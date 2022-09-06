@@ -9,10 +9,10 @@ This project aims to replicate the ELM paper in the original [Sodarace](https://
 
 # Milestones & Progress
 
-- [] Sodarace environment implemented
-- [] Stage 1: Diff Models & MAP-Elites
-  - [] Prompt Engineering on CodeGen
-  - [] Train diff model
-  - [] MAP-Elites implemented
-- [] Stage 2: Train LLM on generated data
-- [] Stage 3: Conditional generation with PPO
+- [ ] Sodarace environment implemented
+- [ ] Stage 1: Diff Models & MAP-Elites
+  - [ ] Prompt Engineering on CodeGen
+  - [ ] Train diff model
+  - [ ] MAP-Elites implemented
+- [ ] Stage 2: Train LLM on generated data
+- [ ] Stage 3: Conditional generation with PPO
