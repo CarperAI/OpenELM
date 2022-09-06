@@ -9,6 +9,8 @@ This project aims to replicate the ELM paper in the original [Sodarace](https://
 
 # Milestones & Progress
 
+Weekly meetings are in the EleutherAI discord at 20:00 UTC on Fridays.
+
 - [ ] Sodarace environment implemented
 - [ ] Stage 1: Diff Models & MAP-Elites
   - [ ] Prompt Engineering on CodeGen
