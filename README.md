@@ -7,6 +7,8 @@ evolutionary algorithms provide a way to generate code by making mutations to kn
 
 This project aims to replicate the ELM paper in the original [Sodarace](https://doi.org/10.1162/ARTL_a_00185) environment, before applying the technique to more complex code generation problems.
 
+For more details, see our full research proposal at https://carperai.notion.site/ELM-e8f37b2649944259b1abf9ccaa4edae2
+
 # Milestones & Progress
 
 Weekly meetings are in the EleutherAI discord at 20:00 UTC on Fridays.
