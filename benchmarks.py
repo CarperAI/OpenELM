@@ -1,5 +1,7 @@
 import itertools
 import re
+from shutil import ExecError
+from typing import Dict
 
 import torch
 from transformers import CodeGenForCausalLM, GPT2TokenizerFast
@@ -33,7 +35,7 @@ def include_tabs(t, n_min=2, n_max=20, as_special_tokens=False):
 
 
 def create_custom_gpt2_tokenizer():
-    t = create_tokenizer()
+    # t = create_tokenizer()
     t = include_whitespace(t=t, n_min=2, n_max=32, as_special_tokens=False)
     t = include_tabs(t=t, n_min=2, n_max=10, as_special_tokens=False)
     return t
@@ -80,17 +82,30 @@ def four_parity_reference(b1, b2, b3, b4):
     return bit_sum % 2
 
 
+def eval_code_string(string: str, task_ground_truth: Dict):
+    code_dct: Dict = {}
+    exec(string, {}, code_dct)
+    func_match = re.search(r"def (\w+)\s*\((.*?)\):", string)
+    if func_match is not None:
+        func_name = func_match.group(1)
+    else:
+        return 3  # No function found in code.
+    try:
+        if not all([code_dct[func_name](*i) == res for i, res in task_ground_truth.items()]):
+            return 1  # Error in code, but it runs.
+        else:
+            return 0  # Passes all tests.
+    except Exception:
+        return 2  # Code fails to run.
+
+
 def eval_model(task="parity"):
     if task == "parity":
         inputs = [i for i in itertools.product(range(2), repeat=4)]
         ground_truth = {i: four_parity_reference(*i) for i in inputs}
 
         code = """def fixed_bugs(b1,b2,b3,b4):\n    bit_sum = sum([b1,b2,b3,b4])\n    return bit_sum % 2\n"""
-        print("About to exec")
-        exec(code)
-        for i in inputs:
-            print(fixed_bugs(*inputs[i]), ground_truth[i])
-
+        result = eval_code_string(code, ground_truth)
     else:
         raise ValueError("Unknown task: {}".format(task))
 
