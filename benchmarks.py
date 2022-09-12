@@ -7,8 +7,9 @@ from typing import Dict, Iterator, List
 import hydra
 import numpy as np
 import torch
-from transformers import CodeGenForCausalLM, GPT2TokenizerFast
+from transformers import GPT2TokenizerFast
 
+from codegen.modelling_codegen import CodeGenForCausalLM
 from constants import PROJECT_PATH
 
 
@@ -25,8 +26,8 @@ def set_seed(seed, deterministic=True):
 
 def create_model(ckpt_path, fp16=True):
     if fp16:
-        return CodeGenForCausalLM.from_pretrained(f"Salesforce/{ckpt_path.name}", cache_dir=ckpt_path,
-                                                  revision='float16',
+        return CodeGenForCausalLM.from_pretrained(ckpt_path,
+                                                  # revision='float16',
                                                   torch_dtype=torch.float16,
                                                   low_cpu_mem_usage=True)
     else:
@@ -217,7 +218,7 @@ def run_benchmark(cfg):
     eval_results = np.fromiter(eval_completions(truncations, task=cfg.tasks[0]),
                                dtype=np.byte)
     successes = np.count_nonzero(eval_results == 0)
-    print("Results: ", successes, cfg.batch_size, successes / cfg.batch_size)
+    print("Results: ", successes, cfg.batch_size, (successes / cfg.batch_size) * 100)
 
 
 # Load hydra config from yaml files and command line arguments.
