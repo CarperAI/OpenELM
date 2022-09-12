@@ -1,0 +1,21 @@
+model: codegen-350M-mono
+checkpoints_dir: ./checkpoints/
+device: cuda:0
+seed: 42
+deterministic: True
+top_p: 0.95
+temp: 0.88
+max_length: 256
+batch_size: 1
+fp16: False
+pad_token: 50256
+tasks: ["4-parity"]
+# run_name: ???  # Mandatory string argument that describes the run.
+
+###################################################################################################
+# Hydra config overrides:
+hydra:
+    run:
+        dir: logs/ #${run_name}
+    sweep:
+        dir: logs/ #${run_name}
