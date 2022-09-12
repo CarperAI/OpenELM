@@ -1,7 +1,6 @@
 # This file steals codes from https://github.com/moshesipper/tiny_gp and modifies it into one of ELM benchmarks.
 # Original header below:
 
-
 # tiny genetic programming plus, by © moshe sipper, www.moshesipper.com
 # graphic output, dynamic progress display, bloat-control option 
 # need to install https://pypi.org/project/graphviz/
@@ -20,10 +19,17 @@ PROB_MUTATION = 0.2  # per-node mutation probability
 NUM_MUTATION_PER_LOOP = 10000  # the number of mutations to be run per step of the experiments
 
 
+# TODO: modularize functions and FUNCTIONS, TERMINALS lists so that they can be more easily swapped for different uses.
 def add(x, y): return x + y
 
 
 def mod(x, y): return x % y
+
+
+def mul(x, y): return x * y
+
+
+def subtract(x, y): return x - y
 
 
 FUNCTIONS = [add, mod]
@@ -35,9 +41,13 @@ def four_parity_reference(b1, b2, b3, b4):
     return bit_sum % 2
 
 
-def generate_dataset():
+def quadratic_references(a, b, c, x):
+    return a * pow(x, 2) + b * x + c
+
+
+def generate_dataset(target_fn=four_parity_reference):
     inputs = [i for i in itertools.product(range(2), repeat=4)]
-    ground_truth = [four_parity_reference(*i) for i in inputs]
+    ground_truth = [target_fn(*i) for i in inputs]
     return inputs, ground_truth
 
 
@@ -153,7 +163,7 @@ def error(individual, dataset):
     return mean([abs(individual.compute_tree(ds[0]) - ds[1]) for ds in dataset])
 
 
-def generate_original_four_parity():
+def generate_four_parity():
     """
     Hand-coded four_parity.
     Returns:
@@ -165,6 +175,24 @@ def generate_original_four_parity():
         node = GPTree(data=add, left=GPTree(data=f'b{i}'), right=prev_node)
         prev_node = node
     root.left = prev_node
+
+    return root
+
+
+def generate_quadratic():
+    """
+    Hand-coded quadratic.
+    Returns:
+        the GPTree object that implements quadratic.
+    """
+    root = GPTree(data=add, right=GPTree(data='c'))
+
+    node_1 = GPTree(data=pow, left=GPTree(data='x'), right=GPTree(data=2))
+    node_2 = GPTree(data=mul, left=GPTree(data='a'), right=node_1)
+    node_3 = GPTree(data=add, left=node_2, right=GPTree(data=mul,
+                                                        left=GPTree(data='b'),
+                                                        right=GPTree(data='x')))
+    root.left = node_3
 
     return root
 
@@ -220,7 +248,7 @@ def list_equal(l1, l2):
 
 
 def main():
-    tree = generate_original_four_parity()
+    tree = generate_four_parity()
     dataset = generate_dataset()
 
     # According to the paper, the error is gradually introduced by replacing b-variables to c-variables step-by-step.
