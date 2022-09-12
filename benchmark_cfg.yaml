@@ -2,14 +2,15 @@ model: codegen-350M-mono
 checkpoints_dir: ./checkpoints/
 device: cuda:0
 seed: 42
-deterministic: True
-top_p: 0.95
-temp: 0.88
-max_length: 256
-batch_size: 1
+deterministic: False
+top_p: 0.9
+temp: 0.85
+max_length: 128
+batch_size: 256
+n_bugs: 1
 fp16: False
 pad_token: 50256
-tasks: ["4-parity"]
+tasks: ["parity"]
 # run_name: ???  # Mandatory string argument that describes the run.
 
 ###################################################################################################

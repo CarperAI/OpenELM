@@ -1,14 +1,13 @@
 import itertools
 import os
-import pathlib
 import random
 import re
 from typing import Dict, Iterator, List
 
 import hydra
+import numpy as np
 import torch
-from transformers import (AutoModelForCausalLM, AutoTokenizer,
-                          CodeGenForCausalLM, GPT2TokenizerFast)
+from transformers import CodeGenForCausalLM, GPT2TokenizerFast
 
 from constants import PROJECT_PATH
 
@@ -24,19 +23,15 @@ def set_seed(seed, deterministic=True):
         # torch.use_deterministic_algorithms(deterministic)
 
 
-def download_checkpoint(model_name: str, save_dir: pathlib.Path):
-    """Download a checkpoint from the Hugging Face Hub."""
-    model = AutoModelForCausalLM.from_pretrained(model_name)
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-
-
 def create_model(ckpt_path, fp16=True):
     if fp16:
-        return CodeGenForCausalLM.from_pretrained(ckpt_path, revision='float16',
+        return CodeGenForCausalLM.from_pretrained(f"Salesforce/{ckpt_path.name}", cache_dir=ckpt_path,
+                                                  revision='float16',
                                                   torch_dtype=torch.float16,
                                                   low_cpu_mem_usage=True)
     else:
-        return CodeGenForCausalLM.from_pretrained(ckpt_path)
+        return CodeGenForCausalLM.from_pretrained(f"Salesforce/{ckpt_path.name}",
+                                                  cache_dir=ckpt_path)
 
 
 def create_tokenizer():
@@ -101,6 +96,7 @@ def truncate(completion):
 
 
 def model_setup(cfg):
+    set_seed(cfg.seed, deterministic=True)
     device = torch.device(cfg.device)
     use_fp16 = True
     if (not cfg.fp16 or device.type == "cpu"):
@@ -118,9 +114,15 @@ def model_setup(cfg):
     return model, tokenizer
 
 
-def four_parity_reference(b1, b2, b3, b4):
+def parity(b1, b2, b3, b4):
+    """Return binary parity of a sequence of input bits. Return 0 for even parity, 1 for odd parity."""
     bit_sum = sum([b1, b2, b3, b4])
     return bit_sum % 2
+
+
+def quadratic(a, b, c, x):
+    """Return quadratic: a,b,c are coefficients and x is the independent variable."""
+    return a * x ** 2 + b * x + c
 
 
 def eval_code_string(code_str: str, ground_truth: Dict):
@@ -140,12 +142,13 @@ def eval_code_string(code_str: str, ground_truth: Dict):
         return 2  # Code fails to run.
 
 
-def eval_completions(model_output: Iterator[str], task="4-parity"):
+def eval_completions(model_output: Iterator[str], task="parity"):
     """Evaluate a batch of prompt completions on a task."""
-    if task == "4-parity":
+    if task == "parity":
         inputs = [i for i in itertools.product(range(2), repeat=4)]
-        ground_truth = {i: four_parity_reference(*i) for i in inputs}
+        ground_truth = {i: parity(*i) for i in inputs}
         for completion in model_output:
+            # print(completion)
             # completion = truncate(completion)
             if len(completion) > 0:
                 yield eval_code_string(completion, ground_truth)
@@ -185,17 +188,36 @@ def sample(cfg, model, tokenizer, contexts: List[str]):
     return text
 
 
+def mutate_code(n_bugs: int = 5, task: str = "parity"):
+    """Mutate code to create n bugs."""
+    mutation_template = ['# A buggy implementation\n#!/usr/bin/python3\n', '\n# Fixed bugs\n']
+    if task == "parity":
+        vars = ['b', 'b', 'b', 'b', 2]
+        for i in range(n_bugs):
+            vars[i] = 'c' if i < 4 else 3
+        func_str = ('def parity(b1,b2,b3,b4):\n    """Return binary parity of a sequence of input bits.'
+                    ' Return 0 for even parity, 1 for odd parity."""\n    bit_sum = sum(['
+                    f'{vars[0]}1,{vars[1]}2,{vars[2]}3,{vars[3]}4])\n    return bit_sum % {vars[4]}')
+        mutation_template.insert(1, func_str)
+        return ''.join(mutation_template)
+    else:
+        raise ValueError("Unknown task: {}".format(task))
+
+
 def run_benchmark(cfg):
     model, tokenizer = model_setup(cfg)
-    code_example = """# A buggy implementation\n#!/usr/bin/python3\ndef parity(b1,b2,b3,b4):\n  \"\"\" Return binary parity of a sequence of input bits. Return 0 for even parity, 1 for odd parity \"\"\"\n  bit_sum = sum([b1,b2,b3,b4])\n  return bit_sum % 2\n# Fixed bugs\n"""
-    contexts = [code_example, code_example]
+    mutated_str = mutate_code(n_bugs=cfg.n_bugs, task=cfg.tasks[0])
+
+    contexts = [mutated_str] * cfg.batch_size
     completions = sample(cfg, model, tokenizer, contexts)
     # TODO: better truncation?
-    truncations = map(truncate, completions)
+    # truncations = map(truncate, completions)
+    truncations = completions
 
-    eval_results = list(eval_completions(truncations, task=cfg.tasks[0]))
-    print(eval_results)
-    print(list(truncations))
+    eval_results = np.fromiter(eval_completions(truncations, task=cfg.tasks[0]),
+                               dtype=np.byte)
+    successes = np.count_nonzero(eval_results == 0)
+    print("Results: ", successes, cfg.batch_size, successes / cfg.batch_size)
 
 
 # Load hydra config from yaml files and command line arguments.
