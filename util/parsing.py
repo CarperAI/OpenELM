@@ -1,15 +1,16 @@
 """
-This file contains some helper functions to parse python programs. They might not be absolutely essential to the reimplementation of ELM, but
-    hopefully they simplify some processes (turning 4-parity/quadratic to GPTree) and provide a code base for future generalizations.
+This file contains some helper functions to parse python programs. They might not be absolutely essential to the
+    reimplementation of ELM, but hopefully they can be a part of the automation of some processes
+    (e.g., turning a program like 4-parity/quadratic to GPTree) and provide a code base for syntax parsing.
 """
 
-from tree_sitter import Language, Parser
+from tree_sitter import Language, Parser, TreeCursor
 from typing import Callable
 import inspect
 import pygraphviz as pgv
 import os
 
-PY_LANGUAGE = Language(os.path.dirname(__file__) + '/src/python_parsing_lib.so', 'python')
+PY_LANGUAGE = Language(os.path.dirname(__file__) + '/src/python_lib.so', 'python')
 
 
 def draw_func_tree(func, save_path='tree.png'):
@@ -18,6 +19,8 @@ def draw_func_tree(func, save_path='tree.png'):
     Parameters:
         func: The function to be parsed. Can be either an actual function or a string.
         save_path: The path to the saved png image.
+    Returns:
+        the pygraphviz AGraph object (note that in the meantime a picture will be saved).
     """
     parser = Parser()
     parser.set_language(PY_LANGUAGE)
@@ -26,6 +29,8 @@ def draw_func_tree(func, save_path='tree.png'):
         tree = parser.parse(bytes(inspect.getsource(func), 'utf8'))
     elif isinstance(func, (bytes, str)):
         tree = parser.parse(bytes(func, 'utf8'))
+    else:
+        raise TypeError(f"func must be a function, a string or a bytes object. Got {type(func)}.")
 
     cursor = tree.walk()
 
@@ -38,7 +43,14 @@ def draw_func_tree(func, save_path='tree.png'):
     return graph
 
 
-def construct_graph(graph, node_id, cursor):
+def construct_graph(graph: pgv.AGraph, node_id: int, cursor: TreeCursor):
+    """
+    Recursively construct the pygraphviz graph according to the TreeCursor.
+    Parameters:
+        graph: the pygraphviz AGraph object.
+        node_id: current node id.
+        cursor: the pytree-sitter TreeCursor object.
+    """
     if not cursor.goto_first_child():
         return
 

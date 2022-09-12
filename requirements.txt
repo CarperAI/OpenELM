@@ -1,3 +1,8 @@
 hydra-core~=1.2.0
 tree-sitter~=0.20.1
 pygraphviz~=1.10
+graphviz~=0.20.1
+numpy~1.21.3
+ipython~=8.5.0
+torch~=1.12.1
+transformers~=4.21.3
