@@ -1,0 +1,3 @@
+hydra-core~=1.2.0
+tree-sitter~=0.20.1
+pygraphviz~=1.10
