@@ -7,6 +7,7 @@
 # need to install https://pypi.org/project/graphviz/
 
 import itertools
+from copy import deepcopy
 from random import random, randint
 from statistics import mean
 from typing import Iterable, List, Tuple
@@ -14,8 +15,9 @@ from typing import Iterable, List, Tuple
 from IPython.display import Image, display
 from graphviz import Digraph, Source
 
-MIN_DEPTH = 2  # minimal initial random tree depth
+MIN_DEPTH = 0  # minimal initial random tree depth
 PROB_MUTATION = 0.2  # per-node mutation probability
+NUM_MUTATION_PER_LOOP = 10000  # the number of mutations to be run per step of the experiments
 
 
 def add(x, y): return x + y
@@ -64,12 +66,13 @@ class GPTree:
             self.right.draw(dot, count)
 
     def draw_tree(self, fname, footer):
-        dot = [Digraph()]
-        dot[0].attr(kw='graph', label=footer)
+        dot = [Digraph(fname, comment=footer)]
         count = [0]
         self.draw(dot, count)
-        Source(dot[0], filename=fname + ".gv", format="png").render()
-        display(Image(filename=fname + ".gv.png"))
+        dot[0].format = 'png'
+        dot[0].render(directory='')
+        display(Image(filename = f'{fname}.gv.png'))
+        return dot[0].source
 
     def compute_tree(self, b, arg_names=('b1', 'b2', 'b3', 'b4')):
         """
@@ -80,7 +83,7 @@ class GPTree:
             the evaluation at this node.
         """
         if not isinstance(b, (List, Tuple)):
-            raise TypeError(f"Input b must be a list of (b1, b2, b3, b4). Got {b} instead.")
+            raise TypeError(f"Input b must be a list or tuple. Got {type(b)} instead.")
 
         arg_dict = {name: value for name, value in zip(arg_names, b)}
 
@@ -166,6 +169,28 @@ def generate_original_four_parity():
     return root
 
 
+def swap_node(tree: GPTree, var_name: str, target_name: str) -> bool:
+    """
+    Swap the name of a variable into another one (only apply to the first encounter of a DFS).
+    Parameters:
+        tree: the GPTree node.
+        var_name: the variable name.
+        target_name: the target variable name.
+    Returns:
+        True if the variable is found and replaced.
+    """
+    if tree is None:
+        return False
+
+    if tree.data == var_name:
+        tree.data = target_name
+        return True
+
+    if not swap_node(tree.left, var_name, target_name):
+        return swap_node(tree.right, var_name, target_name)
+    return True
+
+
 def eval_tree(tree: GPTree, dataset: Iterable) -> list:
     """
     Test the correctness of a GPTree against a dataset.
@@ -190,12 +215,28 @@ def eval_tree(tree: GPTree, dataset: Iterable) -> list:
     return results
 
 
+def list_equal(l1, l2):
+    return all([x == y for x, y in zip(l1, l2)])
+
+
 def main():
-    original = generate_original_four_parity()
+    tree = generate_original_four_parity()
     dataset = generate_dataset()
-    print(eval_tree(original, dataset))
-    original.mutation()
-    print(eval_tree(original, dataset))
+
+    # According to the paper, the error is gradually introduced by replacing b-variables to c-variables step-by-step.
+    # At the very end, modulo 2 is replaced by modulo 3. We carry the experiments out here and collect the percentage
+    #   of mutations that fix the problem.
+
+    for i in range(4):
+        swap_node(tree, f'b{i+1}', f'c{i+1}')
+
+        corrected = 0
+        for j in range(NUM_MUTATION_PER_LOOP):
+            tree_copy = deepcopy(tree)
+            tree_copy.mutation()
+            corrected += list_equal(eval_tree(tree_copy, dataset), [0] * len(dataset[1]))
+
+        print(f'Step {i+1}, percentage of successful mutations: {corrected / NUM_MUTATION_PER_LOOP}')
 
 
 if __name__ == "__main__":
