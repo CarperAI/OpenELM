@@ -1,7 +1,11 @@
 """
-This file contains some helper functions to parse python programs. They might not be absolutely essential to the
-    reimplementation of ELM, but hopefully they can be a part of the automation of some processes
-    (e.g., turning a program like 4-parity/quadratic to GPTree) and provide a code base for syntax parsing.
+This file contains some helper functions to parse python programs and visualize. They are not essential to the
+    reimplementation of ELM, but if one wants to generalize the traditional GP experiments to arbitrary functions,
+    hopefully this provides the code base for syntax parsing.
+For example, if we expand the TinyGP experiment to arbitrary functions, we can modify `GPTree` to non-binary trees,
+    and use the `tree.walk()` cursor demonstrated below to traverse (will also need to filter out some unwanted nodes).
+    The visualization code below will also be necessary for development and testing. But I am not sure if we want to
+    generalize the non-LM GP benchmarks. So I am leaving it here until the need arises in the future.
 """
 
 from tree_sitter import Language, Parser, TreeCursor
