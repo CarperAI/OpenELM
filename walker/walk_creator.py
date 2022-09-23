@@ -58,6 +58,24 @@ class Walker:
         Returns:
             _type_: bool
         """
+        max_muscles_per_joint = 4
+        max_muscle_strength = 10
+        min_joint_distance = 0.1
+        for j in self.joints:
+            count = 0
+            for m in self.muscles:
+                if m.j0 == j or m.j1 == j:
+                    count += 1
+                # Check b) that the strength of muscles is limited
+                if m.type == "muscle":
+                    if m.amplitude > max_muscle_strength:
+                        return False
+            # Check a) that each joint is connected only to so many muscles
+            if count > max_muscles_per_joint:
+                return False
+            # Check c) that there is a minimum distance between joints
+            if j.x - j.y < min_joint_distance:
+                return False
         return True
 
 class walker_creator:
