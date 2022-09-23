@@ -35,3 +35,5 @@ def make_walker():
         return x1 if x1%2==1 else -x1
 
     joints = query_cppn(wc,8,3,1.5,connect,amp,phase)
+
+    return wc.get_walker()
