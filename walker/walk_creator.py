@@ -1,5 +1,5 @@
 
-class joint(muscle):
+class joint:
     def __init__(self, x, y):
         self.x = x
         self.y = y
@@ -9,18 +9,13 @@ class muscle:
     def __init__(self, j0, j1, *args):
         self.j0 = j0
         self.j1 = j1
-
-class distance(muscle):
-    def __init__(self, j0, j1, amplitude, phase):
-        super().__init__()
         self.type = "distance"
-
-class muscleMuscle(muscle):
-    def __init__(self, j0, j1, amplitude, phase):
-        super().__init__()
-        self.type = "muscle"
-        self.amplitude = amplitude
-        self.phase = phase
+        if len(args) == 3:
+            active, amplitude, phase = args
+            self.active = active
+            self.type = "muscle"
+            self.amplitude = amplitude
+            self.phase = phase
 
 class walker:
     def __init__(self, joints, muscles):
@@ -39,11 +34,14 @@ class walker:
         for j in self.joints:
             joints.append((j.x, j.y))
         for m in self.muscles:
-            muscles.append([self.joint_index(m.j0), self.joint_index(m.j1), {"type": m.type, "amplitude": m.amplitude, "phase": m.phase}])
+            if m.type == "distance":
+                muscles.append([self.joint_index(m.j0), self.joint_index(m.j1), {"type": m.type}])
+            elif m.type == "muscle":
+                muscles.append([self.joint_index(m.j0), self.joint_index(m.j1), {"type": m.type, "amplitude": m.amplitude, "phase": m.phase}])
         return {"joints": joints, "muscles": muscles}
 
     def __str__(self) -> str:
-        self.serialize_walker()
+        return str(self.serialize_walker())
 
     def validate(self):
         """logic for ensuring that the Sodaracer will not break the underlying Box2D physics engine
@@ -72,6 +70,7 @@ class walker_creator:
         """add a point mass"""
         m = muscle(j0, j1, args)
         self.muscles.append(m)
+        return m
 
     def get_walker(self):
         """Python dictionary with keys such as “joints” and “muscles”"""
