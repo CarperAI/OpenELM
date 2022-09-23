@@ -1,9 +1,10 @@
 
-class joint:
+class Joint:
     def __init__(self, x, y):
         self.x = x
         self.y = y
-class muscle:
+
+class Muscle:
     # {"type": "muscle", "amplitude": 2.12, "phase": 0.0}
     # {"type": "distance"}
     def __init__(self, j0, j1, *args):
@@ -17,7 +18,7 @@ class muscle:
             self.amplitude = amplitude
             self.phase = phase
 
-class walker:
+class Walker:
     def __init__(self, joints, muscles):
         self.joints = joints
         self.muscles = muscles
@@ -40,7 +41,7 @@ class walker:
                 muscles.append([self.joint_index(m.j0), self.joint_index(m.j1), {"type": m.type, "amplitude": m.amplitude, "phase": m.phase}])
         return {"joints": joints, "muscles": muscles}
 
-    def __str__(self) -> str:
+    def __str__(self):
         return str(self.serialize_walker())
 
     def validate(self):
@@ -62,16 +63,16 @@ class walker_creator:
 
     def add_joint(self, x, y):
         """add a spring"""
-        j = joint(x, y)
+        j = Joint(x, y)
         self.joints.append(j)
         return j
 
     def add_muscle(self, j0, j1, *args):
         """add a point mass"""
-        m = muscle(j0, j1, args)
+        m = Muscle(j0, j1, args)
         self.muscles.append(m)
         return m
 
     def get_walker(self):
         """Python dictionary with keys such as “joints” and “muscles”"""
-        return walker(self.joints, self.muscles)
+        return Walker(self.joints, self.muscles)
