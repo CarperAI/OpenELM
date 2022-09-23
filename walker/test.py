@@ -1,10 +1,11 @@
-from square import make_walker
+from square import make_walker as make_walker_square
+from radial import make_walker as make_walker_radial
+from CPPN_fixed import make_walker as make_walker_cppn_fixed
+from CPPN_mutable import make_walker as make_walker_cppn_mutable
 
-# Serialized Square Seed #
-output_seed = make_walker().serialize_walker()  # translation after being executed into a dictionary of joints and muscles
-
-# Test the output format from the paper
-expected_seed = {
+# Compare to serialized square seed from paper (pg. 17) #
+square_seed = make_walker_square()
+square_seed_expected = {
     "joints": [(0, 0), (0, 10), (10, 10), (10, 0), (5, 5)],
     "muscles": [
     [0, 1, {"type": "distance"}],
@@ -18,4 +19,13 @@ expected_seed = {
     ],
 }
 
-print("Working Serialization: ", output_seed == expected_seed)
+print("Square Seed Serialization Passed: ",  square_seed == square_seed_expected)
+
+
+# Print other seeds #
+radial_seed = make_walker_radial()
+cppn_fixed_seed = make_walker_cppn_fixed()
+cppn_mutable_seed = make_walker_cppn_mutable()
+print("\n Radial Seed: \n ", radial_seed)
+print("\n CPPN Fixed Seed: \n ", cppn_fixed_seed)
+print("\n CPPN Mutable Seed: \n ", cppn_mutable_seed)

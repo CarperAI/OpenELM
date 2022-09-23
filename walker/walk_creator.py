@@ -44,6 +44,12 @@ class Walker:
     def __str__(self):
         return str(self.serialize_walker())
 
+    def __eq__(self, other):
+        # Check if other is a Dictionary
+        if isinstance(other, dict):
+            return self.serialize_walker() == other
+        return self == other
+
     def validate(self):
         """logic for ensuring that the Sodaracer will not break the underlying Box2D physics engine
             a) that each joint is connected only to so many muscles
