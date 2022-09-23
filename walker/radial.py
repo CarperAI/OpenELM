@@ -1,18 +1,34 @@
 from walk_creator import walker_creator
 import math
 
-def make_radial(wc, c, radius=1, spokes=7):
-    """ Make a radial walker"""
-    for spoke in range(spokes):
-        x = radius * math.cos(2*math.pi/spokes * spoke)
-        y = radius * math.sin(2*math.pi/spokes * spoke)
-        wc.add_joint(x, y)
+def make_circle(wc, cx,cy,radius,num_points):
+    """ Approximate a circle with center (cx,cy) square with
+        num_points points """
+    joints = []
+
+    tot_ang = 3.14*2.0
+
+    for idx in range(num_points):
+        ang = tot_ang/(num_points-1)*idx
+        x = math.cos(ang) * radius + cx
+        y = math.sin(ang) * radius + cy
+        joints.append(wc.add_joint(x,y))
+
+    return joints
 
 def make_walker():
+
     wc = walker_creator()
 
-    # the main body is a radial
-    center = wc.add_joint(5, 5)
-    wheel = make_radial(wc, center, radius=1, spokes=4)
+    num_points = 8
+    rad = 5.0
+    cx,cy  = (5,5)
+    # the main body is a square
+    points = make_circle(wc, cx,cy,rad,num_points)
+    center = wc.add_joint(cx,cy)
 
+    for k in range(num_points):
+        wc.add_muscle(points[k], points[(k+1)%num_points])
+        wc.add_muscle(points[k],  center, False, float(k)/num_points, float(k)/num_points)
+    
     return wc.get_walker()
