@@ -1,7 +1,7 @@
 from square import make_walker
 
 # Serialized Square Seed #
-output_seed = make_walker()  # translation after being executed into a dictionary of joints and muscles
+output_seed = make_walker().serialize_walker()  # translation after being executed into a dictionary of joints and muscles
 
 # Test the output format from the paper
 expected_seed = {
