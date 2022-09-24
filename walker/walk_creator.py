@@ -12,8 +12,7 @@ class Muscle:
         self.j1 = j1
         self.type = "distance"
         if len(args[0]) == 3:
-            active, amplitude, phase = args[0]
-            self.active = active
+            isDistance, amplitude, phase = args[0]
             self.type = "muscle"
             self.amplitude = amplitude
             self.phase = phase
