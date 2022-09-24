@@ -98,5 +98,5 @@ class walker_creator:
         return m
 
     def get_walker(self):
-        """Python dictionary with keys such as “joints” and “muscles”"""
+        """Python dictionary with keys such as 'joints' and 'muscles'"""
         return Walker(self.joints, self.muscles)
