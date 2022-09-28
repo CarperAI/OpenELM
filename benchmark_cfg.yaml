@@ -1,12 +1,15 @@
 model: codegen-350M-mono
 checkpoints_dir: ./checkpoints/
-device: cuda:0
+device: cuda
 seed: 42
 deterministic: False
-top_p: 0.9
+top_p: 0.95
 temp: 0.85
+timeout: 5  # Seconds
+gpus: 1
 max_length: 128
-batch_size: 256
+batch_size: 300
+n_trials: 1000
 n_bugs: 1
 fp16: False
 pad_token: 50256
