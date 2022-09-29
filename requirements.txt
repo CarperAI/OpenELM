@@ -6,3 +6,4 @@ numpy~1.21.3
 ipython~=8.5.0
 torch~=1.12.1
 transformers~=4.21.3
+pybox2d==2.3.10
