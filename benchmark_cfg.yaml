@@ -14,12 +14,12 @@ n_bugs: 1
 fp16: False
 pad_token: 50256
 tasks: ["parity"]
-# run_name: ???  # Mandatory string argument that describes the run.
+run_name: ???  # Mandatory string argument that describes the run.
 
 ###################################################################################################
 # Hydra config overrides:
 hydra:
     run:
-        dir: logs/ #${run_name}
+        dir: logs/${run_name}
     sweep:
-        dir: logs/ #${run_name}
+        dir: logs/${run_name}
