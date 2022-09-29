@@ -2,20 +2,25 @@ import itertools
 import os
 import random
 import re
+import shutil
 from typing import Dict, Iterator, List
 
 import hydra
 import numpy as np
 import torch
+from omegaconf import OmegaConf
+from tqdm import tqdm
 from transformers import GPT2TokenizerFast
 
 from codegen.modelling_codegen import CodeGenForCausalLM
+from codex_execute import (TimeoutException, create_tempdir, reliability_guard,
+                           swallow_io, time_limit)
 from constants import PROJECT_PATH
 
 
 def set_seed(seed, deterministic=True):
     random.seed(seed)
-    os.environ['PYTHONHASHSEED'] = str(seed)
+    # os.environ['PYTHONHASHSEED'] = str(seed)
     torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed(seed)
@@ -27,12 +32,10 @@ def set_seed(seed, deterministic=True):
 def create_model(ckpt_path, fp16=True):
     if fp16:
         return CodeGenForCausalLM.from_pretrained(ckpt_path,
-                                                  # revision='float16',
                                                   torch_dtype=torch.float16,
                                                   low_cpu_mem_usage=True)
     else:
-        return CodeGenForCausalLM.from_pretrained(f"Salesforce/{ckpt_path.name}",
-                                                  cache_dir=ckpt_path)
+        return CodeGenForCausalLM.from_pretrained(ckpt_path)
 
 
 def create_tokenizer():
@@ -111,11 +114,15 @@ def model_setup(cfg):
     tokenizer.pad_token = cfg.pad_token
 
     ckpt_path = PROJECT_PATH / "checkpoints" / cfg.model
-    model = create_model(ckpt_path, fp16=use_fp16).to(device)
+    if cfg.gpus > 1:
+        model = torch.nn.DataParallel(create_model(ckpt_path, fp16=use_fp16),
+                                      device_ids=list(range(cfg.gpus))).to(device)
+    else:
+        model = create_model(ckpt_path, fp16=use_fp16).to(device)
     return model, tokenizer
 
 
-def parity(b1, b2, b3, b4):
+def parity_reference(b1, b2, b3, b4):
     """Return binary parity of a sequence of input bits. Return 0 for even parity, 1 for odd parity."""
     bit_sum = sum([b1, b2, b3, b4])
     return bit_sum % 2
@@ -126,105 +133,156 @@ def quadratic(a, b, c, x):
     return a * x ** 2 + b * x + c
 
 
-def eval_code_string(code_str: str, ground_truth: Dict):
+def reset_os_funcs(rmtree, rmdir, chdir):
+    shutil.rmtree = rmtree
+    os.rmdir = rmdir
+    os.chdir = chdir
+
+
+def eval_code_string(code_str: str, ground_truth: Dict, timeout: int = 5):
+    if len(code_str) == 0:
+        return 6  # No code found.
     code_dct: Dict = {}
     func_match = re.search(r"def (\w+)\s*\((.*?)\):", code_str)
     if func_match:
         func_name = func_match.group(1)
     else:
-        return 3  # No function found in code.
-    try:
-        exec(code_str, {}, code_dct)
-        if not all([code_dct[func_name](*i) == res for i, res in ground_truth.items()]):
-            return 1  # Error in code, but it runs.
-        else:
-            return 0  # Passes all tests.
-    except Exception:
-        return 2  # Code fails to run.
+        return 6  # No function found in code.
+    with create_tempdir():
+
+        # These system calls are needed when cleaning up tempdir.
+        import os
+        import shutil
+
+        rmtree = shutil.rmtree
+        rmdir = os.rmdir
+        chdir = os.chdir
+
+        # Disable functionalities that can make destructive changes to the test.
+        reliability_guard()
+        try:
+            # TODO: Check https://arxiv.org/pdf/2209.07753.pdf
+            with swallow_io():
+                with time_limit(timeout):
+                    exec(code_str, {}, code_dct)
+                    if not all([code_dct[func_name](*i) == res for i, res in ground_truth.items()]):
+                        reset_os_funcs(rmtree, rmdir, chdir)
+                        return 1  # Code runs but fails a test.
+                    else:
+                        reset_os_funcs(rmtree, rmdir, chdir)
+                        return 0  # Passes all tests.
+        except TimeoutException:
+            reset_os_funcs(rmtree, rmdir, chdir)
+            return 2  # Code takes too long to run.
+        except RuntimeError:
+            reset_os_funcs(rmtree, rmdir, chdir)
+            return 3  # Code runs but crashes.
+        except SyntaxError:
+            reset_os_funcs(rmtree, rmdir, chdir)
+            return 4  # Code does not run - syntax error.
+        except TypeError:
+            reset_os_funcs(rmtree, rmdir, chdir)
+            return 5  # Code does not run - type error.
+        except Exception:
+            reset_os_funcs(rmtree, rmdir, chdir)
+            return 6  # Code fails to run - other error.
 
 
-def eval_completions(model_output: Iterator[str], task="parity"):
+def eval_completions(model_output: Iterator[str], task: str = "parity", timeout: int = 5):
     """Evaluate a batch of prompt completions on a task."""
     if task == "parity":
-        inputs = [i for i in itertools.product(range(2), repeat=4)]
-        ground_truth = {i: parity(*i) for i in inputs}
+        ground_truth = {i: parity_reference(*i) for i in itertools.product(range(2), repeat=4)}
         for completion in model_output:
             # print(completion)
             # completion = truncate(completion)
-            if len(completion) > 0:
-                yield eval_code_string(completion, ground_truth)
-            else:
-                yield 3  # No code found.
+            yield eval_code_string(completion, ground_truth, timeout)
     else:
-        raise ValueError("Unknown task: {}".format(task))
+        raise ValueError(f"Unknown task: {task}")
 
 
-def sample(cfg, model, tokenizer, contexts: List[str]):
+def sample(cfg, model, tokenizer, batch):
     """Run a model on a batch of contexts for a particular task."""
     device = torch.device(cfg.device)
-    inputs = tokenizer(
-        contexts,
-        truncation=True,
-        padding=True,
-        max_length=2048,
-        return_tensors='pt',
-    )
-    input_ids_len = inputs["input_ids"].shape[1]
-    assert input_ids_len < cfg.max_length
 
+    input_ids_len = batch["input_ids"].shape[1]
+    assert input_ids_len < cfg.max_length
     with torch.no_grad():
-        inputs = inputs.to(device)
-        tokens = model.generate(
-            **inputs,
-            do_sample=True,
-            num_return_sequences=1,
-            temperature=cfg.temp,
-            max_length=input_ids_len + cfg.max_length,
-            top_p=cfg.top_p,
-            pad_token_id=cfg.pad_token,
-            use_cache=True,
-        )
+        batch = batch.to(device)
+        if cfg.gpus > 1:
+            tokens = model.module.generate(
+                **batch,
+                do_sample=True,
+                num_return_sequences=cfg.batch_size,
+                temperature=cfg.temp,
+                max_length=input_ids_len + cfg.max_length,
+                top_p=cfg.top_p,
+                pad_token_id=cfg.pad_token,
+                use_cache=True,
+            )
+        else:
+            tokens = model.generate(
+                **batch,
+                do_sample=True,
+                num_return_sequences=cfg.batch_size,
+                temperature=cfg.temp,
+                max_length=input_ids_len + cfg.max_length,
+                top_p=cfg.top_p,
+                pad_token_id=cfg.pad_token,
+                use_cache=True,
+            )
         # "input_ids_len:" removes the prompt
-        text = tokenizer.batch_decode(tokens[:, input_ids_len:, ...])
+        # - 1 adds in "def"
+        text = tokenizer.batch_decode(tokens[:, input_ids_len - 1:, ...])
     return text
 
 
 def mutate_code(n_bugs: int = 5, task: str = "parity"):
     """Mutate code to create n bugs."""
-    mutation_template = ['# A buggy implementation\n#!/usr/bin/python3\n', '\n# Fixed bugs\n']
+    mutation_template = ['# A buggy implementation\n#!/usr/bin/python3\n', '\n# Fixed bugs\ndef']
     if task == "parity":
         vars = ['b', 'b', 'b', 'b', 2]
         for i in range(n_bugs):
             vars[i] = 'c' if i < 4 else 3
         func_str = ('def parity(b1,b2,b3,b4):\n    """Return binary parity of a sequence of input bits.'
                     ' Return 0 for even parity, 1 for odd parity."""\n    bit_sum = sum(['
-                    f'{vars[0]}1,{vars[1]}2,{vars[2]}3,{vars[3]}4])\n    return bit_sum % {vars[4]}')
+                    '{}1,{}2,{}3,{}4])\n    return bit_sum % {}'.format(*vars))
         mutation_template.insert(1, func_str)
         return ''.join(mutation_template)
     else:
-        raise ValueError("Unknown task: {}".format(task))
+        raise ValueError(f"Unknown task: {task}")
 
 
 def run_benchmark(cfg):
     model, tokenizer = model_setup(cfg)
     mutated_str = mutate_code(n_bugs=cfg.n_bugs, task=cfg.tasks[0])
-
-    contexts = [mutated_str] * cfg.batch_size
-    completions = sample(cfg, model, tokenizer, contexts)
-    # TODO: better truncation?
-    # truncations = map(truncate, completions)
-    truncations = completions
-
-    eval_results = np.fromiter(eval_completions(truncations, task=cfg.tasks[0]),
-                               dtype=np.byte)
-    successes = np.count_nonzero(eval_results == 0)
-    print("Results: ", successes, cfg.batch_size, (successes / cfg.batch_size) * 100)
+    # mutated_encoding = tokenizer([mutated_str] * cfg.gpus, truncation=True, padding=True,
+    mutated_encoding = tokenizer([mutated_str], truncation=True, padding=True,
+                                max_length=2048,
+                                return_tensors='pt')
+    num_batches = cfg.n_trials // cfg.batch_size
+    for i in tqdm(range(num_batches), desc=f"Running benchmark with {cfg.n_bugs} bugs"):
+        set_seed(torch.random.seed())
+        completions = sample(cfg, model, tokenizer, mutated_encoding)
+        truncations = map(truncate, completions)
+        if i == 0:
+            eval_results = np.fromiter(eval_completions(truncations, task=cfg.tasks[0], timeout=cfg.timeout),
+                                                        dtype=np.byte)
+        else:
+            eval_results = np.vstack((eval_results,
+                                      np.fromiter(eval_completions(truncations, task=cfg.tasks[0], timeout=cfg.timeout),
+                                                  dtype=np.byte)))
+    corr_cnt = np.count_nonzero(eval_results == 0)
+    print(f"Number of bugs: {cfg.n_bugs}")
+    print(f"Result: {corr_cnt} successful completions in {cfg.n_trials} trials, {(corr_cnt / cfg.n_trials) * 100}%")
 
 
 # Load hydra config from yaml files and command line arguments.
 @hydra.main(config_path=str(PROJECT_PATH), config_name="benchmark_cfg",
             version_base="1.2")
 def main(cfg):
+    print('----------------- Config ---------------')
+    print(OmegaConf.to_yaml(cfg))
+    print('-----------------  End -----------------')
     run_benchmark(cfg)
 
 
