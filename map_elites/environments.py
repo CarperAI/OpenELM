@@ -1,9 +1,11 @@
-from numpy import array
-import numpy as np
-import string
-from typing import Union
 import math
-from mapelites import Genotype, Phenotype
+import string
+
+import numpy as np
+from numpy import array
+
+from map_elites.map_elites import Genotype, Phenotype
+
 
 def ackley(x: np.ndarray) -> np.ndarray:
     d = x.shape[-1]
@@ -15,6 +17,8 @@ def ackley(x: np.ndarray) -> np.ndarray:
 
     return -(a + math.exp(1) + o1 + o2)
 
+
+# TODO: write base class
 # find all local maxima of a multimodal function
 class FunctionOptim:
     def __init__(self, ndim=2):
@@ -52,6 +56,7 @@ class FunctionOptim:
     def behaviour_ndim(self):
         return self.behaviour_space.shape[1]
 
+
 # find a string by mutating one character at a time
 class MatchString:
     def __init__(self, target: str):
@@ -77,7 +82,7 @@ class MatchString:
         return x
 
     def to_string(self, x: Genotype) -> str:
-        return ''.join(self.alphabet[ix] for ix in np.clip(np.round(x).astype(int), 0, len(self.alphabet)-1))
+        return ''.join(self.alphabet[ix] for ix in np.clip(np.round(x).astype(int), 0, len(self.alphabet) - 1))
 
     @property
     def max_fitness(self):
@@ -91,3 +96,50 @@ class MatchString:
     @property
     def behaviour_ndim(self):
         return self.behaviour_space.shape[1]
+
+
+class Sodarace:
+    def __init__(self, max_height: int = 10, max_width: int = 10, max_mass: int = 10,
+                 ndim: int = 3, seed: str = None) -> None:
+        self.seed = seed
+        self.genotype_ndim = ndim
+        self.genotype_space = np.array([[0, max_height], [0, max_width], [0, max_mass]]).T
+
+    def generate_program(self, x: Genotype) -> Genotype:
+        # Call LM to generate a new program.
+        return NotImplementedError
+
+    def get_characteristics(self, x: Genotype) -> list(float):
+        # Call Sodaracers environment to get behaviour characteristics.
+        raise NotImplementedError
+
+    def fitness(self, x: Genotype) -> float:
+        # Call Sodaracers environment to get the fitness.
+        raise NotImplementedError
+
+    def random(self) -> Genotype:
+        return self.generate_program(self.seed)
+
+    def mutate(self, x: Genotype) -> Genotype:
+        return self.generate_program(x)
+
+    def to_behaviour_space(self, x: Genotype) -> Phenotype:
+        # Map from floats of h,w,m to behaviour space grid cells.
+        return np.array(self.get_characteristics(x)).astype(int)
+
+    def to_string(self, x: Genotype) -> str:
+        return str(x)
+
+    @property
+    def max_fitness(self):
+        return 0
+
+    @property
+    # [starts, endings) of search intervals
+    def behaviour_space(self):
+        return self.genotype_space
+
+    @property
+    def behaviour_ndim(self):
+        return self.behaviour_space.shape[1]
+
