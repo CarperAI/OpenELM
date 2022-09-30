@@ -7,7 +7,7 @@ translated to python
 import math
 from Box2D import Box2D as b2
 from Box2D.examples.framework import Framework, main
-from helpers import Bone, Muscle, PhysicsId, DistanceAccessor, BodyInformation, EntityType, Entity, staticBodyCount
+from sodaracer_env.helpers import Bone, Muscle, PhysicsId, DistanceAccessor, BodyInformation, EntityType, Entity, staticBodyCount
 import path
 import os
 import json
@@ -903,7 +903,7 @@ class IESoRWorld(Framework):
         # }
 
         # TODO: figure out where this should be located. For now this is fine.
-        physics_datapath = "Physics/Data"
+        physics_datapath = "./Physics/Data"
         return get_file_contents(os.path.join(physics_datapath, data_name))
 
     def add_distance_joint(self, source_id: str, target_id: str, props: dict) -> Bone:

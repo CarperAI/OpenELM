@@ -6,7 +6,7 @@ translated to python
 
 import math
 from Box2D import Box2D as b2
-from helpers import Bone, Muscle, PhysicsId, DistanceAccessor, BodyInformation, EntityType, Entity, staticBodyCount
+from sodaracer_env.helpers import Bone, Muscle, PhysicsId, DistanceAccessor, BodyInformation, EntityType, Entity, staticBodyCount
 import path
 import os
 import json
