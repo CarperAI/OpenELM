@@ -7,7 +7,7 @@ translated to python
 import math
 from Box2D import Box2D as b2
 from Box2D.examples.framework import Framework, main
-from helpers import Bone, Muscle, PhysicsId, DistanceAccessor, BodyInformation, EntityType, Entity, staticBodyCount
+from .helpers import Bone, Muscle, PhysicsId, DistanceAccessor, BodyInformation, EntityType, Entity, staticBodyCount
 import path
 import os
 import json
