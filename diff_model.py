@@ -79,7 +79,7 @@ class DiffModel():
 
     def generate_program(self, seed: str) -> dict:
         model, tokenizer = model_setup(self.cfg)
-        encoding = self.generate_code_str(seed, tokenizer)
+        encoding = self.generate_prompt_str(seed, tokenizer)
         completion = sample(self.cfg, model, tokenizer, encoding)
         truncation = truncate(completion)
         execution_result = unsafe_execute(truncation, timeout=self.cfg.timeout)
