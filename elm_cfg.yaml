@@ -14,6 +14,7 @@ n_steps: 10000
 n_bins: 12
 fp16: False
 pad_token: 50256
+task: "Sodarace"
 run_name: ???  # Mandatory string argument that describes the run.
 
 ###################################################################################################

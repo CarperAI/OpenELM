@@ -3,6 +3,8 @@ import re
 import shutil
 from typing import Dict
 
+import torch
+
 from codegen.codegen_utilities import model_setup, sample, set_seed, truncate
 from codex_execute import (TimeoutException, create_tempdir, reliability_guard,
                            swallow_io, time_limit)
@@ -62,12 +64,24 @@ def unsafe_execute(code_str: str, timeout: int = 5):
 class DiffModel():
     def __init__(self, cfg) -> None:
         self.cfg = cfg
+        set_seed(self.cfg.seed)
+
+    def generate_code_str(self, seed, tokenizer):
+        if self.cfg.task == "Sodarace":
+            encoding = tokenizer([seed], truncation=True, padding=True,
+                                max_length=2048,
+                                return_tensors='pt')
+            return encoding
+        elif self.cfg.task == "imagegen":
+            encoding = tokenizer([seed], truncation=True, padding=True,
+                                max_length=2048,
+                                return_tensors='pt')
+            return encoding
+
 
     def generate_program(self, seed: str) -> dict:
         model, tokenizer = model_setup(self.cfg)
-        encoding = tokenizer([seed], truncation=True, padding=True,
-                                max_length=2048,
-                                return_tensors='pt')
+        encoding = self.generate_code_str(seed, tokenizer)
         completion = sample(self.cfg, model, tokenizer, encoding)
         truncation = truncate(completion)
         execution_result = unsafe_execute(truncation, timeout=self.cfg.timeout)
