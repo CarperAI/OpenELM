@@ -70,7 +70,7 @@ class ELM():
 
 
 # Load hydra config from yaml files and command line arguments.
-@hydra.main(config_path=str(PROJECT_PATH), config_name="benchmark_cfg",
+@hydra.main(config_path=str(PROJECT_PATH), config_name="elm_cfg",
             version_base="1.2")
 def main(cfg):
     print('----------------- Config ---------------')

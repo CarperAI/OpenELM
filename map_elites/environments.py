@@ -7,6 +7,7 @@ from numpy import array
 
 from map_elites.map_elites import Genotype, Phenotype
 
+from ..diff_model import DiffModel
 from ..sodaracer_env import simulator
 
 
@@ -135,7 +136,7 @@ class Sodarace(BaseEnvironment):
     def __init__(self, seed: dict, diff_model, max_height: int = 100, max_width: int = 100, max_mass: int = 100,
                  ndim: int = 3) -> None:
         self.seed = seed
-        self.diff_model = diff_model
+        self.diff_model: DiffModel = diff_model
         self.genotype_ndim = ndim
         self.genotype_space = np.array([[0, max_height], [0, max_width], [0, max_mass]]).T
 
