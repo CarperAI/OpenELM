@@ -1,10 +1,13 @@
 import math
 import string
+from abc import ABC, abstractmethod
 
 import numpy as np
 from numpy import array
 
 from map_elites.map_elites import Genotype, Phenotype
+
+from ..sodaracer_env import simulator
 
 
 def ackley(x: np.ndarray) -> np.ndarray:
@@ -18,9 +21,34 @@ def ackley(x: np.ndarray) -> np.ndarray:
     return -(a + math.exp(1) + o1 + o2)
 
 
-# TODO: write base class
+# class Genotype(ABC):
+
+
+class BaseEnvironment(ABC):
+
+    @abstractmethod
+    def random(self) -> Genotype:
+        raise NotImplementedError
+
+    @abstractmethod
+    def mutate(self, x: Genotype) -> Genotype:
+        raise NotImplementedError
+
+    @abstractmethod
+    def fitness(self, x: Genotype) -> float:
+        raise NotImplementedError
+
+    @abstractmethod
+    def to_behaviour_space(self, x: Genotype) -> Phenotype:
+        raise NotImplementedError
+
+    @abstractmethod
+    def to_string(self, x: Genotype) -> str:
+        raise NotImplementedError
+
+
 # find all local maxima of a multimodal function
-class FunctionOptim:
+class FunctionOptim(BaseEnvironment):
     def __init__(self, ndim=2):
         self.genotype_ndim = ndim
         self.genotype_space = np.repeat([[-4, 4]], self.genotype_ndim, axis=0).T
@@ -58,7 +86,7 @@ class FunctionOptim:
 
 
 # find a string by mutating one character at a time
-class MatchString:
+class MatchString(BaseEnvironment):
     def __init__(self, target: str):
         self.alphabet = string.ascii_letters
 
@@ -98,34 +126,47 @@ class MatchString:
         return self.behaviour_space.shape[1]
 
 
-class Sodarace:
-    def __init__(self, max_height: int = 10, max_width: int = 10, max_mass: int = 10,
-                 ndim: int = 3, seed: str = None) -> None:
+# class Sodaracer(Genotype):
+#     def __init__(self, program_str: str):
+#         self.program_str = program_str
+
+
+class Sodarace(BaseEnvironment):
+    def __init__(self, seed: dict, diff_model, max_height: int = 100, max_width: int = 100, max_mass: int = 100,
+                 ndim: int = 3) -> None:
         self.seed = seed
+        self.diff_model = diff_model
         self.genotype_ndim = ndim
         self.genotype_space = np.array([[0, max_height], [0, max_width], [0, max_mass]]).T
 
-    def generate_program(self, x: Genotype) -> Genotype:
-        # Call LM to generate a new program.
-        return NotImplementedError
+        self.simulator = simulator.SodaraceSimulator(body=self.seed["sodaracer"])
 
-    def get_characteristics(self, x: Genotype) -> list(float):
-        # Call Sodaracers environment to get behaviour characteristics.
-        raise NotImplementedError
+    def generate_program(self, x: str) -> Genotype:
+        # Call LM to generate a new program and run it, retuning a dict containing the program string
+        # and the dict from running
+        return self.diff_model.generate_program(seed=x)
 
     def fitness(self, x: Genotype) -> float:
         # Call Sodaracers environment to get the fitness.
-        raise NotImplementedError
+        return self.simulator.evaluate(x)
 
     def random(self) -> Genotype:
-        return self.generate_program(self.seed)
+        program_dict = self.generate_program(self.seed["program_str"])
+        # TODO: consider storing morphology dict inside genotype?
+        self.simulator = simulator.SodaraceSimulator(body=program_dict["sodaracer"])
+        return program_dict
 
     def mutate(self, x: Genotype) -> Genotype:
-        return self.generate_program(x)
+        # TODO: maybe create proper Genotype class.
+        program_dict = self.generate_program(x["program_str"])
+        self.simulator = simulator.SodaraceSimulator(body=program_dict["sodaracer"])
+        return program_dict
 
     def to_behaviour_space(self, x: Genotype) -> Phenotype:
         # Map from floats of h,w,m to behaviour space grid cells.
-        return np.array(self.get_characteristics(x)).astype(int)
+        # TODO: Implement this.
+        morphology = self.simulator.morphology
+        return np.array([morphology['height'], morphology['width'], morphology['mass']]).astype(int)
 
     def to_string(self, x: Genotype) -> str:
         return str(x)
@@ -142,4 +183,3 @@ class Sodarace:
     @property
     def behaviour_ndim(self):
         return self.behaviour_space.shape[1]
-

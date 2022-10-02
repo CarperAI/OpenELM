@@ -3,7 +3,9 @@ from typing import Union
 import numpy as np
 from tqdm import trange
 
-Genotype = Union[str, np.ndarray]
+from map_elites.environments import Sodarace
+
+Genotype = Union[str, np.ndarray, dict]
 Phenotype = np.ndarray
 Mapindex = tuple
 
@@ -37,6 +39,9 @@ class MAPElites:
         max_genome = None
 
         for n_steps in tbar:
+            if isinstance(self.env, Sodarace):
+                # Batch generate initsteps programs
+                pass
             if n_steps < initsteps:
                 # Initialise by generating initsteps random solutions.
                 x = self.env.random()

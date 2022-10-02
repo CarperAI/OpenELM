@@ -4,6 +4,7 @@ class Joint:
         self.x = x
         self.y = y
 
+
 class Muscle:
     # {"type": "muscle", "amplitude": 2.12, "phase": 0.0}
     # {"type": "distance"}
@@ -17,6 +18,7 @@ class Muscle:
             self.amplitude = amplitude
             self.phase = phase
 
+
 class Walker:
     def __init__(self, joints, muscles):
         self.joints = joints
@@ -27,7 +29,7 @@ class Walker:
             if self.joints[i] == joint:
                 return i
         return -1
-    
+
     def serialize_walker(self):
         joints = []
         muscles = []
@@ -37,8 +39,37 @@ class Walker:
             if m.type == "distance":
                 muscles.append([self.joint_index(m.j0), self.joint_index(m.j1), {"type": m.type}])
             elif m.type == "muscle":
-                muscles.append([self.joint_index(m.j0), self.joint_index(m.j1), {"type": m.type, "amplitude": m.amplitude, "phase": m.phase}])
+                muscles.append([self.joint_index(m.j0), self.joint_index(m.j1),
+                                {"type": m.type, "amplitude": m.amplitude, "phase": m.phase}])
         return {"joints": joints, "muscles": muscles}
+
+    def serialize_walker_sodarace(self):
+        walker_dict = {
+            "useLEO": True,
+            "nodes": [
+            ],
+            "connections": [
+            ],
+        }
+        for j in self.joints:
+            walker_dict["nodes"].append({
+                "x": j.x,
+                "y": j.y,
+            })
+        for m in self.muscles:
+            if m.type == "distance":
+                walker_dict['connections'].append({
+                    "sourceID": str(self.joint_index(m.j0)),
+                    "targetID": str(self.joint_index(m.j1)),
+                    "cppnOutputs": [0, 0, 0, -10.0]
+                })
+            elif m.type == "muscle":
+                walker_dict['connections'].append({
+                    "sourceID": str(self.joint_index(m.j0)),
+                    "targetID": str(self.joint_index(m.j1)),
+                    "cppnOutputs": [0, 0, m.phase, m.amplitude]
+                })
+        return walker_dict
 
     def __str__(self):
         return str(self.serialize_walker())
@@ -77,9 +108,10 @@ class Walker:
                 return False
         return True
 
+
 class walker_creator:
     """Walker Creator Referenced in ELM Paper - https://arxiv.org/abs/2206.08896 (pg.16)
-    """    
+    """
     def __init__(self):
         self.joints = []
         self.muscles = []
