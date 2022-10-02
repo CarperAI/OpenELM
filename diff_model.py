@@ -72,12 +72,11 @@ class DiffModel():
                                 max_length=2048,
                                 return_tensors='pt')
             return encoding
-        elif self.cfg.task == "imagegen":
+        elif self.cfg.task == "Imagegen":
             encoding = tokenizer([seed], truncation=True, padding=True,
                                 max_length=2048,
                                 return_tensors='pt')
             return encoding
-
 
     def generate_program(self, seed: str) -> dict:
         model, tokenizer = model_setup(self.cfg)
