@@ -66,17 +66,16 @@ class DiffModel():
         self.cfg = cfg
         set_seed(self.cfg.seed)
 
-    def generate_code_str(self, seed, tokenizer):
+    def generate_prompt_str(self, seed, tokenizer):
         if self.cfg.task == "Sodarace":
             encoding = tokenizer([seed], truncation=True, padding=True,
                                 max_length=2048,
                                 return_tensors='pt')
-            return encoding
         elif self.cfg.task == "Imagegen":
             encoding = tokenizer([seed], truncation=True, padding=True,
                                 max_length=2048,
                                 return_tensors='pt')
-            return encoding
+        return encoding
 
     def generate_program(self, seed: str) -> dict:
         model, tokenizer = model_setup(self.cfg)
