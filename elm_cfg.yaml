@@ -7,8 +7,8 @@ top_p: 0.95
 temp: 0.85
 timeout: 5  # Seconds
 gpus: 1
-max_length: 128
-batch_size: 500
+max_length: 1024
+batch_size: 1
 init_steps: 1000
 n_steps: 10000
 n_bins: 12

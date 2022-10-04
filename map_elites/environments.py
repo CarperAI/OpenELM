@@ -3,12 +3,11 @@ import string
 from abc import ABC, abstractmethod
 
 import numpy as np
+from diff_model import DiffModel
 from numpy import array
+from sodaracer_env import simulator
 
 from map_elites.map_elites import Genotype, Phenotype
-
-from ..diff_model import DiffModel
-from ..sodaracer_env import simulator
 
 
 def ackley(x: np.ndarray) -> np.ndarray:
@@ -145,7 +144,7 @@ class Sodarace(BaseEnvironment):
     def generate_program(self, x: str) -> Genotype:
         # Call LM to generate a new program and run it, retuning a dict containing the program string
         # and the dict from running
-        return self.diff_model.generate_program(seed=x)
+        return self.diff_model.generate_program(x)
 
     def fitness(self, x: Genotype) -> float:
         # Call Sodaracers environment to get the fitness.

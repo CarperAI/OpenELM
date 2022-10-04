@@ -78,7 +78,6 @@ def truncate(completion):
             '\n\n\n'
         ]
     ]
-
     prints = list(re.finditer('^print', completion, re.MULTILINE))
     if len(prints) > 1:
         completion = completion[:prints[1].start()]

@@ -3,8 +3,6 @@ import re
 import shutil
 from typing import Dict
 
-import torch
-
 from codegen.codegen_utilities import model_setup, sample, set_seed, truncate
 from codex_execute import (TimeoutException, create_tempdir, reliability_guard,
                            swallow_io, time_limit)
@@ -65,6 +63,7 @@ class DiffModel():
     def __init__(self, cfg) -> None:
         self.cfg = cfg
         set_seed(self.cfg.seed)
+        self.model, self.tokenizer = model_setup(self.cfg)
 
     def generate_prompt_str(self, seed, tokenizer):
         if self.cfg.task == "Sodarace":
@@ -78,16 +77,16 @@ class DiffModel():
         return encoding
 
     def generate_program(self, seed: str) -> dict:
-        model, tokenizer = model_setup(self.cfg)
-        encoding = self.generate_prompt_str(seed, tokenizer)
-        completion = sample(self.cfg, model, tokenizer, encoding)
-        truncation = truncate(completion)
-        execution_result = unsafe_execute(truncation, timeout=self.cfg.timeout)
-        if isinstance(execution_result, Walker):
-            if execution_result.validate():
-                sodaracer_dict: dict = execution_result.serialize_walker_sodarace()
-                return {
-                    "program_str": truncation,
-                    "sodaracer": sodaracer_dict,
-                }
-        return {}
+        # encoding = self.generate_prompt_str(seed, self.tokenizer)
+        while True:
+            # completions = sample(self.cfg, self.model, self.tokenizer, encoding)
+            # truncation = truncate(completions[0])
+            execution_result = unsafe_execute(seed, timeout=self.cfg.timeout)
+            print(execution_result)
+            if isinstance(execution_result, Walker):
+                if execution_result.validate():
+                    sodaracer_dict: dict = execution_result.serialize_walker_sodarace()
+                    return {
+                        "program_str": seed,
+                        "sodaracer": sodaracer_dict,
+                    }

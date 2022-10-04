@@ -5,7 +5,8 @@ from constants import PROJECT_PATH
 from diff_model import DiffModel
 from map_elites import MAPElites, Sodarace
 
-TEST_SEED = {"program_str": """from walker.walk_creator import walker_creator
+TEST_SEED = {"program_str":
+"""from walker.walk_creator import walker_creator
 
 
 def make_square(wc, x0, y0, x1, y1):
@@ -63,7 +64,7 @@ class ELM():
         self.diff_model = DiffModel(self.cfg)
         self.seed = TEST_SEED
         self.environment = Sodarace(seed=TEST_SEED, diff_model=self.diff_model)
-        self.map_elites = MAPElites(self.environment, nbins=self.cfg.n_bins)
+        self.map_elites = MAPElites(self.environment, n_bins=self.cfg.n_bins, task=self.cfg.task)
 
     def run(self) -> str:
         return self.map_elites.search(initsteps=self.cfg.init_steps, totalsteps=self.cfg.n_steps)
@@ -77,7 +78,7 @@ def main(cfg):
     print(OmegaConf.to_yaml(cfg))
     print('-----------------  End -----------------')
     elm = ELM(cfg)
-    print("Best Sodaracer: ", elm.run)
+    print("Best Sodaracer: ", elm.run())
 
 
 if __name__ == "__main__":
