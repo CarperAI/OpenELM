@@ -8,7 +8,7 @@ app = Flask(__name__)
 
 def generate_racer(code_str, timeout):
     try:
-        execution_result = unsafe_execute(code_str, 500)
+        execution_result = unsafe_execute(code_str, timeout)
         print(execution_result)
         if isinstance(execution_result, Walker):
             if execution_result.validate():
@@ -29,7 +29,6 @@ def generate_racer(code_str, timeout):
 
 @app.route("/gen", methods=["POST"])
 def gen():
-    # print("running unsafe in gen", unsafe_execute(CODE_STR, 5))
     req_json = request.get_json()
     code_str = req_json["code"]
     timeout = req_json["timeout"]
