@@ -39,7 +39,7 @@ def make_walker():
     wc.add_muscle(sides[2], center, False, 2.0, 0.0)
 
     return wc.get_walker()
-}""",
+""",
 "sodaracer": {'useLEO': True,
  'nodes': [{'x': 0, 'y': 0},
   {'x': 0, 'y': 10},
