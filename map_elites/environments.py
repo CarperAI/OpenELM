@@ -105,7 +105,7 @@ class ImageOptim(BaseEnvironment):
     default_import = 'import math\nimport numpy as np'
 
     def __init__(self, seed: str, config: Union[str, dict, DictConfig], target_img: np.ndarray, func_name: str,
-                 block_size=(8, 8), extra_string_for_mutation=default_extra_string, import_for_mutation=default_import,
+                 block_size=(16, 16), extra_string_for_mutation=default_extra_string, import_for_mutation=default_import,
                  sandbox_server='localhost:5000'):
         """
         Parameters:
@@ -157,7 +157,7 @@ class ImageOptim(BaseEnvironment):
 
     def fitness(self, x: Genotype) -> float:
         if not isinstance(x[1], np.ndarray) or x[1].shape != self.shape:
-            return 0
+            return -np.inf
         return -np.abs(x[1] - self.target_img).sum()
 
     def to_behaviour_space(self, x: Genotype) -> Phenotype:
@@ -167,6 +167,10 @@ class ImageOptim(BaseEnvironment):
         ny = math.ceil(height / bh)
         nx = math.ceil(width / bw)
         result = np.zeros((ny, nx, 3))
+
+        # Assume all-zero behaviour space if the program ended up with error?
+        if x[1] is None:
+            return result.reshape(-1)
 
         for i in range(ny):
             for j in range(nx):
@@ -218,7 +222,20 @@ class ImageOptim(BaseEnvironment):
         """
         Update the random seed in `self.config.seed` using `self.rng`.
         """
-        self.config.seed = self.rng.integer(0, 1e8)
+        self.config.seed = int(self.rng.integers(0, 1e8))
+
+    @property
+    def max_fitness(self):
+        return 0
+
+    @property
+    # [starts, endings) of search intervals
+    def behaviour_space(self):
+        return self.genotype_space
+
+    @property
+    def behaviour_ndim(self):
+        return self.behaviour_space.shape[1]
 
 
 # find a string by mutating one character at a time
