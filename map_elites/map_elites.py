@@ -3,7 +3,7 @@ from typing import Union
 import numpy as np
 from tqdm import trange
 
-Genotype = Union[str, np.ndarray, dict]
+Genotype = Union[str, np.ndarray, dict, tuple]
 Phenotype = np.ndarray
 Mapindex = tuple
 
