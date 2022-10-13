@@ -168,15 +168,15 @@ class ImageOptim(BaseEnvironment):
         return -np.abs(x[1] - self.target_img).sum()
 
     def to_behaviour_space(self, x: Genotype) -> Phenotype:
-        height, width = self.shape
+        height, width, _ = self.shape
         bh = self.block_size[0]
         bw = self.block_size[1]
         ny = math.ceil(height / bh)
         nx = math.ceil(width / bw)
         result = np.zeros((ny, nx, 3))
 
-        # Assume all-zero behaviour space if the program ended up with error?
-        if x[1] is None:
+        # Assume all-zero behaviour space if the program ended up with error and invalid output?
+        if not self._has_valid_output(x):
             return result.reshape(-1)
 
         for i in range(ny):
@@ -187,7 +187,7 @@ class ImageOptim(BaseEnvironment):
         return result.reshape(-1)
 
     def to_string(self, x: Genotype) -> str:
-        return x[0]
+        return str(x[1].reshape((-1, 3)).mean(axis=0)) if self._has_valid_output(x) else None
 
     def _generate_code(self, seed: str, num=1) -> List[str]:
         """
@@ -234,6 +234,9 @@ class ImageOptim(BaseEnvironment):
                     return codes[i], result
         # If needed, the result can be further classified based on the error type.
         return codes[-1], None
+
+    def _has_valid_output(self, x: Genotype) -> bool:
+        return isinstance(x[1], np.ndarray) and x[1].shape == self.shape
 
     def _update_seed(self):
         """
