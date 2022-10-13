@@ -187,7 +187,7 @@ class ImageOptim(BaseEnvironment):
         return result.reshape(-1)
 
     def to_string(self, x: Genotype) -> str:
-        return str(x[1].reshape((-1, 3)).mean(axis=0)) if self._has_valid_output(x) else None
+        return str(x[1].reshape((-1, 3)).mean(axis=0).astype(int)) if self._has_valid_output(x) else None
 
     def _generate_code(self, seed: str, num=1) -> List[str]:
         """

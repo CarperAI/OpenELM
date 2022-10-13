@@ -89,7 +89,7 @@ class MAPElites:
 
 
 if __name__ == '__main__':
-    from map_elites.environments import FunctionOptim, MatchString
+    from map_elites.environments import FunctionOptim, MatchString, ImageOptim
 
     env = MatchString(target='MAPElites')
     elites = MAPElites(env, n_bins=3)
@@ -100,3 +100,19 @@ if __name__ == '__main__':
     elites = MAPElites(env, n_bins=128)
     print("Function's maximum:", elites.search(initsteps=10_000, totalsteps=1_000_000, atol=0))
     elites.plot()
+
+    seed = """def draw_blue_rectangle() -> np.ndarray:
+    pic = np.zeros((32, 32, 3))
+    for x in range(2, 30):
+        for y in range(2, 30):
+            pic[x, y] = np.array([0, 0, 255])
+    return pic
+    """
+    target = np.zeros((32, 32, 3))
+    for y in range(32):
+        for x in range(32):
+            if (y - 16)**2 + (x - 16)**2 <= 100:  # a radius-10 circle
+                target[y, x] = np.array([1, 1, 0])
+    env = ImageOptim(seed, 'elm_cfg.yaml', target_img=target, func_name='draw')
+    elites = MAPElites(env, n_bins=2)
+    print("Best image", elites.search(initsteps=5, totalsteps=10))
