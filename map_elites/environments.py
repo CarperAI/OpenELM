@@ -102,7 +102,7 @@ class ImageOptim(BaseEnvironment):
     average-pooling).
     """
     default_extra_string = '\t"""Draw a yellow circle.\n\t"""'
-    default_import = 'import math\nimport numpy as np'
+    default_import = 'import math\nimport numpy as np\n'
 
     def __init__(self, seed: str, config: Union[str, dict, DictConfig], target_img: np.ndarray, func_name: str,
                  block_size=(16, 16), extra_string_for_mutation=default_extra_string, import_for_mutation=default_import,
@@ -130,8 +130,8 @@ class ImageOptim(BaseEnvironment):
         self.shape = target_img.shape
         self.func_name = func_name
         self.block_size = block_size
-        self.import_prompt = import_for_mutation
-        self.extra_prompt = f'\ndef {self.func_name}():\n{extra_string_for_mutation}\n\tpic = np.zeros({self.shape})'
+        self.import_text = import_for_mutation + '\n'
+        self.extra_text = f'\ndef {self.func_name}():\n{extra_string_for_mutation}\n\tpic = np.zeros({self.shape})\n'
 
         self.model, self.tokenizer = model_setup(self.config)
 
@@ -144,16 +144,23 @@ class ImageOptim(BaseEnvironment):
 
         self.sandbox_server = sandbox_server
 
-    def random(self) -> Genotype:
-        code = self._generate_code(self.seed + self.extra_prompt)[0]
-        result = self._evaluate_code(self.extra_prompt + code)
-        # If needed, the result can be further classified based on the error type.
-        return code, None if isinstance(result, Exception) else result
+    def random(self, **kwargs) -> Genotype:
+        """
+        Randomly generate one individual with 'hopefully' working code and valid result.
+        It will generate a batch first, and try to pick one with valid result. If none of them work, return the last
+        code with None as returning result.
+        Returns:
+            a tuple of the code string and the returning result (None if there is error).
+        """
+        return self._get_code_result_pair(self.seed + self.extra_text, **kwargs)
 
-    def mutate(self, x: Genotype) -> Genotype:
-        code = self._generate_code(self.extra_prompt + x[0] + self.extra_prompt)[0]
-        result = self._evaluate_code(self.extra_prompt + code)
-        return code, None if isinstance(result, Exception) else result
+    def mutate(self, x: Genotype, **kwargs) -> Genotype:
+        """
+        Randomly mutate an individual with hopefully working code and valid result.
+        Returns:
+            a tuple of the code string and the returning result (None if there is error).
+        """
+        return self._get_code_result_pair(self.extra_text + x[0] + self.extra_text, **kwargs)
 
     def fitness(self, x: Genotype) -> float:
         if not isinstance(x[1], np.ndarray) or x[1].shape != self.shape:
@@ -217,6 +224,16 @@ class ImageOptim(BaseEnvironment):
             result = e
 
         return result
+
+    def _get_code_result_pair(self, prompt, batch_size=10, max_tries=1):
+        for _ in range(max_tries):
+            codes = self._generate_code(prompt, num=batch_size)
+            for i in range(len(codes)):
+                result = self._evaluate_code(self.import_text + self.extra_text + codes[i])
+                if isinstance(result, np.ndarray):
+                    return codes[i], result
+        # If needed, the result can be further classified based on the error type.
+        return codes[-1], None
 
     def _update_seed(self):
         """
