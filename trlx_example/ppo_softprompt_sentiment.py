@@ -19,8 +19,8 @@ from dataclasses import dataclass
 @dataclass
 @register_method
 class PPOSoftpromptConfig(PPOConfig):
-    n_soft_tokens: int = None  # soft prompt support
-    initialize_from_vocab: bool = True  # soft prompt support
+    n_soft_tokens: int = None
+    initialize_from_vocab: bool = True
 
 
 if __name__ == "__main__":

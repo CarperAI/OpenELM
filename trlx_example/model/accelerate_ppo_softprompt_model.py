@@ -26,13 +26,6 @@ from trlx.data.method_configs import register_method, PPOConfig
 from dataclasses import dataclass
 
 
-@dataclass
-@register_method
-class PPOSoftpromptConfig(PPOConfig):
-    n_soft_tokens: int = None  # soft prompt support
-    initialize_from_vocab: bool = True  # soft prompt support
-
-
 class SoftEmbedding(nn.Module):
     def __init__(
         self,
