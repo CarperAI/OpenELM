@@ -67,7 +67,7 @@ class MAPElites:
             for individual in x:
                 map_ix = self.to_mapindex(self.env.to_behaviour_space(individual))
                 # if the return is None, the individual is invalid and is thrown into the recycle bin.
-                if individual[1] is None:
+                if map_ix is None:
                     self.recycled[self.recycled_count % len(self.recycled)] = x
                     self.recycled_count += 1
                     continue
