@@ -4,7 +4,7 @@ import numpy as np
 from tqdm import trange
 
 Genotype = Union[str, np.ndarray, dict, tuple]
-Phenotype = np.ndarray
+Phenotype = Union[np.ndarray, None]
 Mapindex = tuple
 
 
@@ -23,19 +23,27 @@ class MAPElites:
         # index over explored niches to select from
         self.nonzero = np.full(self.fitnesses.shape, False)
 
+        # bad mutations that ended up with invalid output.
+        # TODO: What do we do with it? Refine into different errors? Recycle and mutate again? I leave it here for play.
+        self.recycled = [None] * 1000
+        self.recycled_count = 0
+
         print(f"MAP of size: {self.fitnesses.shape} = {self.fitnesses.size}")
 
     def to_mapindex(self, b: Phenotype) -> Mapindex:
-        return tuple(np.digitize(x, bins) for x, bins in zip(b, self.bins))
+        return None if b is None else tuple(np.digitize(x, bins) for x, bins in zip(b, self.bins))
 
     def random_selection(self) -> Mapindex:
         ix = np.random.choice(np.flatnonzero(self.nonzero))
         return np.unravel_index(ix, self.nonzero.shape)
 
-    def search(self, initsteps: int, totalsteps: int, atol=1):
+    def search(self, initsteps: int, totalsteps: int, atol=1, batch_size=32):
         tbar = trange(int(totalsteps))
         max_fitness = -np.inf
         max_genome = None
+
+        use_batch_op = self.env.use_batch_op
+        config = {'batch_size': batch_size} if use_batch_op else {}
 
         for n_steps in tbar:
             if self.task == "Sodarace":
@@ -43,31 +51,43 @@ class MAPElites:
                 pass
             if n_steps < initsteps:
                 # Initialise by generating initsteps random solutions.
-                x = self.env.random()
+                x = self.env.random(**config)
             else:
                 # Randomly select an elite from the map
+                # TODO: now it selects an elite and mutate a bunch, but better to select a bunch of elites and mutate
                 map_ix = self.random_selection()
                 x = self.genomes[map_ix]
                 # Mutate the elite
-                x = self.env.mutate(x)
+                x = self.env.mutate(x, **config)
 
-            map_ix = self.to_mapindex(self.env.to_behaviour_space(x))
-            self.nonzero[map_ix] = True
+            if not use_batch_op:
+                x = [x]
 
-            f = self.env.fitness(x)
-            # If new fitness greater than old fitness in niche, replace.
-            if f > self.fitnesses[map_ix]:
-                self.fitnesses[map_ix] = f
-                self.genomes[map_ix] = x
-            # If new fitness is the highest so far, update the tracker.
-            if f > max_fitness:
-                max_fitness = f
-                max_genome = x
+            # Now that `x` is a list, we put them into the behaviour space one-by-one.
+            for individual in x:
+                map_ix = self.to_mapindex(self.env.to_behaviour_space(individual))
+                # if the return is None, the individual is invalid and is thrown into the recycle bin.
+                if individual[1] is None:
+                    self.recycled[self.recycled_count % len(self.recycled)] = x
+                    self.recycled_count += 1
+                    continue
 
-                tbar.set_description(f'{max_fitness=:.4f} of "{self.env.to_string(max_genome)}"')
-            # If best fitness is within atol of the maximum possible fitness, stop.
-            if np.isclose(max_fitness, self.env.max_fitness, atol=atol):
-                break
+                self.nonzero[map_ix] = True
+
+                f = self.env.fitness(individual)
+                # If new fitness greater than old fitness in niche, replace.
+                if f > self.fitnesses[map_ix]:
+                    self.fitnesses[map_ix] = f
+                    self.genomes[map_ix] = individual
+                # If new fitness is the highest so far, update the tracker.
+                if f > max_fitness:
+                    max_fitness = f
+                    max_genome = individual
+
+                    tbar.set_description(f'{max_fitness=:.4f} of "{self.env.to_string(max_genome)}"')
+                # If best fitness is within atol of the maximum possible fitness, stop.
+                if np.isclose(max_fitness, self.env.max_fitness, atol=atol):
+                    break
 
         return self.env.to_string(self.genomes[np.unravel_index(self.fitnesses.argmax(), self.fitnesses.shape)])
 

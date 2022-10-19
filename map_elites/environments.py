@@ -33,6 +33,7 @@ def ackley(x: np.ndarray) -> np.ndarray:
 
 
 class BaseEnvironment(ABC):
+    use_batch_op: bool
 
     @abstractmethod
     def random(self) -> Genotype:
@@ -57,14 +58,16 @@ class BaseEnvironment(ABC):
 
 # find all local maxima of a multimodal function
 class FunctionOptim(BaseEnvironment):
+    use_batch_op = False
+
     def __init__(self, ndim=2):
         self.genotype_ndim = ndim
         self.genotype_space = np.repeat([[-4, 4]], self.genotype_ndim, axis=0).T
 
-    def random(self) -> Genotype:
+    def random(self) -> Union[Genotype, List[Genotype]]:
         return np.random.uniform(*self.genotype_space)
 
-    def mutate(self, x: Genotype) -> Genotype:
+    def mutate(self, x: Genotype) -> Union[Genotype, List[Genotype]]:
         x = x.copy()
         ix = np.random.randint(self.genotype_ndim)
         x[ix] = x[ix] + np.random.uniform(-1, 1)
@@ -93,6 +96,18 @@ class FunctionOptim(BaseEnvironment):
         return self.behaviour_space.shape[1]
 
 
+def _three_channel_average(x: Genotype) -> Phenotype:
+    """
+    Assume the input is of shape (height, width, channel), and we average each channel to get (channel,)
+    """
+    assert isinstance(x, tuple) and len(x) == 2
+    # Code with invalid return -> return a `None` Phenotype.
+    if not isinstance(x[1], np.ndarray) or len(x[1].shape) != 3 or x[1].shape[2] != 3:
+        return None
+
+    return np.average(x[1].reshape((-1, 3)), axis=0)
+
+
 class ImageOptim(BaseEnvironment):
     """
     This will try to mutate programs that return images. Fitness is simply the absolute difference between the returning
@@ -101,19 +116,25 @@ class ImageOptim(BaseEnvironment):
     values of RGB channels in each block will be put together as a point in the behaviour space (basically it is
     average-pooling).
     """
+    use_batch_op = True
+
     default_extra_string = '\t"""Draw a yellow circle.\n\t"""'
     default_import = 'import math\nimport numpy as np\n'
 
+    # Record different definitions of behaviour spaces in a dict. Feel free to add.
+    behaviour_mode_spec = {'3-channel':
+                               {'genotype_ndim': 3,
+                                'behaviour_space_fn': _three_channel_average}}
+
     def __init__(self, seed: str, config: Union[str, dict, DictConfig], target_img: np.ndarray, func_name: str,
-                 block_size=(16, 16), extra_string_for_mutation=default_extra_string, import_for_mutation=default_import,
-                 sandbox_server='localhost:5000'):
+                 extra_string_for_mutation=default_extra_string, import_for_mutation=default_import,
+                 sandbox_server: str = 'localhost:5000', behaviour_mode: str = '3-channel'):
         """
         Parameters:
             seed: the seed string.
             config: the config file or dict.
             target_img: the target image.
             func_name: the name of the function to be called to return images.
-            block_size: (Optional) the size of each block (used to calculate the behavior space).
             extra_string_for_mutation: (Optional) the extra string attached under the function definition in prompt.
             import_for_mutation: (Optional) the import lines for the prompt while mutating.
             sandbox_server: (Optional) the address of sandbox server: 'domain:port'.
@@ -129,7 +150,6 @@ class ImageOptim(BaseEnvironment):
         self.target_img = target_img
         self.shape = target_img.shape
         self.func_name = func_name
-        self.block_size = block_size
         self.import_text = import_for_mutation + '\n'
         self.extra_text = f'\ndef {self.func_name}():\n{extra_string_for_mutation}\n\tpic = np.zeros({self.shape})\n'
 
@@ -138,25 +158,25 @@ class ImageOptim(BaseEnvironment):
         # Use RNG to rotate random seeds during inference.
         self.rng = np.random.default_rng(seed=self.config.seed)
 
-        height, width, _ = self.shape
-        self.genotype_ndim = 3 * math.ceil(height / block_size[0]) * math.ceil(width / block_size[1])
+        self.behaviour_mode = behaviour_mode
+        self.genotype_ndim = self.behaviour_mode_spec[self.behaviour_mode]['genotype_ndim']
         self.genotype_space = np.repeat([[0, 255]], self.genotype_ndim, axis=0).T
 
         self.sandbox_server = sandbox_server
 
-    def random(self, **kwargs) -> Genotype:
+    def random(self, **kwargs) -> List[Genotype]:
         """
-        Randomly generate one individual with 'hopefully' working code and valid result.
-        It will generate a batch first, and try to pick one with valid result. If none of them work, return the last
-        code with None as returning result.
+        Randomly generate a batch of codes and evaluate their outputs.
         Returns:
             a tuple of the code string and the returning result (None if there is error).
         """
         return self._get_code_result_pair(self.seed + self.extra_text, **kwargs)
 
-    def mutate(self, x: Genotype, **kwargs) -> Genotype:
+    def mutate(self, x: Genotype, **kwargs) -> List[Genotype]:
         """
-        Randomly mutate an individual with hopefully working code and valid result.
+        Randomly mutate a batch of codes from a given individual and evaluate their outputs.
+        Parameters:
+            x: the individual to be mutated.
         Returns:
             a tuple of the code string and the returning result (None if there is error).
         """
@@ -168,23 +188,7 @@ class ImageOptim(BaseEnvironment):
         return -np.abs(x[1] - self.target_img).sum()
 
     def to_behaviour_space(self, x: Genotype) -> Phenotype:
-        height, width, _ = self.shape
-        bh = self.block_size[0]
-        bw = self.block_size[1]
-        ny = math.ceil(height / bh)
-        nx = math.ceil(width / bw)
-        result = np.zeros((ny, nx, 3))
-
-        # Assume all-zero behaviour space if the program ended up with error and invalid output?
-        if not self._has_valid_output(x):
-            return result.reshape(-1)
-
-        for i in range(ny):
-            for j in range(nx):
-                for ch in range(3):
-                    result[i, j, ch] = np.mean(x[1][i * bh:(i+1) * bh, j * bw: (j+1) * bw, ch])
-
-        return result.reshape(-1)
+        return self.behaviour_mode_spec[self.behaviour_mode]['behaviour_space_fn'](x)
 
     def to_string(self, x: Genotype) -> str:
         return str(x[1].reshape((-1, 3)).mean(axis=0).astype(int)) if self._has_valid_output(x) else None
@@ -208,7 +212,7 @@ class ImageOptim(BaseEnvironment):
 
         return truncation
 
-    def _evaluate_code(self, code: str):
+    def _evaluate_code(self, code: str) -> Union[np.ndarray, Exception]:
         """
         Call the sandbox server to execute the code, and obtain the result.
         Parameters:
@@ -225,18 +229,30 @@ class ImageOptim(BaseEnvironment):
 
         return result
 
-    def _get_code_result_pair(self, prompt, batch_size=10, max_tries=1):
-        for _ in range(max_tries):
-            codes = self._generate_code(prompt, num=batch_size)
-            for i in range(len(codes)):
-                result = self._evaluate_code(self.import_text + self.extra_text + codes[i])
-                if isinstance(result, np.ndarray):
-                    return codes[i], result
+    def _get_code_result_pair(self, prompt, batch_size=32) -> List[Tuple[str, np.ndarray]]:
+        """
+        Parameters:
+            prompt: the prompt input.
+            batch_size: (Optional) the batch size.
+        Returns:
+            a list of tuples (code, result).
+            `result` is a numpy array if the code returns an array or a list (uniform size).
+            `result` is None if otherwise.
+        """
+        codes = self._generate_code(prompt, num=batch_size)
+        results = []
+        for i in range(len(codes)):
+            result = self._evaluate_code(self.import_text + self.extra_text + codes[i])
+            if isinstance(result, np.ndarray):
+                results.append((codes[i], result))
+            else:
+                results.append((codes[i], None))
         # If needed, the result can be further classified based on the error type.
-        return codes[-1], None
+        return results
 
-    def _has_valid_output(self, x: Genotype) -> bool:
-        return isinstance(x[1], np.ndarray) and x[1].shape == self.shape
+    @staticmethod
+    def _has_valid_output(x: Genotype) -> bool:
+        return isinstance(x[1], np.ndarray) and len(x[1].shape) == 3 and x[1].shape[2] == 3
 
     def _update_seed(self):
         """
@@ -260,6 +276,8 @@ class ImageOptim(BaseEnvironment):
 
 # find a string by mutating one character at a time
 class MatchString(BaseEnvironment):
+    use_batch_op = False
+
     def __init__(self, target: str):
         self.alphabet = string.ascii_letters
 
@@ -305,6 +323,8 @@ class MatchString(BaseEnvironment):
 
 
 class Sodarace(BaseEnvironment):
+    use_batch_op = True
+
     def __init__(self, seed: dict, diff_model, max_height: int = 100, max_width: int = 100, max_mass: int = 100,
                  ndim: int = 3) -> None:
         self.seed = seed
