@@ -24,7 +24,6 @@ class MAPElites:
         self.nonzero = np.full(self.fitnesses.shape, False)
 
         # bad mutations that ended up with invalid output.
-        # TODO: What do we do with it? Refine into different errors? Recycle and mutate again? I leave it here for play.
         self.recycled = [None] * 1000
         self.recycled_count = 0
 
@@ -54,7 +53,6 @@ class MAPElites:
                 x = self.env.random(**config)
             else:
                 # Randomly select an elite from the map
-                # TODO: now it selects an elite and mutate a bunch, but better to select a bunch of elites and mutate
                 map_ix = self.random_selection()
                 x = self.genomes[map_ix]
                 # Mutate the elite

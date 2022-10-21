@@ -36,11 +36,11 @@ class BaseEnvironment(ABC):
     use_batch_op: bool
 
     @abstractmethod
-    def random(self) -> Genotype:
+    def random(self) -> Union[Genotype, List[Genotype]]:
         raise NotImplementedError
 
     @abstractmethod
-    def mutate(self, x: Genotype) -> Genotype:
+    def mutate(self, x: Genotype) -> Union[Genotype, List[Genotype]]:
         raise NotImplementedError
 
     @abstractmethod
@@ -64,10 +64,10 @@ class FunctionOptim(BaseEnvironment):
         self.genotype_ndim = ndim
         self.genotype_space = np.repeat([[-4, 4]], self.genotype_ndim, axis=0).T
 
-    def random(self) -> Union[Genotype, List[Genotype]]:
+    def random(self) -> Genotype:
         return np.random.uniform(*self.genotype_space)
 
-    def mutate(self, x: Genotype) -> Union[Genotype, List[Genotype]]:
+    def mutate(self, x: Genotype) -> Genotype:
         x = x.copy()
         ix = np.random.randint(self.genotype_ndim)
         x[ix] = x[ix] + np.random.uniform(-1, 1)
@@ -118,7 +118,7 @@ class ImageOptim(BaseEnvironment):
     """
     use_batch_op = True
 
-    default_extra_string = '\t"""Draw a yellow circle.\n\t"""'
+    default_docstring = '\t"""Draw a yellow circle.\n\t"""'
     default_import = 'import math\nimport numpy as np\n'
 
     # Record different definitions of behaviour spaces in a dict. Feel free to add.
@@ -127,16 +127,16 @@ class ImageOptim(BaseEnvironment):
                                 'behaviour_space_fn': _three_channel_average}}
 
     def __init__(self, seed: str, config: Union[str, dict, DictConfig], target_img: np.ndarray, func_name: str,
-                 extra_string_for_mutation=default_extra_string, import_for_mutation=default_import,
-                 sandbox_server: str = 'localhost:5000', behaviour_mode: str = '3-channel'):
+                 docstring=default_docstring, import_text=default_import, sandbox_server='localhost:5000',
+                 behaviour_mode: str = '3-channel'):
         """
         Parameters:
             seed: the seed string.
             config: the config file or dict.
             target_img: the target image.
             func_name: the name of the function to be called to return images.
-            extra_string_for_mutation: (Optional) the extra string attached under the function definition in prompt.
-            import_for_mutation: (Optional) the import lines for the prompt while mutating.
+            docstring: (Optional) the extra docstring attached under the function definition in a prompt.
+            import_text: (Optional) the import lines to run the codes.
             sandbox_server: (Optional) the address of sandbox server: 'domain:port'.
         """
         self.seed = seed
@@ -150,9 +150,9 @@ class ImageOptim(BaseEnvironment):
         self.target_img = target_img
         self.shape = target_img.shape
         self.func_name = func_name
-        self.import_text = import_for_mutation + '\n'
+        self.import_text = import_text + '\n'
         # These prompts can probably be improved.
-        self.def_and_docstring = f'\ndef {self.func_name}():\n{extra_string_for_mutation}\n\tpic = np.zeros({self.shape})\n'
+        self.def_and_docstring = f'\ndef {self.func_name}():\n{docstring}\n\tpic = np.zeros({self.shape})\n'
         self.def_for_mutation = f'\ndef {self.func_name}_old():\n\tpic = np.zeros({self.shape})\n'
 
         self.model, self.tokenizer = model_setup(self.config)
@@ -187,7 +187,7 @@ class ImageOptim(BaseEnvironment):
     def fitness(self, x: Genotype) -> float:
         if not isinstance(x[1], np.ndarray) or x[1].shape != self.shape:
             return -np.inf
-        return -np.abs(x[1] - self.target_img).mean()
+        return -np.abs(x[1] - self.target_img).sum()
 
     def to_behaviour_space(self, x: Genotype) -> Phenotype:
         return self.behaviour_mode_spec[self.behaviour_mode]['behaviour_space_fn'](x)
