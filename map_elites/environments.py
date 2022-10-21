@@ -151,7 +151,9 @@ class ImageOptim(BaseEnvironment):
         self.shape = target_img.shape
         self.func_name = func_name
         self.import_text = import_for_mutation + '\n'
-        self.extra_text = f'\ndef {self.func_name}():\n{extra_string_for_mutation}\n\tpic = np.zeros({self.shape})\n'
+        # These prompts can probably be improved.
+        self.def_and_docstring = f'\ndef {self.func_name}():\n{extra_string_for_mutation}\n\tpic = np.zeros({self.shape})\n'
+        self.def_for_mutation = f'\ndef {self.func_name}_old():\n\tpic = np.zeros({self.shape})\n'
 
         self.model, self.tokenizer = model_setup(self.config)
 
@@ -170,7 +172,7 @@ class ImageOptim(BaseEnvironment):
         Returns:
             a tuple of the code string and the returning result (None if there is error).
         """
-        return self._get_code_result_pair(self.seed + self.extra_text, **kwargs)
+        return self._get_code_result_pair(self.seed + self.def_and_docstring, **kwargs)
 
     def mutate(self, x: Genotype, **kwargs) -> List[Genotype]:
         """
@@ -180,12 +182,12 @@ class ImageOptim(BaseEnvironment):
         Returns:
             a tuple of the code string and the returning result (None if there is error).
         """
-        return self._get_code_result_pair(self.extra_text + x[0] + self.extra_text, **kwargs)
+        return self._get_code_result_pair(self.def_for_mutation + x[0] + self.def_and_docstring, **kwargs)
 
     def fitness(self, x: Genotype) -> float:
         if not isinstance(x[1], np.ndarray) or x[1].shape != self.shape:
             return -np.inf
-        return -np.abs(x[1] - self.target_img).sum()
+        return -np.abs(x[1] - self.target_img).mean()
 
     def to_behaviour_space(self, x: Genotype) -> Phenotype:
         return self.behaviour_mode_spec[self.behaviour_mode]['behaviour_space_fn'](x)
@@ -242,7 +244,7 @@ class ImageOptim(BaseEnvironment):
         codes = self._generate_code(prompt, num=batch_size)
         results = []
         for i in range(len(codes)):
-            result = self._evaluate_code(self.import_text + self.extra_text + codes[i])
+            result = self._evaluate_code(self.import_text + self.def_and_docstring + codes[i])
             if isinstance(result, np.ndarray):
                 results.append((codes[i], result))
             else:
