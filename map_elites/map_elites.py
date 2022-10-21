@@ -3,20 +3,21 @@ from typing import Union
 import numpy as np
 from tqdm import trange
 
-Genotype = Union[str, np.ndarray]
+Genotype = Union[str, np.ndarray, dict]
 Phenotype = np.ndarray
 Mapindex = tuple
 
 
 class MAPElites:
-    def __init__(self, env, nbins: int):
+    def __init__(self, env, n_bins: int, task: str = None):
+        self.task = task
         self.env = env
-        self.nbins = nbins
+        self.n_bins = n_bins
 
         # discretization of behaviour space
-        self.bins = np.linspace(*env.behaviour_space, nbins + 1)[1:-1].T
+        self.bins = np.linspace(*env.behaviour_space, n_bins + 1)[1:-1].T
         # perfomance of niches
-        self.fitnesses = np.full(np.repeat(nbins, env.behaviour_ndim), -np.inf)
+        self.fitnesses = np.full(np.repeat(n_bins, env.behaviour_ndim), -np.inf)
         # niches' sources
         self.genomes = np.zeros(self.fitnesses.shape, dtype=object)
         # index over explored niches to select from
@@ -37,6 +38,9 @@ class MAPElites:
         max_genome = None
 
         for n_steps in tbar:
+            if self.task == "Sodarace":
+                # Batch generate initsteps programs
+                pass
             if n_steps < initsteps:
                 # Initialise by generating initsteps random solutions.
                 x = self.env.random()
@@ -88,11 +92,11 @@ if __name__ == '__main__':
     from map_elites.environments import FunctionOptim, MatchString
 
     env = MatchString(target='MAPElites')
-    elites = MAPElites(env, nbins=3)
+    elites = MAPElites(env, n_bins=3)
     print('Best string match:', elites.search(initsteps=10_000, totalsteps=50_000))
     elites.plot()
 
     env = FunctionOptim(ndim=2)
-    elites = MAPElites(env, nbins=128)
+    elites = MAPElites(env, n_bins=128)
     print("Function's maximum:", elites.search(initsteps=10_000, totalsteps=1_000_000, atol=0))
     elites.plot()
