@@ -1,7 +1,7 @@
 import numpy as np
 
-from CPPN_mutable import query_cppn
-from walk_creator import walker_creator
+from walker.CPPN_mutable import query_cppn
+from walker.walk_creator import walker_creator
 
 
 def make_walker():
