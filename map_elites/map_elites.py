@@ -41,13 +41,9 @@ class MAPElites:
         max_fitness = -np.inf
         max_genome = None
 
-        use_batch_op = self.env.use_batch_op
-        config = {'batch_size': batch_size} if use_batch_op else {}
+        config = {'batch_size': batch_size}
 
         for n_steps in tbar:
-            if self.task == "Sodarace":
-                # Batch generate initsteps programs
-                pass
             if n_steps < initsteps:
                 # Initialise by generating initsteps random solutions.
                 x = self.env.random(**config)
@@ -57,9 +53,6 @@ class MAPElites:
                 x = self.genomes[map_ix]
                 # Mutate the elite
                 x = self.env.mutate(x, **config)
-
-            if not use_batch_op:
-                x = [x]
 
             # Now that `x` is a list, we put them into the behaviour space one-by-one.
             for individual in x:
@@ -116,16 +109,16 @@ if __name__ == '__main__':
 
     env = FunctionOptim(ndim=2)
     elites = MAPElites(env, n_bins=128)
-    print("Function's maximum:", elites.search(initsteps=10_000, totalsteps=1_000_000, atol=0))
+    print("Function's maximum:", elites.search(initsteps=5_000, totalsteps=50_000, atol=0))
     elites.plot()
 
     seed = """def draw_blue_rectangle() -> np.ndarray:
-    pic = np.zeros((32, 32, 3))
-    for x in range(2, 30):
-        for y in range(2, 30):
-            pic[x, y] = np.array([0, 0, 255])
-    return pic
-    """
+\tpic = np.zeros((32, 32, 3))
+\tfor x in range(2, 30):
+\t\tfor y in range(2, 30):
+\t\t\tpic[x, y] = np.array([0, 0, 255])
+\treturn pic
+"""
     target = np.zeros((32, 32, 3))
     for y in range(32):
         for x in range(32):

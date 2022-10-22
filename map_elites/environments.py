@@ -33,14 +33,13 @@ def ackley(x: np.ndarray) -> np.ndarray:
 
 
 class BaseEnvironment(ABC):
-    use_batch_op: bool
 
     @abstractmethod
-    def random(self) -> Union[Genotype, List[Genotype]]:
+    def random(self, **kwarg) -> List[Genotype]:
         raise NotImplementedError
 
     @abstractmethod
-    def mutate(self, x: Genotype) -> Union[Genotype, List[Genotype]]:
+    def mutate(self, x: Genotype, **kwarg) -> List[Genotype]:
         raise NotImplementedError
 
     @abstractmethod
@@ -58,20 +57,19 @@ class BaseEnvironment(ABC):
 
 # find all local maxima of a multimodal function
 class FunctionOptim(BaseEnvironment):
-    use_batch_op = False
 
     def __init__(self, ndim=2):
         self.genotype_ndim = ndim
         self.genotype_space = np.repeat([[-4, 4]], self.genotype_ndim, axis=0).T
 
-    def random(self) -> Genotype:
-        return np.random.uniform(*self.genotype_space)
+    def random(self, **kwarg) -> List[Genotype]:
+        return [np.random.uniform(*self.genotype_space)]
 
-    def mutate(self, x: Genotype) -> Genotype:
+    def mutate(self, x: Genotype, **kwarg) -> List[Genotype]:
         x = x.copy()
         ix = np.random.randint(self.genotype_ndim)
         x[ix] = x[ix] + np.random.uniform(-1, 1)
-        return x
+        return [x]
 
     def fitness(self, x: Genotype) -> float:
         return ackley(x[None])[0]
@@ -116,8 +114,6 @@ class ImageOptim(BaseEnvironment):
     values of RGB channels in each block will be put together as a point in the behaviour space (basically it is
     average-pooling).
     """
-    use_batch_op = True
-
     default_docstring = '\t"""Draw a yellow circle.\n\t"""'
     default_import = 'import math\nimport numpy as np\n'
 
@@ -278,8 +274,6 @@ class ImageOptim(BaseEnvironment):
 
 # find a string by mutating one character at a time
 class MatchString(BaseEnvironment):
-    use_batch_op = False
-
     def __init__(self, target: str):
         self.alphabet = string.ascii_letters
 
@@ -287,14 +281,14 @@ class MatchString(BaseEnvironment):
         self.genotype_ndim = self.target.shape[0]
         self.genotype_space = np.repeat([[0, len(self.alphabet)]], self.genotype_ndim, axis=0).T
 
-    def random(self) -> Genotype:
-        return np.random.uniform(*self.genotype_space)
+    def random(self, **kwarg) -> List[Genotype]:
+        return [np.random.uniform(*self.genotype_space)]
 
-    def mutate(self, x: Genotype) -> Genotype:
+    def mutate(self, x: Genotype, **kwarg) -> List[Genotype]:
         x = x.copy()
         ix = np.random.randint(self.genotype_ndim)
         x[ix] = x[ix] + np.random.uniform(-5, 5)
-        return x
+        return [x]
 
     def fitness(self, x: Genotype) -> float:
         return -np.abs(x - self.target).sum()
@@ -325,8 +319,6 @@ class MatchString(BaseEnvironment):
 
 
 class Sodarace(BaseEnvironment):
-    use_batch_op = True
-
     def __init__(self, seed: dict, diff_model, max_height: int = 100, max_width: int = 100, max_mass: int = 100,
                  ndim: int = 3) -> None:
         self.seed = seed
@@ -345,17 +337,17 @@ class Sodarace(BaseEnvironment):
         # Call Sodaracers environment to get the fitness.
         return self.simulator.evaluate(x)
 
-    def random(self) -> Genotype:
+    def random(self, **kwarg) -> List[Genotype]:
         program_dict = self.generate_program(self.seed["program_str"])
         # TODO: consider storing morphology dict inside genotype?
         self.simulator = simulator.SodaraceSimulator(body=program_dict["sodaracer"])
-        return program_dict
+        return [program_dict]
 
-    def mutate(self, x: Genotype) -> Genotype:
+    def mutate(self, x: Genotype, **kwarg) -> List[Genotype]:
         # TODO: maybe create proper Genotype class.
         program_dict = self.generate_program(x["program_str"])
         self.simulator = simulator.SodaraceSimulator(body=program_dict["sodaracer"])
-        return program_dict
+        return [program_dict]
 
     def to_behaviour_space(self, x: Genotype) -> Phenotype:
         # Map from floats of h,w,m to behaviour space grid cells.
