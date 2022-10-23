@@ -102,18 +102,6 @@ class FunctionOptim(BaseEnvironment[ArrayGenotype]):
         return np.asarray(x)
 
 
-def _three_channel_average(x: Genotype) -> Phenotype:
-    """
-    Assume the input is of shape (height, width, channel), and we average each channel to get (channel,)
-    """
-    assert isinstance(x, tuple) and len(x) == 2
-    # Code with invalid return -> return a `None` Phenotype.
-    if not isinstance(x[1], np.ndarray) or len(x[1].shape) != 3 or x[1].shape[2] != 3:
-        return None
-
-    return np.average(x[1].reshape((-1, 3)), axis=0)
-
-
 class ImageGeneration(Genotype):
     def __init__(self, input_str: str, result: Optional[np.ndarray]):
         self.input_str = input_str
@@ -125,6 +113,13 @@ class ImageGeneration(Genotype):
 
     def validate(self) -> bool:
         return isinstance(self.result, np.ndarray) and len(self.result.shape) == 3 and self.result.shape[2] == 3
+
+    def _three_channel_average(self) -> Phenotype:
+        """
+        Assume the input is of shape (height, width, channel), and we average each channel to get (channel,)
+        """
+        # Code with invalid return -> return a `None` Phenotype.
+        return np.average(self.result.reshape((-1, 3)), axis=0) if self.valid else None
 
 
 class ImageOptim(BaseEnvironment[ImageGeneration]):
@@ -140,8 +135,7 @@ class ImageOptim(BaseEnvironment[ImageGeneration]):
 
     # Record different definitions of behaviour spaces in a dict. Feel free to add.
     behaviour_mode_spec = {'3-channel':
-                               {'genotype_ndim': 3,
-                                'behaviour_space_fn': _three_channel_average}}
+                               {'genotype_ndim': 3}}
 
     def __init__(self, seed: str, config: Union[str, dict, DictConfig], target_img: np.ndarray, func_name: str,
                  docstring=default_docstring, import_text=default_import, sandbox_server='localhost:5000',
@@ -208,7 +202,8 @@ class ImageOptim(BaseEnvironment[ImageGeneration]):
         return -np.abs(x.result - self.target_img).sum()
 
     def to_behaviour_space(self, x: ImageGeneration) -> Phenotype:
-        return self.behaviour_mode_spec[self.behaviour_mode]['behaviour_space_fn'](x)
+        if self.behaviour_mode == '3-channel':
+            return x._three_channel_average()
 
     def _generate_code(self, seed: str, num=1) -> list[str]:
         """
