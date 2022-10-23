@@ -88,5 +88,5 @@ class DiffModel():
                     sodaracer_dict: dict = execution_result.serialize_walker_sodarace()
                     return {
                         "program_str": seed,
-                        "sodaracer": sodaracer_dict,
+                        "result_dict": sodaracer_dict,
                     }

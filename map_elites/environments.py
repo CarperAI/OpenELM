@@ -3,7 +3,7 @@ import json
 import math
 import string
 from abc import ABC, abstractmethod
-from typing import Tuple, Union, List
+from typing import Optional, Union, TypeVar, Generic
 
 import numpy as np
 import requests
@@ -12,10 +12,9 @@ from omegaconf import DictConfig, OmegaConf
 
 from codegen.codegen_utilities import model_setup, sample, truncate
 from diff_model import DiffModel
-from numpy import array
-from sodaracer_env import simulator
+from sodaracer_env.simulator import SodaraceSimulator
 
-from map_elites.map_elites import Genotype, Phenotype
+from map_elites.map_elites import Phenotype
 
 
 def ackley(x: np.ndarray) -> np.ndarray:
@@ -29,69 +28,78 @@ def ackley(x: np.ndarray) -> np.ndarray:
     return -(a + math.exp(1) + o1 + o2)
 
 
-# class Genotype(ABC):
+class Genotype(ABC):
+    def __str__(self) -> str:
+        raise NotImplementedError
 
 
-class BaseEnvironment(ABC):
+GenoType = TypeVar('GenoType', bound=Genotype)
+
+
+class BaseEnvironment(ABC, Generic[GenoType]):
+    def __init__(self) -> None:
+        self.genotype_space: np.ndarray
 
     @abstractmethod
-    def random(self, **kwarg) -> List[Genotype]:
+    def random(self, **kwarg) -> list[GenoType]:
         raise NotImplementedError
 
     @abstractmethod
-    def mutate(self, x: Genotype, **kwarg) -> List[Genotype]:
+    def mutate(self, x: GenoType, **kwarg) -> list[GenoType]:
         raise NotImplementedError
 
     @abstractmethod
-    def fitness(self, x: Genotype) -> float:
+    def fitness(self, x: GenoType) -> float:
         raise NotImplementedError
 
     @abstractmethod
-    def to_behaviour_space(self, x: Genotype) -> Phenotype:
+    def to_behaviour_space(self, x: GenoType) -> Phenotype:
         raise NotImplementedError
 
-    @abstractmethod
-    def to_string(self, x: Genotype) -> str:
-        raise NotImplementedError
+    @property
+    def max_fitness(self) -> int:
+        return 0
+
+    @property
+    # [starts, endings) of search intervals
+    def behaviour_space(self) -> np.ndarray:
+        return self.genotype_space
+
+    @property
+    def behaviour_ndim(self) -> int:
+        return self.behaviour_space.shape[1]
+
+
+class ArrayGenotype(Genotype, np.ndarray):
+    def __new__(cls, input_array):
+        obj = np.asarray(input_array).view(cls)
+        return obj
+
+    def __str__(self) -> str:
+        return f'({", ".join(map(str, np.asarray(self)))})'
 
 
 # find all local maxima of a multimodal function
-class FunctionOptim(BaseEnvironment):
+class FunctionOptim(BaseEnvironment[ArrayGenotype]):
 
     def __init__(self, ndim=2):
         self.genotype_ndim = ndim
         self.genotype_space = np.repeat([[-4, 4]], self.genotype_ndim, axis=0).T
 
-    def random(self, **kwarg) -> List[Genotype]:
-        return [np.random.uniform(*self.genotype_space)]
+    def random(self, **kwarg) -> list[ArrayGenotype]:
+        return [ArrayGenotype(np.random.uniform(*self.genotype_space))]
 
-    def mutate(self, x: Genotype, **kwarg) -> List[Genotype]:
+    def mutate(self, x: ArrayGenotype, **kwarg) -> list[ArrayGenotype]:
         x = x.copy()
         ix = np.random.randint(self.genotype_ndim)
         x[ix] = x[ix] + np.random.uniform(-1, 1)
         return [x]
 
-    def fitness(self, x: Genotype) -> float:
+    def fitness(self, x: ArrayGenotype) -> float:
         return ackley(x[None])[0]
 
-    def to_behaviour_space(self, x: Genotype) -> Phenotype:
-        return x
-
-    def to_string(self, x: Genotype) -> str:
-        return f'({", ".join(map(str, x))})'
-
-    @property
-    def max_fitness(self):
-        return 0
-
-    @property
-    # [starts, endings) of search intervals
-    def behaviour_space(self):
-        return self.genotype_space
-
-    @property
-    def behaviour_ndim(self):
-        return self.behaviour_space.shape[1]
+    def to_behaviour_space(self, x: ArrayGenotype) -> Phenotype:
+        return np.asarray(x)
 
 
 def _three_channel_average(x: Genotype) -> Phenotype:
@@ -106,7 +114,20 @@ def _three_channel_average(x: Genotype) -> Phenotype:
     return np.average(x[1].reshape((-1, 3)), axis=0)
 
 
-class ImageOptim(BaseEnvironment):
+class ImageGeneration(Genotype):
+    def __init__(self, input_str: str, result: Optional[np.ndarray]):
+        self.input_str = input_str
+        self.result = result
+        self.valid = self.validate()
+
+    def __str__(self) -> str:
+        return str(self.result.reshape((-1, 3)).mean(axis=0).astype(int)) if self.valid else ""
+
+    def validate(self) -> bool:
+        return isinstance(self.result, np.ndarray) and len(self.result.shape) == 3 and self.result.shape[2] == 3
+
+
+class ImageOptim(BaseEnvironment[ImageGeneration]):
     """
     This will try to mutate programs that return images. Fitness is simply the absolute difference between the returning
     image and the target image.
@@ -136,6 +157,7 @@ class ImageOptim(BaseEnvironment):
             sandbox_server: (Optional) the address of sandbox server: 'domain:port'.
         """
         self.seed = seed
+        # TODO: test config loading types
         if isinstance(config, str):
             self.config = OmegaConf.load(config)
         elif isinstance(config, (dict, DictConfig)):
@@ -157,12 +179,12 @@ class ImageOptim(BaseEnvironment):
         self.rng = np.random.default_rng(seed=self.config.seed)
 
         self.behaviour_mode = behaviour_mode
-        self.genotype_ndim = self.behaviour_mode_spec[self.behaviour_mode]['genotype_ndim']
+        self.genotype_ndim: int = self.behaviour_mode_spec[self.behaviour_mode]['genotype_ndim']
         self.genotype_space = np.repeat([[0, 255]], self.genotype_ndim, axis=0).T
 
         self.sandbox_server = sandbox_server
 
-    def random(self, **kwargs) -> List[Genotype]:
+    def random(self, **kwargs) -> list[ImageGeneration]:
         """
         Randomly generate a batch of codes and evaluate their outputs.
         Returns:
@@ -170,7 +192,7 @@ class ImageOptim(BaseEnvironment):
         """
         return self._get_code_result_pair(self.seed + self.def_and_docstring, **kwargs)
 
-    def mutate(self, x: Genotype, **kwargs) -> List[Genotype]:
+    def mutate(self, x: ImageGeneration, **kwargs) -> list[ImageGeneration]:
         """
         Randomly mutate a batch of codes from a given individual and evaluate their outputs.
         Parameters:
@@ -178,20 +200,17 @@ class ImageOptim(BaseEnvironment):
         Returns:
             a tuple of the code string and the returning result (None if there is error).
         """
-        return self._get_code_result_pair(self.def_for_mutation + x[0] + self.def_and_docstring, **kwargs)
+        return self._get_code_result_pair(self.def_for_mutation + x.input_str + self.def_and_docstring, **kwargs)
 
-    def fitness(self, x: Genotype) -> float:
-        if not isinstance(x[1], np.ndarray) or x[1].shape != self.shape:
+    def fitness(self, x: ImageGeneration) -> float:
+        if not x.valid or x.result.shape != self.shape:
             return -np.inf
-        return -np.abs(x[1] - self.target_img).sum()
+        return -np.abs(x.result - self.target_img).sum()
 
-    def to_behaviour_space(self, x: Genotype) -> Phenotype:
+    def to_behaviour_space(self, x: ImageGeneration) -> Phenotype:
         return self.behaviour_mode_spec[self.behaviour_mode]['behaviour_space_fn'](x)
 
-    def to_string(self, x: Genotype) -> str:
-        return str(x[1].reshape((-1, 3)).mean(axis=0).astype(int)) if self._has_valid_output(x) else None
-
-    def _generate_code(self, seed: str, num=1) -> List[str]:
+    def _generate_code(self, seed: str, num=1) -> list[str]:
         """
         Parameters:
             seed: the seed text.
@@ -227,7 +246,7 @@ class ImageOptim(BaseEnvironment):
 
         return result
 
-    def _get_code_result_pair(self, prompt, batch_size=32) -> List[Tuple[str, np.ndarray]]:
+    def _get_code_result_pair(self, prompt, batch_size=32) -> list[ImageGeneration]:
         """
         Parameters:
             prompt: the prompt input.
@@ -242,15 +261,11 @@ class ImageOptim(BaseEnvironment):
         for i in range(len(codes)):
             result = self._evaluate_code(self.import_text + self.def_and_docstring + codes[i])
             if isinstance(result, np.ndarray):
-                results.append((codes[i], result))
+                results.append(ImageGeneration(codes[i], result))
             else:
-                results.append((codes[i], None))
+                results.append(ImageGeneration(codes[i], None))
         # If needed, the result can be further classified based on the error type.
         return results
-
-    @staticmethod
-    def _has_valid_output(x: Genotype) -> bool:
-        return isinstance(x[1], np.ndarray) and len(x[1].shape) == 3 and x[1].shape[2] == 3
 
     def _update_seed(self):
         """
@@ -258,115 +273,78 @@ class ImageOptim(BaseEnvironment):
         """
         self.config.seed = int(self.rng.integers(0, 1e8))
 
-    @property
-    def max_fitness(self):
-        return 0
 
-    @property
-    # [starts, endings) of search intervals
-    def behaviour_space(self):
-        return self.genotype_space
-
-    @property
-    def behaviour_ndim(self):
-        return self.behaviour_space.shape[1]
+class StringArrayGenotype(ArrayGenotype):
+    def __str__(self) -> str:
+        x: np.ndarray = np.round(self)
+        return ''.join(string.ascii_letters[ix] for ix in np.clip(x.astype(int), 0, len(string.ascii_letters) - 1))
 
 
 # find a string by mutating one character at a time
-class MatchString(BaseEnvironment):
+class MatchString(BaseEnvironment[StringArrayGenotype]):
     def __init__(self, target: str):
         self.alphabet = string.ascii_letters
 
-        self.target = array([self.alphabet.index(ch) for ch in target])
+        self.target = np.array([self.alphabet.index(ch) for ch in target])
         self.genotype_ndim = self.target.shape[0]
         self.genotype_space = np.repeat([[0, len(self.alphabet)]], self.genotype_ndim, axis=0).T
 
-    def random(self, **kwarg) -> List[Genotype]:
+    def random(self, **kwarg) -> list[StringArrayGenotype]:
         return [np.random.uniform(*self.genotype_space)]
 
-    def mutate(self, x: Genotype, **kwarg) -> List[Genotype]:
+    def mutate(self, x: StringArrayGenotype, **kwarg) -> list[StringArrayGenotype]:
         x = x.copy()
         ix = np.random.randint(self.genotype_ndim)
         x[ix] = x[ix] + np.random.uniform(-5, 5)
         return [x]
 
-    def fitness(self, x: Genotype) -> float:
+    def fitness(self, x: StringArrayGenotype) -> float:
         return -np.abs(x - self.target).sum()
 
-    def to_behaviour_space(self, x: Genotype) -> Phenotype:
-        return x
-
-    def to_string(self, x: Genotype) -> str:
-        return ''.join(self.alphabet[ix] for ix in np.clip(np.round(x).astype(int), 0, len(self.alphabet) - 1))
-
-    @property
-    def max_fitness(self):
-        return 0
-
-    @property
-    # [starts, endings) of search intervals
-    def behaviour_space(self):
-        return self.genotype_space
-
-    @property
-    def behaviour_ndim(self):
-        return self.behaviour_space.shape[1]
+    def to_behaviour_space(self, x: StringArrayGenotype) -> Phenotype:
+        return np.asarray(x)
 
 
-# class Sodaracer(Genotype):
-#     def __init__(self, program_str: str):
-#         self.program_str = program_str
+class Sodaracer(Genotype):
+    def __init__(self, program_str: str, result_dict: dict):
+        self.program_str = program_str
+        self.result_dict = result_dict
+        self.simulator = SodaraceSimulator(body=self.result_dict)
+        self.morphology = self.simulator.morphology
+
+    def evaluate(self, timesteps: int) -> float:
+        return self.simulator.evaluate(timesteps)
+
+    def __str__(self) -> str:
+        return self.program_str
 
 
-class Sodarace(BaseEnvironment):
-    def __init__(self, seed: dict, diff_model, max_height: int = 100, max_width: int = 100, max_mass: int = 100,
-                 ndim: int = 3) -> None:
-        self.seed = seed
+class Sodarace(BaseEnvironment[Sodaracer]):
+    def __init__(self, seed: dict, diff_model, eval_steps: int, max_height: int = 100, max_width: int = 100,
+                 max_mass: int = 100, ndim: int = 3) -> None:
+        self.seed = Sodaracer(**seed)
         self.diff_model: DiffModel = diff_model
+        self.eval_steps = eval_steps
         self.genotype_ndim = ndim
         self.genotype_space = np.array([[0, max_height], [0, max_width], [0, max_mass]]).T
 
-        self.simulator = simulator.SodaraceSimulator(body=self.seed["sodaracer"])
-
-    def generate_program(self, x: str) -> Genotype:
+    def generate_program(self, x: str) -> Sodaracer:
         # Call LM to generate a new program and run it, returning a dict containing the program string
-        # and the dict from running
-        return self.diff_model.generate_program(x)
+        # and the dict from running it.
+        return Sodaracer(**self.diff_model.generate_program(x))
 
-    def fitness(self, x: Genotype) -> float:
+    def fitness(self, x: Sodaracer) -> float:
         # Call Sodaracers environment to get the fitness.
-        return self.simulator.evaluate(x)
+        return x.evaluate(self.eval_steps)
 
-    def random(self, **kwarg) -> List[Genotype]:
-        program_dict = self.generate_program(self.seed["program_str"])
-        # TODO: consider storing morphology dict inside genotype?
-        self.simulator = simulator.SodaraceSimulator(body=program_dict["sodaracer"])
-        return [program_dict]
+    def random(self, **kwarg) -> list[Sodaracer]:
+        new_sodaracer = self.generate_program(self.seed.program_str)
+        return [new_sodaracer]
 
-    def mutate(self, x: Genotype, **kwarg) -> List[Genotype]:
-        # TODO: maybe create proper Genotype class.
-        program_dict = self.generate_program(x["program_str"])
-        self.simulator = simulator.SodaraceSimulator(body=program_dict["sodaracer"])
-        return [program_dict]
+    def mutate(self, x: Sodaracer, **kwarg) -> list[Sodaracer]:
+        new_sodaracer = self.generate_program(x.program_str)
+        return [new_sodaracer]
 
-    def to_behaviour_space(self, x: Genotype) -> Phenotype:
+    def to_behaviour_space(self, x: Sodaracer) -> Phenotype:
         # Map from floats of h,w,m to behaviour space grid cells.
-        # TODO: Implement this.
-        morphology = self.simulator.morphology
-        return np.array([morphology['height'], morphology['width'], morphology['mass']]).astype(int)
-
-    def to_string(self, x: Genotype) -> str:
-        return str(x)
-
-    @property
-    def max_fitness(self):
-        return 0
-
-    @property
-    # [starts, endings) of search intervals
-    def behaviour_space(self):
-        return self.genotype_space
-
-    @property
-    def behaviour_ndim(self):
-        return self.behaviour_space.shape[1]
+        return np.array([x.morphology['height'], x.morphology['width'], x.morphology['mass']]).astype(int)

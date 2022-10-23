@@ -40,7 +40,7 @@ def make_walker():
 
     return wc.get_walker()
 }""",
-"sodaracer": {'useLEO': True,
+"result_dict": {'useLEO': True,
  'nodes': [{'x': 0, 'y': 0},
   {'x': 0, 'y': 10},
   {'x': 10, 'y': 10},
@@ -61,10 +61,11 @@ def make_walker():
 class ELM():
     def __init__(self, cfg) -> None:
         self.cfg = cfg
+        # TODO: hierarchical hydra config for different environments, config type validation.
         self.diff_model = DiffModel(self.cfg)
         self.seed = TEST_SEED
-        self.environment = Sodarace(seed=TEST_SEED, diff_model=self.diff_model)
-        self.map_elites = MAPElites(self.environment, n_bins=self.cfg.n_bins, task=self.cfg.task)
+        self.environment = Sodarace(seed=TEST_SEED, diff_model=self.diff_model, eval_steps=self.cfg.eval_steps)
+        self.map_elites = MAPElites(self.environment, n_bins=self.cfg.n_bins, history_length=self.cfg.history_length)
 
     def run(self) -> str:
         return self.map_elites.search(initsteps=self.cfg.init_steps, totalsteps=self.cfg.n_steps)
