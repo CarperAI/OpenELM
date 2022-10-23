@@ -17,13 +17,10 @@ from trlx.data.configs import TRLConfig
 from trlx.model import BaseRLModel, register_model
 from trlx.model.accelerate_base_model import AccelerateRLModel
 from trlx.model.accelerate_ppo_model import AcceleratePPOModel
-from trlx.model.nn.ppo_models import GPTHeadWithValueModel
+from trlx.model.nn.ppo_models import GPTHeadWithValueModel, GPTHydraHeadWithValueModel
 from trlx.pipeline.ppo_pipeline import PPORolloutStorage
 from trlx.utils import Clock, rampup_decay, safe_mkdir, topk_mask
 from trlx.utils.modeling import clip_by_value, logprobs_from_logits, whiten
-
-from trlx.data.method_configs import register_method, PPOConfig
-from dataclasses import dataclass
 
 
 class SoftEmbedding(nn.Module):
@@ -44,7 +41,7 @@ class SoftEmbedding(nn.Module):
             random_range (float, optional): range to init embedding (if not initialize from vocab). Defaults to 0.5.
             initialize_from_vocab (bool, optional): initalizes from default vocab. Defaults to True.
         """
-        super(SoftEmbedding, self).__init__()
+        super().__init__()
         self.wte = wte
         self.n_tokens = n_tokens
         self.learned_embedding = nn.parameter.Parameter(
@@ -87,35 +84,41 @@ class SoftEmbedding(nn.Module):
 @register_model
 class AcceleratePPOSoftpromptModel(AcceleratePPOModel):
     def __init__(self, config, train_mode=True):
-        self.store = PPORolloutStorage()
-        super().__init__(config, self.store)
+        super().__init__(config)
 
         assert (
             config.method.n_soft_tokens > 0
         ), "Number of soft prompt tokens should be >=1"
 
+        # account for extra prefix tokens
+        self.config.method.gen_kwargs["max_length"] += self.n_soft_tokens
+        self.config.method.gen_kwargs["min_length"] += self.n_soft_tokens
+
+    def get_arch(self, config: TRLConfig):
+        # TODO: set only self.learned_embedding as learnable parameter in case of fully frozen layers model
+        model = GPTHydraHeadWithValueModel(
+            self.config.model.model_path, self.config.model.num_layers_unfrozen
+        )
+
         # here, we setup softprompts by initializing learned softprompt embedding(s)
         # and the model's input embeddings.
         # the model will always concatenate learned softprompt embeddings as prefix to the prompt/query after it's set
-        # option to initialize embedding from existing vocab, or random
+        # use config option to initialize embedding from existing vocab, or random
         self.soft_dummy_token_id = 50256  # dummy token for padding soft prompts
         self.n_soft_tokens = (
             config.method.n_soft_tokens
         )  # number of prefix tokens added to prompt, with learned embeddings
 
         s_wte = SoftEmbedding(
-            self.model.gpt.get_input_embeddings(),
+            model.gpt.get_input_embeddings(),
             n_tokens=self.n_soft_tokens,
             initialize_from_vocab=config.method.initialize_from_vocab,
         )
 
-        self.model.gpt.set_input_embeddings(s_wte)
+        model.gpt.set_input_embeddings(s_wte)
 
-        # account for extra prefix tokens
-        self.config.train.gen_size += self.n_soft_tokens
-        self.config.method.gen_kwargs["max_length"] += self.n_soft_tokens
-        self.config.method.gen_kwargs["min_length"] += self.n_soft_tokens
-
+        return model
+    
     def act(
         self, data: PromptBatch
     ) -> Tuple[
@@ -123,6 +126,7 @@ class AcceleratePPOSoftpromptModel(AcceleratePPOModel):
         TensorType["chunk_size", "gen_size"],
         Iterable[str],
     ]:
+        # TODO: align recent trlx merge changes with example rollout actions
         data.tokens = torch.cat(
             [
                 torch.full(
