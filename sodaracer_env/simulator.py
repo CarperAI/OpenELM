@@ -4,13 +4,16 @@ translated to python
 
 """
 
-import math
-from Box2D import Box2D as b2
-from helpers import Bone, Muscle, PhysicsId, DistanceAccessor, BodyInformation, EntityType, Entity, staticBodyCount
-import path
-import os
 import json
+import math
+import os
 from typing import List
+
+from Box2D import Box2D as b2
+
+from sodaracer_env.helpers import (BodyInformation, Bone, DistanceAccessor,
+                                   Entity, EntityType, Muscle, PhysicsId,
+                                   staticBodyCount)
 
 
 class IESoRWorld:
@@ -562,20 +565,20 @@ class IESoRWorld:
         # //we use bodycount as a way to identify each physical object being added from the body information
         # int oBodyCount = world->GetBodyCount();
         o_body_count = self.world.bodyCount
-        # 
+        #
         # //This mapping will be what we return from the function while adding the body
         # //we measure the morphological properties
         # map<string, double> morphology;
         morphology = dict()
-        # 
+        #
         # //here we use our body information to create all the necessary body additions to the world
         # vector<Json::Value> entities = getBodyEntities(inBody, widthHeight, morphology);
         entities = self.get_body_entities(in_body, width_height, morphology)
-        # 
+        #
         # //we'll quickly map and ID into a json point value
         # map<string, Json::Value> entityMap;
         entity_map = dict()
-        # 
+        #
         # //this was we can access locations by the bodyID while determining connection distance
         # for (std::vector<Json::Value>::iterator it = entities.begin() ; it != entities.end(); ++it)
         # {
@@ -584,28 +587,28 @@ class IESoRWorld:
         # }
         for e in entities:
             entity_map[e['bodyID']] = e
-        # 
+        #
         # //push our bodies into the system so that our joints have bodies to connect to
         # this->setBodies(&entities);
         self.set_bodies(entities)
-        # 
+        #
         # //Did we use LEO to calculate our body information -- affects the indexing procedure
         # bool useLEO = inBody["useLEO"].asBool();
         useLEO = in_body['useLEO']
-        # 
+        #
         # //this is the json connection array
         # Json::Value connections = inBody["connections"];
         connections = in_body['connections']
-        # 
+        #
         # //this determines if we should be a fixed connection (bone) or a moving connection (muscle)
         # double amplitudeCutoff = .2;
         amplitude_cutoff = 0.2
-        # 
+        #
         # //we like to measure the total connection distance as part of our mass calculation
         # //mass = # of nodes + length of connections
         # double connectionDistanceSum = 0.0;
         connection_distance_sum = 0.0
-        # 
+        #
         # //loop through all our connections
         # for(int i=0; i < connections.size(); i++)
         for i in range(len(connections)):
@@ -615,19 +618,19 @@ class IESoRWorld:
         #     Json::Value cppnOutputs = connectionObject["cppnOutputs"];
             connection_object = connections[i]
             cppn_outputs = connection_object['cppnOutputs']
-        # 
+        #
         #     int sID = atoi(connectionObject["sourceID"].asString().c_str());
             s_id = int(connection_object["sourceID"])
             t_id = int(connection_object['targetID'])
         #     int tID = atoi(connectionObject["targetID"].asString().c_str());
-        # 
+        #
         #     //To identify a given object in the physical world, we need to start with the current body count, and add the source id number
         #     //This allows us to add multiple bodies to the same world (though this is recommended against, since it's easier to create separate worlds)
         #     string sourceID = toString(oBodyCount + sID);
         #     string targetID = toString(oBodyCount + tID);
             source_id = str(o_body_count + s_id)
             target_id = str(o_body_count + t_id)
-        # 
+        #
         #      //we ignore connections that loop to themselves
         #     if (sourceID == targetID)
         #     {
@@ -635,8 +638,8 @@ class IESoRWorld:
         #     }
             if source_id == target_id:
                 continue
-        # 
-        # 
+        #
+        #
         #     try
         #     {
             try:  # oh boy...
@@ -645,11 +648,11 @@ class IESoRWorld:
         #         int ampIx = (useLEO ? 3 : 2);
                 phase_ix = 2 if useLEO else 1
                 amp_ix = 3 if useLEO else 2
-        # 
+        #
         #         //sample the amplitude output to know what's up -- we convert from [-1,1] to [0,1]
         #         double amp = (cppnOutputs[ampIx].asDouble() + 1) / 2;
                 amp = (cppn_outputs[amp_ix] + 1) / 2.0
-        # 
+        #
         #         //what's the distance been the source (x,y) and distance (x,y) -- that's the length of our connection
         #         double connectionDistance = sqrt(
         #             pow(entityMap[sourceID]["x"].asDouble() - entityMap[targetID]["x"].asDouble(), 2)
@@ -662,24 +665,24 @@ class IESoRWorld:
         #         //add the connection distance to our sum
         #         connectionDistanceSum += connectionDistance;
                 connection_distance_sum += connection_distance
-        # 
+        #
         #         //this will hold our custom props for the distance/muscle joints
         #         Json::Value props;
                 props = dict()
-        # 
+        #
         #         if (amp < amplitudeCutoff)
         #             this->addDistanceJoint(sourceID, targetID, props);//, {frequencyHz: 3, dampingRatio:.3});
                 if amp < amplitude_cutoff:
                     self.add_distance_joint(source_id, target_id, props)
                 else:
         #         else{
-        # 
+        #
         #             //these are our hardcoded spring behaviors, could be altered by CPPN, but that seems risky
         #             props["frequencyHz"] = 3;
         #             props["dampingRatio"] = .3;
                     props["frequencyHz"] = 3
                     props["dampingRatio"] = .3
-        # 
+        #
         #             //Phase/Amplitude set by our cppn outputs
         #             props["phase"] = cppnOutputs[phaseIx].asDouble();
                     props["phase"] = cppn_outputs[phase_ix]
@@ -687,7 +690,7 @@ class IESoRWorld:
         #             //props["amplitude"] = .3f*connectionDistance*amp;
         #             props["amplitude"] = .3f*amp;
                     props["amplitude"] = .3 * amp
-        # 
+        #
         #             //need to scale joints based on size of the screen - this is a bit odd, but should help multiple sizes behave the same!
         #             this->addMuscleJoint(sourceID, targetID, props);
                     self.add_muscle_joint(source_id, target_id, props)
@@ -702,18 +705,18 @@ class IESoRWorld:
                 # why?
                 print("Oops error", e)
                 raise e
-        # 
+        #
         # }
-        # 
+        #
         # //add the concept of mass
         # morphology["mass"] = morphology["totalNodes"] + connectionDistanceSum/2.0f;
         morphology['mass'] = morphology['totalNodes'] + connection_distance_sum/2.0
-        # 
+        #
         # //remove the concept of totalNodes since we have mass
         # //morphology should now have width/height, startX/startY, and mass
         # morphology.erase("totalNodes");
         del morphology['totalNodes']
-        # 
+        #
         # return &morphology;
         return morphology
         # }
@@ -1199,10 +1202,31 @@ def list_of_points(points: List[b2.b2Vec2], length: int=0) -> list:
     return [position_to_json_value(points[i]) for i in range(length)]
 
 
+class SodaraceSimulator:
+    def __init__(self, body: dict) -> None:
+        self.world = IESoRWorld()
+        self._morphology = self.world.load_body_into_world(body, self.world.canvas)
+
+    @property
+    def morphology(self) -> dict:
+        return self._morphology
+
+    def evaluate(self, timesteps: int) -> float:
+        for _ in range(timesteps // 350):
+            self.world.updateWorld(350)
+
+        start = self.morphology['startX']
+        end = min(
+            [bone.joint.bodyA.position[0] for bone in myWorld.bone_list] +
+            [muscle.joint.bodyA.position[0] for muscle in myWorld.muscle_list]
+        )
+        return end + self.morphology['offsetX']
+
+
 if __name__ == '__main__':
-    import simulator
-    import json
     import Box2D.Box2D as b2
+
+    import simulator
 
     myWorld = simulator.IESoRWorld()
     with open('Physics/Data/jsBody142856.json', 'r') as f:

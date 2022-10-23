@@ -1,0 +1,26 @@
+model: codegen-350M-mono
+checkpoints_dir: ./checkpoints/
+device: cuda
+seed: 42
+deterministic: False
+top_p: 0.95
+temp: 0.85
+timeout: 5  # Seconds
+gpus: 1
+max_length: 1024
+batch_size: 1
+init_steps: 1000
+n_steps: 10000
+n_bins: 12
+fp16: False
+pad_token: 50256
+task: "Sodarace"
+run_name: ???  # Mandatory string argument that describes the run.
+
+###################################################################################################
+# Hydra config overrides:
+hydra:
+    run:
+        dir: logs/${run_name}
+    sweep:
+        dir: logs/${run_name}
