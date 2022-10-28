@@ -6,6 +6,7 @@ code_str = """
 from .walker.walk_creator import walker_creator
 def make_square(wc, x0, y0, x1, y1):
     \"\"\"Make a square with top left x0,y0 and top right x1,y1.\"\"\"
+
     j0 = wc.add_joint(x0, y0)
     j1 = wc.add_joint(x0, y1)
     j2 = wc.add_joint(x1, y1)
@@ -34,8 +35,7 @@ def make_walker():
 
     return wc.get_walker()
 """
-# %%
-resp = requests.post("http://localhost:5000/gen_racer", json={"code":code_str, "timeout":5})
+resp = requests.post("http://localhost:5000/gen_racer", json={"code":code_str, "timeout":500})
 # %%
 code_str="""
 import numpy as np

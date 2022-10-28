@@ -3,8 +3,6 @@ import os
 import re
 import shutil
 from typing import Dict
-from .walker.walk_creator import Walker
-# from walker.walk_creator import Walker
 from .codex_execute import (TimeoutException, create_tempdir, reliability_guard,
 # from codex_execute import (TimeoutException, create_tempdir, reliability_guard,
                            swallow_io, time_limit)
@@ -72,6 +70,7 @@ def unsafe_execute(code_str: str, func_name:str,  timeout: int = 5):
 
         # Disable functionalities that can make destructive changes to the test.
         reliability_guard()
+
         try:
             # TODO: Check https://arxiv.org/pdf/2209.07753.pdf
             # with time_limit(timeout):
