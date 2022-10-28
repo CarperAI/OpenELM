@@ -33,10 +33,17 @@ def make_walker():
     wc.add_muscle(sides[2], center, False, 2.0, 0.0)
 
     return wc.get_walker()
-
-
 """
+# %%
+resp = requests.post("http://localhost:5000/gen_racer", json={"code":code_str, "timeout":5})
+# %%
+code_str="""
+import numpy as np
+def lol():
+    return np.zeros(5)
+"""
+resp = requests.post("http://localhost:5000/eval_imageoptim_func", json={"code":code_str, "func_name":"lol", "timeout":5})
 
-resp = requests.post("http://localhost:5000/gen", json={"code":code_str, "timeout":5})
+# %%
 result = json.loads(resp.text)
 

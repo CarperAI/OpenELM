@@ -51,15 +51,13 @@ def reset_os_funcs(rmtree, rmdir, chdir):
     os.chdir = chdir
 
 
-def unsafe_execute(code_str: str, timeout: int = 5):
+def unsafe_execute(code_str: str, func_name:str,  timeout: int = 5):
     if len(code_str) == 0 or "def " not in code_str:
         print("No code found or no function found.")
         return 6  # No code found or no function found.
     code_dct: Dict = {}
     func_match = re.search(r"def (\w+)\s*\((.*?)\):", code_str)
-    if func_match:
-        func_name = func_match.group(1)
-    else:
+    if not func_match:
         print("No proper function found in code.")
         return 6  # No proper function found in code.
     with create_tempdir():
@@ -81,7 +79,7 @@ def unsafe_execute(code_str: str, timeout: int = 5):
                 exec(code_str, globals(), code_dct)
                 for k,v in code_dct.items():
                     globals()[k] = v
-                res = code_dct["make_walker"]()
+                res = code_dct[func_name]()
                 reset_os_funcs(rmtree, rmdir, chdir)
                 return res
         except TimeoutException:
