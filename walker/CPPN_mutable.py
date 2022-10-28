@@ -1,4 +1,4 @@
-from walk_creator import walker_creator
+from walker.walk_creator import walker_creator
 
 
 def query_cppn(wc, xgrid, ygrid, scale, connect_func, amp_func,

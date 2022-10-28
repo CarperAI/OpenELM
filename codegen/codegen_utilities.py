@@ -61,7 +61,7 @@ def create_custom_gpt2_tokenizer():
     return t
 
 
-def truncate(completion):
+def truncate(completion, def_num=1, print_num=1, only_local_scope=False):
 
     def find_re(string, pattern, start_pos):
         m = pattern.search(string, start_pos)
@@ -79,12 +79,17 @@ def truncate(completion):
         ]
     ]
     prints = list(re.finditer('^print', completion, re.MULTILINE))
-    if len(prints) > 1:
-        completion = completion[:prints[1].start()]
+    if len(prints) > print_num:
+        completion = completion[:prints[print_num].start()]
 
-    defs = list(re.finditer('^def', completion, re.MULTILINE))
-    if len(defs) > 1:
-        completion = completion[:defs[1].start()]
+    if only_local_scope:
+        global_lines = list(re.finditer('^[a-zA-Z]', completion, re.MULTILINE))
+        if global_lines:
+            completion = completion[:global_lines[0].start()]
+    else:
+        defs = list(re.finditer('^def', completion, re.MULTILINE))
+        if len(defs) > def_num:
+            completion = completion[:defs[def_num].start()]
 
     start_pos = 0
 

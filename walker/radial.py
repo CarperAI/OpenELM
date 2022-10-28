@@ -1,6 +1,6 @@
 import math
 
-from walk_creator import walker_creator
+from walker.walk_creator import walker_creator
 
 
 def make_circle(wc, cx, cy, radius, num_points):
@@ -10,7 +10,7 @@ def make_circle(wc, cx, cy, radius, num_points):
     tot_ang = 3.14 * 2.0
 
     for idx in range(num_points):
-        ang = tot_ang / (num_points - 1) * idx
+        ang = (tot_ang / num_points) * idx
         x = math.cos(ang) * radius + cx
         y = math.sin(ang) * radius + cy
         joints.append(wc.add_joint(x, y))
