@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, abort
 from .utils import unsafe_execute
 from .walker.walk_creator import Walker
 from numpy import ndarray
@@ -7,22 +7,26 @@ from numpy import ndarray
 app = Flask(__name__)
 
 
-def generate_racer(code_str, func_name, timeout):
+def generate_racer(code_str, timeout):
     try:
-        execution_result = unsafe_execute(code_str, func_name, timeout)
-        if isinstance(execution_result, Walker):
-            if execution_result.validate():
-                sodaracer_dict: dict = execution_result.serialize_walker_sodarace()
-                return {
-                    "program_str": code_str,
-                    "sodaracer": sodaracer_dict,
-                }
-            else:
-                return "walker not valid"
-        else: 
-            return "not walker"
+        execution_result = unsafe_execute(code_str, "make_walker", timeout)
     except:
-        return "failed to execute code"
+        # print("hi 3", execution_result)
+        abort(500, description=f"failed to execute code")
+    if isinstance(execution_result, Walker):
+        if execution_result.validate():
+            sodaracer_dict: dict = execution_result.serialize_walker_sodarace()
+            return {
+                "program_str": code_str,
+                "sodaracer": sodaracer_dict,
+            }
+        else:
+            abort(500, description=f"walker not valid")    
+    elif isinstance(execution_result, int):
+        abort(500, description=f"failed unsafe_execute with code {execution_result}")
+    else: 
+        abort(500, description=f"not walker")
+    
 
 
 
@@ -30,7 +34,7 @@ def generate_racer(code_str, func_name, timeout):
 @app.route("/gen_racer", methods=["POST"])
 def gen_racer():
     req_json = request.get_json()
-    return generate_racer(req_json["code"], "make_walker", req_json["timeout"]).__repr__()
+    return generate_racer(req_json["code"], req_json["timeout"]).__repr__()
 
 
 @app.route("/eval_imageoptim_func", methods=["POST"])
@@ -41,6 +45,7 @@ def evaluate_function():
         if isinstance(execution_result, ndarray):
             return execution_result.tolist().__repr__()
         elif isinstance(execution_result, int):
-            return f"failed unsafe_execute with code {execution_result}"
+            abort(500, description=f"failed unsafe_execute with code {execution_result}")
     except:
-        return "failed to execute code"
+        abort(500, description="failed to execute code")
+
