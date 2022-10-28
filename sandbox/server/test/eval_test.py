@@ -34,8 +34,10 @@ def make_walker():
     wc.add_muscle(sides[2], center, False, 2.0, 0.0)
 
     return wc.get_walker()
+
 """
-resp = requests.post("http://localhost:5000/gen_racer", json={"code":code_str, "timeout":500})
+# resp = requests.post("http://localhost:5000/gen_racer", json={"code":code_str, "timeout":500})
+resp = requests.post("http://localhost:5000/gen_racer", json={"code":[code_str, code_str], "timeout":500})
 # %%
 code_str="""
 import numpy as np

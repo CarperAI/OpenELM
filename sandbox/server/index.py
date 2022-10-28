@@ -7,7 +7,7 @@ import json
 app = Flask(__name__)
 
 def bad_request(message, **kwargs):
-    return {'message': message, **kwargs}
+    return {'message': message, **kwargs}, 500
 
 
 def generate_racer(code_str, timeout):
@@ -22,7 +22,7 @@ def generate_racer(code_str, timeout):
             return {
                 "program_str": code_str,
                 "sodaracer": sodaracer_dict,
-            }
+            }, 200
         else:
             return bad_request(f"invalid walker", walker=execution_result.serialize_walker_sodarace())
     elif isinstance(execution_result, int):
@@ -37,7 +37,10 @@ def generate_racer(code_str, timeout):
 @app.route("/gen_racer", methods=["POST"])
 def gen_racer():
     req_json = request.get_json()
-    return generate_racer(req_json["code"], req_json["timeout"])
+    if isinstance(req_json["code"], list):
+        return [generate_racer(code, req_json["timeout"])[0] for code in req_json["code"]], 200
+    else:
+        return generate_racer(req_json["code"], req_json["timeout"])
 
 
 @app.route("/eval_imageoptim_func", methods=["POST"])
