@@ -1,8 +1,7 @@
-# %%
-from .square import make_walker as make_walker_square
-from .radial import make_walker as make_walker_radial
-from .CPPN_fixed import make_walker as make_walker_cppn_fixed
-from .CPPN_mutable import make_walker as make_walker_cppn_mutable
+from square import make_walker as make_walker_square
+from radial import make_walker as make_walker_radial
+from CPPN_fixed import make_walker as make_walker_cppn_fixed
+from CPPN_mutable import make_walker as make_walker_cppn_mutable
 
 # Compare to serialized square seed from paper (pg. 17) #
 square_seed = make_walker_square()
@@ -20,14 +19,13 @@ square_seed_expected = {
     ],
 }
 
-print(f"Square Seed Serialization Passed: {square_seed == square_seed_expected}")
-print("\n Square Seed: \n ", square_seed)
-print("\n Expected Square Seed: \n ", square_seed_expected)
+print("Square Seed Serialization Passed: ",  square_seed == square_seed_expected)
+
 
 # Print other seeds #
-# radial_seed = make_walker_radial()
-# cppn_fixed_seed = make_walker_cppn_fixed()
-# cppn_mutable_seed = make_walker_cppn_mutable()
-# print("\n Radial Seed: \n ", radial_seed)
-# print("\n CPPN Fixed Seed: \n ", cppn_fixed_seed)
-# print("\n CPPN Mutable Seed: \n ", cppn_mutable_seed)
+radial_seed = make_walker_radial()
+cppn_fixed_seed = make_walker_cppn_fixed()
+cppn_mutable_seed = make_walker_cppn_mutable()
+print("\n Radial Seed: \n ", radial_seed)
+print("\n CPPN Fixed Seed: \n ", cppn_fixed_seed)
+print("\n CPPN Mutable Seed: \n ", cppn_mutable_seed)
