@@ -233,7 +233,7 @@ class ImageOptim(BaseEnvironment[ImageGeneration]):
             a numpy array (if successful) or the exception object.
         """
         try:
-            x = requests.post(f"http://{self.sandbox_server}/eval_func",
+            x = requests.post(f"http://{self.sandbox_server}/eval_imageoptim_func",
                               json={"code": code, "func_name": self.func_name}, timeout=5)
             result = np.array(json.loads(x.text))
         except Exception as e:
