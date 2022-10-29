@@ -49,7 +49,7 @@ def reset_os_funcs(rmtree, rmdir, chdir):
     os.chdir = chdir
 
 
-def unsafe_execute(code_str: str, func_name:str,  timeout: int = 5):
+def sandbox_unsafe_execute(code_str: str, func_name:str,  timeout: int = 5):
     if len(code_str) == 0 or "def " not in code_str:
         print("No code found or no function found.")
         return 6  # No code found or no function found.
@@ -73,8 +73,8 @@ def unsafe_execute(code_str: str, func_name:str,  timeout: int = 5):
 
         try:
             # TODO: Check https://arxiv.org/pdf/2209.07753.pdf
-            # with time_limit(timeout):
             with swallow_io():
+                # with time_limit(timeout):
                 exec(code_str, globals(), code_dct)
                 for k,v in code_dct.items():
                     globals()[k] = v
