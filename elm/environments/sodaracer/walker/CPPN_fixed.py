@@ -17,6 +17,6 @@ def make_walker():
     def phase(x1, y1, x2, y2):
         return np.sign(x1)
 
-    joints = query_cppn(wc, 8, 3, 1.5, connect, amp, phase)
+    _ = query_cppn(wc, 8, 3, 1.5, connect, amp, phase)
 
     return wc.get_walker()

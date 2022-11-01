@@ -11,7 +11,7 @@ from codex_execute import (
     swallow_io,
     time_limit,
 )
-from walker.walk_creator import Walker
+from environments.sodaracer import Walker
 
 
 def reset_os_funcs(rmtree, rmdir, chdir):

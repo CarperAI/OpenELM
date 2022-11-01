@@ -1,4 +1,4 @@
-from sodaracer_env.helpers import (
+from sodaracer.helpers import (
     BodyInformation,
     Bone,
     DistanceAccessor,
@@ -8,5 +8,5 @@ from sodaracer_env.helpers import (
     PhysicsId,
     staticBodyCount,
 )
-from sodaracer_env.simulator import IESoRWorld
+from sodaracer.simulator import IESoRWorld
 from walker import Walker
