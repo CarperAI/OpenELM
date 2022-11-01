@@ -15,7 +15,7 @@ from codex_execute import (
     swallow_io,
     time_limit,
 )
-from constants import PROJECT_PATH
+from constants import SRC_PATH
 from omegaconf import OmegaConf
 from tqdm import tqdm
 
@@ -170,7 +170,7 @@ def run_benchmark(cfg):
 
 # Load hydra config from yaml files and command line arguments.
 @hydra.main(
-    config_path=str(PROJECT_PATH), config_name="benchmark_cfg", version_base="1.2"
+    config_path=str(SRC_PATH / "config"), config_name="benchmark_cfg", version_base="1.2"
 )
 def main(cfg):
     print("----------------- Config ---------------")

@@ -1,5 +1,5 @@
 import hydra
-from constants import PROJECT_PATH
+from constants import SRC_PATH
 from diff_model import DiffModel
 from environments import Sodarace
 from map_elites import MAPElites
@@ -85,7 +85,7 @@ class ELM:
 
 
 # Load hydra config from yaml files and command line arguments.
-@hydra.main(config_path=str(PROJECT_PATH), config_name="elm_cfg", version_base="1.2")
+@hydra.main(config_path=str(SRC_PATH / "config"), config_name="elm_cfg", version_base="1.2")
 def main(cfg):
     print("----------------- Config ---------------")
     print(OmegaConf.to_yaml(cfg))
