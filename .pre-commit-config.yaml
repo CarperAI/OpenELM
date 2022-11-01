@@ -25,5 +25,12 @@ repos:
     hooks:
       - id: flake8
         args:
-          - '--ignore=E203,E221,E241,E272,E501,F811'
+          - '--ignore=E203,E501,F811'
           - '--max-line-length=88'
+-   repo: https://github.com/pycqa/pydocstyle
+    rev: 6.1.1
+    hooks:
+    -   id: pydocstyle
+        args:
+          - '--convention=google'
+          - '--add-ignore=D10'
