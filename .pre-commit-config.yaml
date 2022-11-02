@@ -27,6 +27,9 @@ repos:
         args:
           - '--ignore=E203,E501,F811'
           - '--max-line-length=88'
+          - '--statistics'
+          - '--count'
+          - '--show-source'
 -   repo: https://github.com/pycqa/pydocstyle
     rev: 6.1.1
     hooks:
