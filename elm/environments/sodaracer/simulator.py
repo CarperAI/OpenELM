@@ -10,7 +10,7 @@ import os
 from typing import List
 
 from Box2D import Box2D as b2
-from sodaracer_env.helpers import (
+from helpers import (
     BodyInformation,
     Bone,
     DistanceAccessor,

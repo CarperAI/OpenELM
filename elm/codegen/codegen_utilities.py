@@ -1,22 +1,9 @@
-import itertools
-import os
 import random
 import re
-import shutil
-from typing import Dict, Iterator, List
 
-import numpy as np
 import torch
 from codegen.modelling_codegen import CodeGenForCausalLM
-from codex_execute import (
-    TimeoutException,
-    create_tempdir,
-    reliability_guard,
-    swallow_io,
-    time_limit,
-)
 from constants import PROJECT_PATH
-from tqdm import tqdm
 from transformers import GPT2TokenizerFast
 
 

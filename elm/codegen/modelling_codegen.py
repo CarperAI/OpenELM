@@ -17,7 +17,6 @@
 
 from typing import Tuple
 
-import numpy as np
 import torch
 import torch.utils.checkpoint
 from torch import nn

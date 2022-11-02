@@ -2,7 +2,7 @@ import itertools
 import os
 import re
 import shutil
-from typing import Dict, Iterator, List
+from typing import Dict, Iterator
 
 import hydra
 import numpy as np
@@ -170,7 +170,9 @@ def run_benchmark(cfg):
 
 # Load hydra config from yaml files and command line arguments.
 @hydra.main(
-    config_path=str(SRC_PATH / "config"), config_name="benchmark_cfg", version_base="1.2"
+    config_path=str(SRC_PATH / "config"),
+    config_name="benchmark_cfg",
+    version_base="1.2",
 )
 def main(cfg):
     print("----------------- Config ---------------")
