@@ -366,7 +366,7 @@ class Sodarace(BaseEnvironment[Sodaracer]):
         ndim: int = 3,
     ) -> None:
         self.seed = Sodaracer(**seed)
-        self.diff_model: DiffModel = diff_model
+        self.diff_model = diff_model
         self.eval_steps = eval_steps
         self.genotype_ndim = ndim
         self.genotype_space = np.array(
