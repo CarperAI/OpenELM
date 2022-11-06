@@ -7,17 +7,24 @@ from typing import Dict, Iterator
 import hydra
 import numpy as np
 import torch
-from codegen.codegen_utilities import model_setup, sample, set_seed, truncate
-from codex_execute import (
+from constants import SRC_PATH
+from omegaconf import OmegaConf
+from tqdm import tqdm
+
+from elm.codegen.codegen_utilities import (
+    create_custom_gpt2_tokenizer,
+    model_setup,
+    sample,
+    set_seed,
+    truncate,
+)
+from elm.codex_execute import (
     TimeoutException,
     create_tempdir,
     reliability_guard,
     swallow_io,
     time_limit,
 )
-from constants import SRC_PATH
-from omegaconf import OmegaConf
-from tqdm import tqdm
 
 
 def parity_reference(b1, b2, b3, b4):
@@ -139,6 +146,10 @@ def run_benchmark(cfg):
         max_length=2048,
         return_tensors="pt",
     )
+    input_ids_len = mutated_encoding.input_ids.shape
+    text = []
+    for i in range(input_ids_len[1]):
+        text.append(tokenizer.batch_decode(mutated_encoding.input_ids[:, i]))
     num_batches = cfg.n_trials // cfg.batch_size
     for i in tqdm(range(num_batches), desc=f"Running benchmark with {cfg.n_bugs} bugs"):
         set_seed(torch.random.seed())

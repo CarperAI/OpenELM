@@ -8,9 +8,10 @@ from typing import Generic, Optional, TypeVar, Union
 import numpy as np
 import requests
 import torch
-from codegen.codegen_utilities import model_setup, sample, truncate
 from omegaconf import DictConfig, OmegaConf
-from sodaracer.simulator import SodaraceSimulator
+
+from elm.codegen.codegen_utilities import model_setup, sample, truncate
+from elm.environments.sodaracer import SodaraceSimulator
 
 Phenotype = Optional[np.ndarray]
 
@@ -106,11 +107,10 @@ class ImageGeneration(Genotype):
         self.valid = self.validate()
 
     def __str__(self) -> str:
-        return (
-            str(self.result.reshape((-1, 3)).mean(axis=0).astype(int))
-            if self.valid
-            else ""
-        )
+        if self.valid:
+            return str(self.result.reshape((-1, 3)).mean(axis=0).astype(int))
+        else:
+            return ""
 
     def validate(self) -> bool:
         return (
@@ -392,6 +392,7 @@ class Sodarace(BaseEnvironment[Sodaracer]):
 
     def to_behaviour_space(self, x: Sodaracer) -> Phenotype:
         # Map from floats of h,w,m to behaviour space grid cells.
+        # TODO: fix
         return np.array(
             [x.morphology["height"], x.morphology["width"], x.morphology["mass"]]
         ).astype(int)

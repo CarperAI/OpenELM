@@ -2,9 +2,10 @@ import random
 import re
 
 import torch
-from codegen.modelling_codegen import CodeGenForCausalLM
-from constants import PROJECT_PATH
 from transformers import GPT2TokenizerFast
+
+from elm.codegen.modelling_codegen import CodeGenForCausalLM
+from elm.constants import PROJECT_PATH
 
 
 def set_seed(seed, deterministic=True):
@@ -93,7 +94,7 @@ def truncate(completion, def_num=1, print_num=1, only_local_scope=False):
 
 def model_setup(cfg):
     set_seed(cfg.seed, deterministic=True)
-    device = torch.device(cfg.device)
+    device = torch.device("cuda" if cfg.cuda else "cpu")
     use_fp16 = True
     if not cfg.fp16 or device.type == "cpu":
         use_fp16 = False
@@ -117,7 +118,7 @@ def model_setup(cfg):
 
 def sample(cfg, model, tokenizer, batch, add_def=False):
     """Run a model on a batch of contexts for a particular task."""
-    device = torch.device(cfg.device)
+    device = torch.device("cuda" if cfg.cuda else "cpu")
 
     input_ids_len = batch["input_ids"].shape[1]
     assert input_ids_len < cfg.max_length

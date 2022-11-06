@@ -1,7 +1,7 @@
 """
 When there are unittests, please refactor this function into them.
 """
-from codegen.codegen_utilities import truncate
+from elm.codegen.codegen_utilities import truncate
 
 
 def test_truncate():

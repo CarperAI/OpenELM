@@ -3,15 +3,15 @@ import re
 import shutil
 from typing import Dict
 
-from codegen.codegen_utilities import model_setup, sample, set_seed, truncate
-from codex_execute import (
+from elm.codegen.codegen_utilities import model_setup, sample, set_seed, truncate
+from elm.codex_execute import (
     TimeoutException,
     create_tempdir,
     reliability_guard,
     swallow_io,
     time_limit,
 )
-from environments.sodaracer import Walker
+from elm.environments.sodaracer import Walker
 
 
 def reset_os_funcs(rmtree, rmdir, chdir):
@@ -28,6 +28,7 @@ def unsafe_execute(code_str: str, timeout: int = 5):
     if func_match:
         func_name = func_match.group(1)
     else:
+        print("No function found")
         return 6  # No proper function found in code.
     with create_tempdir():
 
@@ -40,12 +41,13 @@ def unsafe_execute(code_str: str, timeout: int = 5):
         chdir = os.chdir
 
         # Disable functionalities that can make destructive changes to the test.
-        reliability_guard()
+        # TODO: fix interaction between reliability guard and create_tempdir
+        # reliability_guard()
         try:
             # TODO: Check https://arxiv.org/pdf/2209.07753.pdf
             with swallow_io():
                 with time_limit(timeout):
-                    exec(code_str, {}, code_dct)
+                    exec(code_str, code_dct, code_dct)
                     return code_dct["make_walker"]()
         except TimeoutException:
             reset_os_funcs(rmtree, rmdir, chdir)
@@ -59,8 +61,9 @@ def unsafe_execute(code_str: str, timeout: int = 5):
         except TypeError:
             reset_os_funcs(rmtree, rmdir, chdir)
             return 5  # Code does not run - type error.
-        except Exception:
+        except Exception as e:
             reset_os_funcs(rmtree, rmdir, chdir)
+            print(e)
             return 6  # Code fails to run - other error.
 
 
@@ -71,7 +74,7 @@ class DiffModel:
         self.model, self.tokenizer = model_setup(self.cfg)
 
     def generate_prompt_str(self, seed, tokenizer):
-        if self.cfg.task == "Sodarace":
+        if self.cfg.env_name == "Sodarace":
             encoding = tokenizer(
                 [seed],
                 truncation=True,
@@ -79,7 +82,7 @@ class DiffModel:
                 max_length=2048,
                 return_tensors="pt",
             )
-        elif self.cfg.task == "Imagegen":
+        elif self.cfg.env_name == "Imagegen":
             encoding = tokenizer(
                 [seed],
                 truncation=True,
@@ -95,7 +98,6 @@ class DiffModel:
             # completions = sample(self.cfg, self.model, self.tokenizer, encoding)
             # truncation = truncate(completions[0])
             execution_result = unsafe_execute(seed, timeout=self.cfg.timeout)
-            print(execution_result)
             if isinstance(execution_result, Walker):
                 if execution_result.validate():
                     sodaracer_dict: dict = execution_result.serialize_walker_sodarace()

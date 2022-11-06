@@ -1,4 +1,4 @@
-from sodaracer.helpers import (
+from elm.environments.sodaracer.helpers import (
     BodyInformation,
     Bone,
     DistanceAccessor,
@@ -8,5 +8,5 @@ from sodaracer.helpers import (
     PhysicsId,
     staticBodyCount,
 )
-from sodaracer.simulator import IESoRWorld
-from walker import Walker
+from elm.environments.sodaracer.simulator import IESoRWorld, SodaraceSimulator
+from elm.environments.sodaracer.walker import Walker

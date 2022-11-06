@@ -1,1 +1,1 @@
-from environments.environments import FunctionOptim, MatchString, Sodarace
+from elm.environments.environments import FunctionOptim, MatchString, Sodarace

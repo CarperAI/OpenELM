@@ -11,7 +11,8 @@ from typing import List
 
 from Box2D import Box2D as b2
 from Box2D.examples.framework import Framework, main
-from helpers import (
+
+from elm.environments.sodaracer.helpers import (
     BodyInformation,
     Bone,
     DistanceAccessor,

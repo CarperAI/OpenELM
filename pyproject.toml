@@ -1,2 +1,20 @@
 [tool.isort]
 profile = "black"
+
+[build-system]
+requires = [
+    "setuptools>=42",
+    "wheel"
+]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["elm"]
+
+[project]
+name = "ELM"
+description = "Evolution Through Large Models"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+dynamic = ["version"]

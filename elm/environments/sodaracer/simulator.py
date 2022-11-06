@@ -10,7 +10,8 @@ import os
 from typing import List
 
 from Box2D import Box2D as b2
-from helpers import (
+
+from elm.environments.sodaracer.helpers import (
     BodyInformation,
     Bone,
     DistanceAccessor,
@@ -1236,8 +1237,8 @@ class SodaraceSimulator:
 
         start = self.morphology["startX"]
         end = min(
-            [bone.joint.bodyA.position[0] for bone in myWorld.bone_list]
-            + [muscle.joint.bodyA.position[0] for muscle in myWorld.muscle_list]
+            [bone.joint.bodyA.position[0] for bone in self.world.bone_list]
+            + [muscle.joint.bodyA.position[0] for muscle in self.world.muscle_list]
         )
         return end + self.morphology["offsetX"]
 
