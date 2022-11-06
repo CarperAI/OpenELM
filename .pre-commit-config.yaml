@@ -25,7 +25,7 @@ repos:
     hooks:
       - id: flake8
         args:
-          - '--ignore=E203,E501,F811'
+          - '--ignore=E203,E501,W503,F811'
           - '--max-line-length=88'
           - '--statistics'
           - '--count'
