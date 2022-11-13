@@ -608,11 +608,11 @@ class IESoRWorld:
         #
         # //Did we use LEO to calculate our body information -- affects the indexing procedure
         # bool useLEO = inBody["useLEO"].asBool();
-        useLEO = in_body["useLEO"]
+        # useLEO = in_body["useLEO"]
         #
         # //this is the json connection array
         # Json::Value connections = inBody["connections"];
-        connections = in_body["connections"]
+        connections = in_body.muscles
         #
         # //this determines if we should be a fixed connection (bone) or a moving connection (muscle)
         # double amplitudeCutoff = .2;
@@ -630,12 +630,12 @@ class IESoRWorld:
             #     //grab connection from our array
             #     Json::Value connectionObject = connections[i];
             #     Json::Value cppnOutputs = connectionObject["cppnOutputs"];
-            connection_object = connections[i]
-            cppn_outputs = connection_object["cppnOutputs"]
+            muscle = connections[i]
+            # cppn_outputs = muscle["cppnOutputs"]
             #
             #     int sID = atoi(connectionObject["sourceID"].asString().c_str());
-            s_id = int(connection_object["sourceID"])
-            t_id = int(connection_object["targetID"])
+            s_id = muscle.source_id
+            t_id = muscle.target_id
             #     int tID = atoi(connectionObject["targetID"].asString().c_str());
             #
             #     //To identify a given object in the physical world, we need to start with the current body count, and add the source id number
@@ -660,12 +660,12 @@ class IESoRWorld:
                 #         //depending on whether LEO was used or not, dictates what outputs we'll be looking at for what
                 #         int phaseIx = (useLEO ? 2 : 1);
                 #         int ampIx = (useLEO ? 3 : 2);
-                phase_ix = 2 if useLEO else 1
-                amp_ix = 3 if useLEO else 2
+                # phase_ix = 1
+                # amp_ix = 2
                 #
                 #         //sample the amplitude output to know what's up -- we convert from [-1,1] to [0,1]
                 #         double amp = (cppnOutputs[ampIx].asDouble() + 1) / 2;
-                amp = (cppn_outputs[amp_ix] + 1) / 2.0
+                amp = (muscle.amplitude + 1) / 2.0
                 #
                 #         //what's the distance been the source (x,y) and distance (x,y) -- that's the length of our connection
                 #         double connectionDistance = sqrt(
@@ -682,7 +682,7 @@ class IESoRWorld:
                 #
                 #         //this will hold our custom props for the distance/muscle joints
                 #         Json::Value props;
-                props = dict()
+                props: dict = dict()
                 #
                 #         if (amp < amplitudeCutoff)
                 #             this->addDistanceJoint(sourceID, targetID, props);//, {frequencyHz: 3, dampingRatio:.3});
@@ -699,7 +699,7 @@ class IESoRWorld:
                     #
                     #             //Phase/Amplitude set by our cppn outputs
                     #             props["phase"] = cppnOutputs[phaseIx].asDouble();
-                    props["phase"] = cppn_outputs[phase_ix]
+                    props["phase"] = muscle.phase
                     #             //JS Version
                     #             //props["amplitude"] = .3f*connectionDistance*amp;
                     #             props["amplitude"] = .3f*amp;
@@ -755,7 +755,7 @@ class IESoRWorld:
         #
         #     //Grab an array of nodes from our json object
         #     Json::Value oNodes = inBody["nodes"];
-        o_nodes = in_body["nodes"]
+        o_nodes = in_body.joints
         #
         #     //this is the starting body identifier for each node (every node has a unique ID for the source connections)
         #     //so node 5 is always node 5, but if you already have objects in the physical world
@@ -766,7 +766,7 @@ class IESoRWorld:
         body_id = body_count
         #
         #     bool useLEO = inBody["useLEO"].asBool();
-        useLEO = in_body["useLEO"]
+        # useLEO = in_body["useLEO"]
         #
         #     //manipulated values of each node, adjusted for screen coorindates
         #     double xScaled, yScaled;
@@ -804,8 +804,8 @@ class IESoRWorld:
             #         //We pull
             #         double nodeX = nodeLocation["x"].asDouble();
             #         double nodeY = nodeLocation["y"].asDouble();
-            node_x = node_location["x"]
-            node_y = node_location["y"]
+            node_x = node_location[0]
+            node_y = node_location[1]
             #
             #         //here we actually modify the x and y values to fit into a certain sized box depending on the initial screen size/physics world size
             #         xScaled = (nodeX)/divideForMax* maxAllowedWidth;

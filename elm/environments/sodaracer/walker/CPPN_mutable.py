@@ -1,4 +1,4 @@
-from walker.walk_creator import walker_creator
+from elm.environments.sodaracer.walker.walk_creator import walker_creator
 
 
 def query_cppn(wc, xgrid, ygrid, scale, connect_func, amp_func, phase_func):
@@ -16,9 +16,7 @@ def query_cppn(wc, xgrid, ygrid, scale, connect_func, amp_func, phase_func):
                     if connect_func(x1, y1, x2, y2):
                         amp = amp_func(x1, y1, x2, y2)
                         phase = phase_func(x1, y1, x2, y2)
-                        wc.add_muscle(
-                            joints[(x1, y1)], joints[(x2, y2)], False, amp, phase
-                        )
+                        wc.add_muscle(joints[(x1, y1)], joints[(x2, y2)], amp, phase)
     return joints
 
 

@@ -1,6 +1,6 @@
 import math
 
-from walker.walk_creator import walker_creator
+from elm.environments.sodaracer.walker.walk_creator import walker_creator
 
 
 def make_circle(wc, cx, cy, radius, num_points):
@@ -31,8 +31,6 @@ def make_walker():
 
     for k in range(num_points):
         wc.add_muscle(points[k], points[(k + 1) % num_points])
-        wc.add_muscle(
-            points[k], center, False, float(k) / num_points, float(k) / num_points
-        )
+        wc.add_muscle(points[k], center, float(k) / num_points, float(k) / num_points)
 
     return wc.get_walker()

@@ -1,122 +1,75 @@
+import math
+from dataclasses import dataclass, field
 from itertools import combinations
 
-import numpy as np
 
-
+@dataclass
 class Muscle:
-    # {"type": "muscle", "amplitude": 2.12, "phase": 0.0}
-    # {"type": "distance"}
-    def __init__(self, j0, j1, *args):
-        self.j0 = j0
-        self.j1 = j1
-        self.type = "distance"
-        if len(args[0]) == 3:
-            isDistance, amplitude, phase = args[0]
+    joints: list[tuple[float, float]]
+    type: str = "distance"
+    amplitude: float = 0.0
+    phase: float = 0.0
+    source_id: int = 0
+    target_id: int = 0
+
+    def __post_init__(self):
+        if self.amplitude == 0.0 and self.phase == 0.0:
             self.type = "muscle"
-            self.amplitude = amplitude
-            self.phase = phase
 
 
+@dataclass
 class Walker:
-    def __init__(self, joints, muscles):
-        self.joints = joints
-        self.muscles = muscles
+    joints: list[tuple[float, float]]
+    muscles: list[Muscle]
+    joint_ids: list[int] = field(default_factory=list)
 
     def joint_index(self, joint):
         for i in range(len(self.joints)):
-            if np.array_equal(self.joints[i], joint):
+            if self.joints[i][0] == joint[0] and self.joints[i][1] == joint[1]:
                 return i
         return -1
 
-    def serialize_walker(self):
-        joints = []
-        muscles = []
-        for j in self.joints:
-            joints.append((j[0], j[1]))
+    def __post_init__(self):
         for m in self.muscles:
-            if m.type == "distance":
-                muscles.append(
-                    [self.joint_index(m.j0), self.joint_index(m.j1), {"type": m.type}]
-                )
-            elif m.type == "muscle":
-                muscles.append(
-                    [
-                        self.joint_index(m.j0),
-                        self.joint_index(m.j1),
-                        {"type": m.type, "amplitude": m.amplitude, "phase": m.phase},
-                    ]
-                )
-        return {"joints": joints, "muscles": muscles}
+            m.source_id = self.joint_index(m.joints[0])
+            m.target_id = self.joint_index(m.joints[1])
 
-    def serialize_walker_sodarace(self):
-        walker_dict = {
-            "useLEO": True,
-            "nodes": [],
-            "connections": [],
-        }
-        for j in self.joints:
-            walker_dict["nodes"].append(
-                {
-                    "x": j[0],
-                    "y": j[1],
-                }
-            )
-        for m in self.muscles:
-            if m.type == "distance":
-                walker_dict["connections"].append(
-                    {
-                        "sourceID": self.joint_index(m.j0),
-                        "targetID": self.joint_index(m.j1),
-                        "cppnOutputs": [0, 0, 0, -10.0],
-                    }
-                )
-            elif m.type == "muscle":
-                walker_dict["connections"].append(
-                    {
-                        "sourceID": self.joint_index(m.j0),
-                        "targetID": self.joint_index(m.j1),
-                        "cppnOutputs": [0, 0, m.phase, m.amplitude],
-                    }
-                )
-        return walker_dict
-
-    def __str__(self):
-        return str(self.serialize_walker())
-
-    def __eq__(self, other):
-        # Check if other is a Dictionary
-        if isinstance(other, dict):
-            return self.serialize_walker() == other
-        return self == other
-
-    def validate(self):
+    def validate(self) -> bool:
         """logic for ensuring that the Sodaracer will not break the underlying Box2D physics engine
-            a) that each joint is connected only to so many muscles
-            b) that the strength of muscles is limited
+            a) that the strength of muscles is limited
+            b) that each joint is connected only to so many muscles
             c) that there is a minimum distance between joints
         Returns:
             _type_: bool
         """
-        max_muscles_per_joint = 10
-        max_muscle_strength = 10
-        min_joint_distance = 0.1
+        max_muscles_per_joint: int = 10
+        max_muscle_strength: int = 10
+        min_joint_distance: float = 0.1
         for j in self.joints:
-            count = 0
+            count: int = 0
             for m in self.muscles:
-                if np.array_equal(m.j0, j) or np.array_equal(m.j1, j):
+                if (
+                    m.joints[0][0] == j[0]
+                    and m.joints[0][1] == j[1]
+                    or m.joints[1][0] == j[0]
+                    and m.joints[1][1] == j[1]
+                ):
                     count += 1
-                # Check b) that the strength of muscles is limited
+                # Check a) that the strength of muscles is limited
                 if m.type == "muscle":
                     if m.amplitude > max_muscle_strength:
                         print("Muscle strength too high")
                         return False
-            # Check a) that each joint is connected only to so many muscles
+            # Check b) that each joint is connected only to so many muscles
             if count > max_muscles_per_joint:
                 print("Too many muscles connected to joint", count)
                 return False
         for j1, j2 in combinations(self.joints, r=2):
             # Check c) that there is a minimum distance between joints
-            if np.sqrt(np.sum((j1 - j2) ** 2)) < min_joint_distance:
+            if (
+                math.sqrt(((j1[0] - j2[0]) ** 2 + (j1[1] - j2[1]) ** 2))
+                < min_joint_distance
+            ):
                 print(
                     "Joints too close together",
                     j1,
@@ -128,6 +81,21 @@ class Walker:
         return True
 
 
+class Walker2:
+    def __init__(self, joints, muscles):
+        self.joints = joints
+        self.muscles = muscles
+
+    def __str__(self):
+        return str(self.serialize_walker())
+
+    def __eq__(self, other):
+        # Check if other is a Dictionary
+        if isinstance(other, dict):
+            return self.serialize_walker() == other
+        return self == other
+
+
 class walker_creator:
     """Walker Creator Referenced in ELM Paper - https://arxiv.org/abs/2206.08896 (pg.16)"""
 
@@ -136,17 +104,40 @@ class walker_creator:
         self.muscles = []
 
     def add_joint(self, x, y):
-        """add a spring"""
-        j = [x, y]
+        """
+        Add a spring/joint to the sodaracer.
+
+        Joints make up the body of the robot by connecting point masses.
+        This implementation
+
+        Args:
+            x (_type_): _description_
+            y (_type_): _description_
+
+        Returns:
+            _type_: _description_
+        """
+        j = (x, y)
         self.joints.append(j)
         return j
 
-    def add_muscle(self, j0, j1, *args):
-        """add a point mass"""
-        m = Muscle(j0, j1, args)
+    def add_muscle(self, j0, j1, amplitude=0.0, phase=0.0):
+        """
+        Add muscle to sodaracer.
+
+        _extended_summary_
+
+        Args:
+            j0 (_type_): _description_
+            j1 (_type_): _description_
+
+        Returns:
+            _type_: _description_
+        """
+        m = Muscle(joints=[j0, j1], amplitude=amplitude, phase=phase)
         self.muscles.append(m)
         return m
 
     def get_walker(self):
         """Python dictionary with keys such as 'joints' and 'muscles'"""
-        return Walker(np.array(self.joints), self.muscles)
+        return Walker(self.joints, self.muscles)
