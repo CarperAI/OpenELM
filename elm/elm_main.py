@@ -42,23 +42,16 @@ def make_walker():
     return wc.get_walker()
 """,
     "result_dict": {
-        "useLEO": True,
-        "nodes": [
-            {"x": 0, "y": 0},
-            {"x": 0, "y": 10},
-            {"x": 10, "y": 10},
-            {"x": 10, "y": 0},
-            {"x": 5, "y": 5},
-        ],
-        "connections": [
-            {"sourceID": "0", "targetID": "1", "cppnOutputs": [0, 0, 0, -10.0]},
-            {"sourceID": "1", "targetID": "2", "cppnOutputs": [0, 0, 0, -10.0]},
-            {"sourceID": "2", "targetID": "3", "cppnOutputs": [0, 0, 0, -10.0]},
-            {"sourceID": "3", "targetID": "0", "cppnOutputs": [0, 0, 0, -10.0]},
-            {"sourceID": "3", "targetID": "4", "cppnOutputs": [0, 0, 0, -10.0]},
-            {"sourceID": "0", "targetID": "4", "cppnOutputs": [0, 0, 0.0, 5.0]},
-            {"sourceID": "1", "targetID": "4", "cppnOutputs": [0, 0, 0.0, 10.0]},
-            {"sourceID": "2", "targetID": "4", "cppnOutputs": [0, 0, 0.0, 2.0]},
+        "joints": [(0, 0), (0, 10), (10, 10), (10, 0), (5, 5)],
+        "muscles": [
+            [0, 1, {"type": "distance", "amplitude": 0.0, "phase": 0.0}],
+            [1, 2, {"type": "distance", "amplitude": 0.0, "phase": 0.0}],
+            [2, 3, {"type": "distance", "amplitude": 0.0, "phase": 0.0}],
+            [3, 0, {"type": "distance", "amplitude": 0.0, "phase": 0.0}],
+            [3, 4, {"type": "distance", "amplitude": 0.0, "phase": 0.0}],
+            [0, 4, {"type": "muscle", "amplitude": 5.0, "phase": 0.0}],
+            [1, 4, {"type": "muscle", "amplitude": 10.0, "phase": 0.0}],
+            [2, 4, {"type": "muscle", "amplitude": 2.0, "phase": 0.0}],
         ],
     },
 }

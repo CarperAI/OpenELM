@@ -3,8 +3,8 @@ import json
 from flask import Flask, abort, jsonify, request
 from numpy import ndarray
 
+from .environments.walker.walk_creator import Walker
 from .utils import sandbox_unsafe_execute
-from .walker.walk_creator import Walker
 
 app = Flask(__name__)
 
@@ -20,16 +20,14 @@ def generate_racer(code_str, timeout):
         # print("hi 3", execution_result)
         return bad_request(f"failed to execute code")
     if isinstance(execution_result, Walker):
-        sodaracer_dict: dict = execution_result.serialize_walker_sodarace()
+        sodaracer_dict: dict = execution_result.to_dict()
         if execution_result.validate():
             return {
                 "program_str": code_str,
-                "sodaracer": sodaracer_dict,
+                "result_dict": sodaracer_dict,
             }, 200
         else:
-            return bad_request(
-                f"invalid walker", walker=execution_result.serialize_walker_sodarace()
-            )
+            return bad_request(f"invalid walker", walker=execution_result.to_dict())
     elif isinstance(execution_result, int):
         return bad_request(
             f"failed sandbox_unsafe_execute", unsafe_execute_error_code=execution_result

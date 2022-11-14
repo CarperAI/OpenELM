@@ -49,6 +49,9 @@ def unsafe_execute(code_str: str, timeout: int = 5):
                 with time_limit(timeout):
                     exec(code_str, code_dct, code_dct)
                     return code_dct["make_walker"]()
+        except ValueError:
+            reset_os_funcs(rmtree, rmdir, chdir)
+            return 1  # Code fails validation check.
         except TimeoutException:
             reset_os_funcs(rmtree, rmdir, chdir)
             return 2  # Code takes too long to run.
@@ -100,7 +103,7 @@ class DiffModel:
             execution_result = unsafe_execute(seed, timeout=self.cfg.timeout)
             if isinstance(execution_result, Walker):
                 if execution_result.validate():
-                    sodaracer_dict: dict = execution_result.serialize_walker_sodarace()
+                    sodaracer_dict: dict = execution_result.to_dict()
                     return {
                         "program_str": seed,
                         "result_dict": sodaracer_dict,

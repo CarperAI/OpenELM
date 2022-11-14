@@ -341,7 +341,7 @@ class MatchString(BaseEnvironment[StringArrayGenotype]):
 
 
 class Sodaracer(Genotype):
-    def __init__(self, program_str: str, result_dict: dict):
+    def __init__(self, result_dict: dict, program):
         self.program_str = program_str
         self.result_dict = result_dict
         self.simulator = SodaraceSimulator(body=self.result_dict)

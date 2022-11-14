@@ -612,7 +612,7 @@ class IESoRWorld:
         #
         # //this is the json connection array
         # Json::Value connections = inBody["connections"];
-        connections = in_body.muscles
+        connections = in_body["muscles"]
         #
         # //this determines if we should be a fixed connection (bone) or a moving connection (muscle)
         # double amplitudeCutoff = .2;
@@ -634,8 +634,8 @@ class IESoRWorld:
             # cppn_outputs = muscle["cppnOutputs"]
             #
             #     int sID = atoi(connectionObject["sourceID"].asString().c_str());
-            s_id = muscle.source_id
-            t_id = muscle.target_id
+            s_id = muscle[0]
+            t_id = muscle[1]
             #     int tID = atoi(connectionObject["targetID"].asString().c_str());
             #
             #     //To identify a given object in the physical world, we need to start with the current body count, and add the source id number
@@ -665,7 +665,7 @@ class IESoRWorld:
                 #
                 #         //sample the amplitude output to know what's up -- we convert from [-1,1] to [0,1]
                 #         double amp = (cppnOutputs[ampIx].asDouble() + 1) / 2;
-                amp = (muscle.amplitude + 1) / 2.0
+                amp = (muscle[-1]["amplitude"] + 1) / 2.0
                 #
                 #         //what's the distance been the source (x,y) and distance (x,y) -- that's the length of our connection
                 #         double connectionDistance = sqrt(
@@ -699,7 +699,7 @@ class IESoRWorld:
                     #
                     #             //Phase/Amplitude set by our cppn outputs
                     #             props["phase"] = cppnOutputs[phaseIx].asDouble();
-                    props["phase"] = muscle.phase
+                    props["phase"] = muscle[-1]["phase"]
                     #             //JS Version
                     #             //props["amplitude"] = .3f*connectionDistance*amp;
                     #             props["amplitude"] = .3f*amp;
@@ -755,7 +755,7 @@ class IESoRWorld:
         #
         #     //Grab an array of nodes from our json object
         #     Json::Value oNodes = inBody["nodes"];
-        o_nodes = in_body.joints
+        o_nodes = in_body["joints"]
         #
         #     //this is the starting body identifier for each node (every node has a unique ID for the source connections)
         #     //so node 5 is always node 5, but if you already have objects in the physical world

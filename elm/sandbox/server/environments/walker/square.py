@@ -1,4 +1,4 @@
-from .walk_creator import walker_creator
+from elm.sandbox.server.environments.walker.walk_creator import walker_creator
 
 
 def make_square(wc, x0, y0, x1, y1):
@@ -26,8 +26,8 @@ def make_walker():
     wc.add_muscle(sides[3], center)
 
     # the other prongs from the center of the square are active
-    wc.add_muscle(sides[0], center, False, 5.0, 0.0)
-    wc.add_muscle(sides[1], center, False, 10.0, 0.0)
-    wc.add_muscle(sides[2], center, False, 2.0, 0.0)
+    wc.add_muscle(sides[0], center, 5.0, 0.0)
+    wc.add_muscle(sides[1], center, 10.0, 0.0)
+    wc.add_muscle(sides[2], center, 2.0, 0.0)
 
     return wc.get_walker()

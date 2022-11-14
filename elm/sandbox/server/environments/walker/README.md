@@ -14,5 +14,5 @@
 ## Intermediate Sodaracer representation
 > "its translation after being executed into a dictionary of joints and muscles"
 
-`walker_creator.get_walker()` returns a `Walker` class which can be turned into the necessary dictionary using `Walker.serialize_walker()`
+`walker_creator.get_walker()` returns a `Walker` class which can be turned into the necessary dictionary using `Walker.to_dict()`
 * `test.py`
