@@ -2,7 +2,7 @@ import itertools
 import os
 import re
 import shutil
-from typing import Dict, Iterator
+from typing import Iterator
 
 import hydra
 import numpy as np
@@ -11,14 +11,8 @@ from constants import SRC_PATH
 from omegaconf import OmegaConf
 from tqdm import tqdm
 
-from elm.codegen.codegen_utilities import (
-    create_custom_gpt2_tokenizer,
-    model_setup,
-    sample,
-    set_seed,
-    truncate,
-)
-from elm.codex_execute import (
+from elm.codegen.codegen_utilities import model_setup, sample, set_seed, truncate
+from elm.codegen.codex_execute import (
     TimeoutException,
     create_tempdir,
     reliability_guard,
@@ -44,10 +38,10 @@ def reset_os_funcs(rmtree, rmdir, chdir):
     os.chdir = chdir
 
 
-def eval_code_string(code_str: str, ground_truth: Dict, timeout: int = 5):
+def eval_code_string(code_str: str, ground_truth: dict, timeout: int = 5):
     if len(code_str) == 0 or "def " not in code_str:
         return 6  # No code found or no function found.
-    code_dct: Dict = {}
+    code_dct: dict = {}
     func_match = re.search(r"def (\w+)\s*\((.*?)\):", code_str)
     if func_match:
         func_name = func_match.group(1)

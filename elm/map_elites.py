@@ -1,10 +1,51 @@
-from typing import Optional
+from typing import Optional, Union
 
 import numpy as np
 from tqdm import trange
 
+from elm.environments.environments import BaseEnvironment
+
 Phenotype = Optional[np.ndarray]
 Mapindex = Optional[tuple]
+
+
+class Map:
+    def __init__(
+        self,
+        dims: Union[list, tuple],
+        fill_value: float,
+        dtype: type = np.float32,
+        history_length: int = 1,
+    ):
+        self.history_length = history_length
+        self.dims = dims
+        if self.history_length == 1:
+            self.array: np.ndarray = np.full(dims, fill_value, dtype=dtype)
+        else:
+            # Set starting top of buffer to 0 (% operator)
+            self.top = np.full(dims, self.history_length - 1, dtype=int)
+            self.array = np.full([history_length] + dims, fill_value, dtype=dtype)
+
+    def __getitem__(self, map_ix):
+        """If history length > 1, the history dim is an n-dim circular buffer."""
+        if self.history_length == 1:
+            return self.array[map_ix]
+        else:
+            return self.array[(self.top[map_ix], *map_ix)]
+
+    def __setitem__(self, map_ix, value):
+        """Assumes that `value` is the new best value in the buffer."""
+        if self.history_length == 1:
+            self.array[map_ix] = value
+        else:
+            top_val = self.top[map_ix]
+            top_val = (top_val + 1) % self.history_length
+            self.top[map_ix] = top_val
+            self.array[(self.top[map_ix], *map_ix)] = value
+
+    @property
+    def shape(self) -> tuple:
+        return self.array.shape
 
 
 class MAPElites:
@@ -13,22 +54,29 @@ class MAPElites:
         self.n_bins = n_bins
         self.history_length = history_length
 
-        # discretization of behaviour space
-        self.bins = np.linspace(*env.behaviour_space, n_bins + 1)[1:-1].T
+        # discretization of space
+        self.bins = np.linspace(*env.behavior_space, n_bins + 1)[1:-1].T
         # perfomance of niches
-        self.fitnesses = np.full(
-            [history_length] + [n_bins] * env.behaviour_ndim, -np.inf
+        self.fitnesses: Map = Map(
+            dims=[n_bins] * env.behavior_ndim,
+            fill_value=-np.inf,
+            dtype=float,
+            history_length=history_length,
         )
         # niches' sources
-        self.genomes = np.zeros(self.fitnesses.shape, dtype=object)
+        self.genomes: Map = Map(
+            dims=self.fitnesses.dims,
+            fill_value=0.0,
+            dtype=object,
+            history_length=history_length,
+        )
         # index over explored niches to select from
-        self.nonzero = np.full(self.fitnesses.shape[1:], False)
-
+        self.nonzero: Map = Map(dims=self.fitnesses.dims, fill_value=False, dtype=bool)
         # bad mutations that ended up with invalid output.
         self.recycled = [None] * 1000
         self.recycled_count = 0
 
-        print(f"MAP of size: {self.fitnesses.shape[1:]} = {self.fitnesses[0].size}")
+        print(f"MAP of size: {self.fitnesses.dims} = {self.fitnesses[0].size}")
 
     def to_mapindex(self, b: Phenotype) -> Mapindex:
         return (
@@ -38,8 +86,8 @@ class MAPElites:
         )
 
     def random_selection(self) -> Mapindex:
-        ix = np.random.choice(np.flatnonzero(self.nonzero))
-        return np.unravel_index(ix, self.nonzero.shape)
+        ix = np.random.choice(np.flatnonzero(self.nonzero.array))
+        return np.unravel_index(ix, self.nonzero.dims)
 
     def search(self, initsteps: int, totalsteps: int, atol=1, batch_size=32):
         tbar = trange(int(totalsteps))
@@ -59,9 +107,9 @@ class MAPElites:
                 # Mutate the elite
                 x = self.env.mutate(x, **config)
 
-            # Now that `x` is a list, we put them into the behaviour space one-by-one.
+            # Now that `x` is a list, we put them into the behavior space one-by-one.
             for individual in x:
-                map_ix = self.to_mapindex(self.env.to_behaviour_space(individual))
+                map_ix = self.to_mapindex(self.env.to_behavior_space(individual))
                 # if the return is None, the individual is invalid and is thrown into the recycle bin.
                 if map_ix is None:
                     self.recycled[self.recycled_count % len(self.recycled)] = individual
@@ -87,7 +135,7 @@ class MAPElites:
 
         return str(
             self.genomes[
-                np.unravel_index(self.fitnesses.argmax(), self.fitnesses.shape)
+                np.unravel_index(self.fitnesses.array.argmax(), self.fitnesses.dims)
             ]
         )
 

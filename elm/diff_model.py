@@ -4,7 +4,7 @@ import shutil
 from typing import Dict
 
 from elm.codegen.codegen_utilities import model_setup, sample, set_seed, truncate
-from elm.codex_execute import (
+from elm.codegen.codex_execute import (
     TimeoutException,
     create_tempdir,
     reliability_guard,
@@ -95,16 +95,16 @@ class DiffModel:
             )
         return encoding
 
-    def generate_program(self, seed: str) -> dict:
+    def generate_program(self, seed_str: str) -> dict:
         # encoding = self.generate_prompt_str(seed, self.tokenizer)
         while True:
             # completions = sample(self.cfg, self.model, self.tokenizer, encoding)
             # truncation = truncate(completions[0])
-            execution_result = unsafe_execute(seed, timeout=self.cfg.timeout)
+            execution_result = unsafe_execute(seed_str, timeout=self.cfg.timeout)
             if isinstance(execution_result, Walker):
                 if execution_result.validate():
                     sodaracer_dict: dict = execution_result.to_dict()
                     return {
-                        "program_str": seed,
+                        "program_str": seed_str,
                         "result_dict": sodaracer_dict,
                     }

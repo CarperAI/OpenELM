@@ -60,7 +60,6 @@ def make_walker():
 class ELM:
     def __init__(self, cfg) -> None:
         self.cfg = cfg
-        # TODO: hierarchical hydra config for different environments, config type validation.
         self.diff_model = DiffModel(self.cfg)
         self.seed = TEST_SEED
         self.environment = Sodarace(

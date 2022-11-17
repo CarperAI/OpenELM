@@ -52,7 +52,7 @@ class BaseEnvironment(ABC, Generic[GenoType]):
         raise NotImplementedError
 
     @abstractmethod
-    def to_behaviour_space(self, x: GenoType) -> Phenotype:
+    def to_behavior_space(self, x: GenoType) -> Phenotype:
         raise NotImplementedError
 
     @property
@@ -61,12 +61,12 @@ class BaseEnvironment(ABC, Generic[GenoType]):
 
     @property
     # [starts, endings) of search intervals
-    def behaviour_space(self) -> np.ndarray:
+    def behavior_space(self) -> np.ndarray:
         return self.genotype_space
 
     @property
-    def behaviour_ndim(self) -> int:
-        return self.behaviour_space.shape[1]
+    def behavior_ndim(self) -> int:
+        return self.behavior_space.shape[1]
 
 
 class ArrayGenotype(Genotype, np.ndarray):
@@ -96,7 +96,7 @@ class FunctionOptim(BaseEnvironment[ArrayGenotype]):
     def fitness(self, x: ArrayGenotype) -> float:
         return ackley(x[None])[0]
 
-    def to_behaviour_space(self, x: ArrayGenotype) -> Phenotype:
+    def to_behavior_space(self, x: ArrayGenotype) -> Phenotype:
         return np.asarray(x)
 
 
@@ -131,16 +131,16 @@ class ImageOptim(BaseEnvironment[ImageGeneration]):
     """
     This will try to mutate programs that return images. Fitness is simply the absolute difference between the returning
     image and the target image.
-    To map into the behaviour space, the image will be divided into blocks (specified in `block_size`), and average
-    values of RGB channels in each block will be put together as a point in the behaviour space (basically it is
+    To map into the behavior space, the image will be divided into blocks (specified in `block_size`), and average
+    values of RGB channels in each block will be put together as a point in the behavior space (basically it is
     average-pooling).
     """
 
     default_docstring = '\t"""Draw a yellow circle.\n\t"""'
     default_import = "import math\nimport numpy as np\n"
 
-    # Record different definitions of behaviour spaces in a dict. Feel free to add.
-    behaviour_mode_spec = {"3-channel": {"genotype_ndim": 3}}
+    # Record different definitions of behavior spaces in a dict. Feel free to add.
+    behavior_mode_spec = {"3-channel": {"genotype_ndim": 3}}
 
     def __init__(
         self,
@@ -151,7 +151,7 @@ class ImageOptim(BaseEnvironment[ImageGeneration]):
         docstring=default_docstring,
         import_text=default_import,
         sandbox_server="localhost:5000",
-        behaviour_mode: str = "3-channel",
+        behavior_mode: str = "3-channel",
     ):
         """
         Parameters:
@@ -189,8 +189,8 @@ class ImageOptim(BaseEnvironment[ImageGeneration]):
         # Use RNG to rotate random seeds during inference.
         self.rng = np.random.default_rng(seed=self.config.seed)
 
-        self.behaviour_mode = behaviour_mode
-        self.genotype_ndim: int = self.behaviour_mode_spec[self.behaviour_mode][
+        self.behavior_mode = behavior_mode
+        self.genotype_ndim: int = self.behavior_mode_spec[self.behavior_mode][
             "genotype_ndim"
         ]
         self.genotype_space = np.repeat([[0, 255]], self.genotype_ndim, axis=0).T
@@ -222,8 +222,8 @@ class ImageOptim(BaseEnvironment[ImageGeneration]):
             return -np.inf
         return -np.abs(x.result - self.target_img).sum()
 
-    def to_behaviour_space(self, x: ImageGeneration) -> Phenotype:
-        if self.behaviour_mode == "3-channel":
+    def to_behavior_space(self, x: ImageGeneration) -> Phenotype:
+        if self.behavior_mode == "3-channel":
             return x._three_channel_average()
 
     def _generate_code(self, seed: str, num=1) -> list[str]:
@@ -336,12 +336,12 @@ class MatchString(BaseEnvironment[StringArrayGenotype]):
     def fitness(self, x: StringArrayGenotype) -> float:
         return -np.abs(x - self.target).sum()
 
-    def to_behaviour_space(self, x: StringArrayGenotype) -> Phenotype:
+    def to_behavior_space(self, x: StringArrayGenotype) -> Phenotype:
         return np.asarray(x)
 
 
 class Sodaracer(Genotype):
-    def __init__(self, result_dict: dict, program):
+    def __init__(self, program_str: str, result_dict: dict):
         self.program_str = program_str
         self.result_dict = result_dict
         self.simulator = SodaraceSimulator(body=self.result_dict)
@@ -390,8 +390,8 @@ class Sodarace(BaseEnvironment[Sodaracer]):
         new_sodaracer = self.generate_program(x.program_str)
         return [new_sodaracer]
 
-    def to_behaviour_space(self, x: Sodaracer) -> Phenotype:
-        # Map from floats of h,w,m to behaviour space grid cells.
+    def to_behavior_space(self, x: Sodaracer) -> Phenotype:
+        # Map from floats of h,w,m to behavior space grid cells.
         # TODO: fix
         return np.array(
             [x.morphology["height"], x.morphology["width"], x.morphology["mass"]]
