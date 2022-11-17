@@ -34,7 +34,6 @@ class Map:
             return self.array[(self.top[map_ix], *map_ix)]
 
     def __setitem__(self, map_ix, value):
-        """Assumes that `value` is the new best value in the buffer."""
         if self.history_length == 1:
             self.array[map_ix] = value
         else:
@@ -56,10 +55,13 @@ class Map:
 
 
 class MAPElites:
-    def __init__(self, env, n_bins: int, history_length: int):
+    def __init__(
+        self, env, n_bins: int, history_length: int, save_history: bool = False
+    ):
         self.env = env
         self.n_bins = n_bins
         self.history_length = history_length
+        self.save_history = save_history
 
         # discretization of space
         self.bins = np.linspace(*env.behavior_space, n_bins + 1)[1:-1].T
@@ -100,6 +102,13 @@ class MAPElites:
         tbar = trange(int(totalsteps))
         max_fitness = -np.inf
         max_genome = None
+        if self.save_history:
+            self.history: Map = Map(
+                dims=self.fitnesses.dims,
+                fill_value=0.0,
+                dtype=object,
+                history_length=totalsteps,
+            )
 
         config = {"batch_size": batch_size}
 
@@ -123,6 +132,8 @@ class MAPElites:
                     self.recycled_count += 1
                     continue
 
+                if self.save_history:
+                    self.history[map_ix] = individual
                 self.nonzero[map_ix] = True
 
                 f = self.env.fitness(individual)
