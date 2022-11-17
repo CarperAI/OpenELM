@@ -1,4 +1,4 @@
-from typing import Optional, Union
+from typing import Optional
 
 import numpy as np
 from tqdm import trange
@@ -12,19 +12,19 @@ Mapindex = Optional[tuple]
 class Map:
     def __init__(
         self,
-        dims: Union[list, tuple],
+        dims: tuple,
         fill_value: float,
         dtype: type = np.float32,
         history_length: int = 1,
     ):
-        self.history_length = history_length
-        self.dims = dims
+        self.history_length: int = history_length
+        self.dims: tuple = dims
         if self.history_length == 1:
             self.array: np.ndarray = np.full(dims, fill_value, dtype=dtype)
         else:
             # Set starting top of buffer to 0 (% operator)
             self.top = np.full(dims, self.history_length - 1, dtype=int)
-            self.array = np.full([history_length] + dims, fill_value, dtype=dtype)
+            self.array = np.full((history_length,) + dims, fill_value, dtype=dtype)
 
     def __getitem__(self, map_ix):
         """If history length > 1, the history dim is an n-dim circular buffer."""
@@ -47,6 +47,13 @@ class Map:
     def shape(self) -> tuple:
         return self.array.shape
 
+    @property
+    def map_size(self) -> int:
+        if self.history_length == 1:
+            return self.array.size
+        else:
+            return self.array[0].size
+
 
 class MAPElites:
     def __init__(self, env, n_bins: int, history_length: int):
@@ -58,7 +65,7 @@ class MAPElites:
         self.bins = np.linspace(*env.behavior_space, n_bins + 1)[1:-1].T
         # perfomance of niches
         self.fitnesses: Map = Map(
-            dims=[n_bins] * env.behavior_ndim,
+            dims=(n_bins,) * env.behavior_ndim,
             fill_value=-np.inf,
             dtype=float,
             history_length=history_length,
@@ -76,7 +83,7 @@ class MAPElites:
         self.recycled = [None] * 1000
         self.recycled_count = 0
 
-        print(f"MAP of size: {self.fitnesses.dims} = {self.fitnesses[0].size}")
+        print(f"MAP of size: {self.fitnesses.dims} = {self.fitnesses.map_size}")
 
     def to_mapindex(self, b: Phenotype) -> Mapindex:
         return (
@@ -133,11 +140,7 @@ class MAPElites:
                 if np.isclose(max_fitness, self.env.max_fitness, atol=atol):
                     break
 
-        return str(
-            self.genomes[
-                np.unravel_index(self.fitnesses.array.argmax(), self.fitnesses.dims)
-            ]
-        )
+        return str(max_genome)
 
     def plot(self):
         import matplotlib
@@ -147,7 +150,7 @@ class MAPElites:
         matplotlib.rcParams["figure.dpi"] = 100
         matplotlib.style.use("ggplot")
 
-        ix = tuple(np.zeros(self.fitnesses.ndim - 2, int))
+        ix = tuple(np.zeros(self.fitnesses.array.ndim - 2, int))
         print(ix)
         map2d = self.fitnesses[ix]
         print(f"{map2d.shape=}")

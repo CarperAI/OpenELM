@@ -325,7 +325,7 @@ class MatchString(BaseEnvironment[StringArrayGenotype]):
         ).T
 
     def random(self, **kwarg) -> list[StringArrayGenotype]:
-        return [np.random.uniform(*self.genotype_space)]
+        return [StringArrayGenotype(np.random.uniform(*self.genotype_space))]
 
     def mutate(self, x: StringArrayGenotype, **kwarg) -> list[StringArrayGenotype]:
         x = x.copy()
