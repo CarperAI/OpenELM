@@ -4,6 +4,17 @@ from transformers import pipeline
 import trlx
 from trlx.data.configs import TRLConfig
 from trlx.model.accelerate_ppo_softprompt_model import AcceleratePPOSoftpromptModel
+from trlx.data.method_configs import register_method, PPOConfig
+from dataclasses import dataclass
+
+
+@dataclass
+@register_method
+class PPOSoftpromptConfig(PPOConfig):
+    n_soft_tokens: int = None
+    initialize_from_vocab: bool = True  # of softprompt
+    tune_v_head: bool = True  # set in case whole model is frozen (except softprompt)
+
 
 if __name__ == "__main__":
     sentiment_fn = pipeline(

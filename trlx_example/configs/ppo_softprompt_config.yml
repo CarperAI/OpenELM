@@ -5,9 +5,11 @@ model:
   num_layers_unfrozen: 0  # Number of bottom layers to freeze during training
 
 train:
+  # project_name: "trlx_elm"
+  # run_name: "short_quotes"
   seq_length: 48  # Size of LM context
-  epochs: 1000  # Train for max(epochs, total_steps)
-  total_steps: 10000  # Train for max(epochs, total_steps)
+  epochs: 5000  # Train for max(epochs, total_steps)
+  total_steps: 30000  # Train for max(epochs, total_steps)
   batch_size: 128  # batch size
 
   lr_ramp_steps: 100  # learning rate warm up
@@ -18,6 +20,7 @@ train:
   opt_betas: [0.9, 0.95] # adam betas
 
   checkpoint_interval: 10000  # checkpoint interval
+  checkpoint_dir: "ckpts/frozen"
   eval_interval: 16  # eval interval
 
   pipeline: "PPOPipeline"  # prompt pipeline to load
@@ -25,8 +28,9 @@ train:
 
 method:
   name : 'pposoftpromptconfig'  # Name of RL method config
-  n_soft_tokens: 1  # Number of (prefix) soft prompt tokens
+  n_soft_tokens: 40  # Number of (prefix) soft prompt tokens
   initialize_from_vocab: True  # Initialize learned soft prompt embeddings from vocab
+  tune_v_head: True # if whole model is frozen (except for softprompt), this can be set
   num_rollouts: 128  # Number of rollouts to collect per epoch
   chunk_size: 128  # Number of rollouts to collect in one loop of orchestrator
   ppo_epochs: 4  # Number of ppo epochs
@@ -40,7 +44,7 @@ method:
   vf_coef: 2.3  # value term weight
   gen_kwargs:
     max_length: 48  # LM max sample gen length, n_soft_tokens will be added
-    min_length: 48  # LM min sample gen length, n_soft_tokens will be added
+    min_length: 0  # LM min sample gen length, n_soft_tokens will be added
     top_k: 0.0  # top k
     top_p: 1.0  # top p
     do_sample: True  # sample

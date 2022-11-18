@@ -1,6 +1,8 @@
 import os
 from abc import abstractmethod
 from typing import Dict, Iterable, Tuple
+import copy
+import time
 
 import torch
 import torch.nn.functional as F
@@ -50,6 +52,7 @@ class SoftEmbedding(nn.Module):
                 wte, n_tokens, random_range, initialize_from_vocab
             )
         )
+        self.init_embedding = copy.deepcopy(self.learned_embedding)
 
     def initialize_embedding(
         self,
@@ -100,6 +103,10 @@ class SoftEmbedding(nn.Module):
 @register_model
 class AcceleratePPOSoftpromptModel(AcceleratePPOModel):
     def __init__(self, config, train_mode=True):
+        # account for extra prefix tokens
+        config.method.gen_kwargs["max_length"] += config.method.n_soft_tokens
+        config.method.gen_kwargs["min_length"] += config.method.n_soft_tokens
+        
         super().__init__(config)
 
         assert (
@@ -108,16 +115,19 @@ class AcceleratePPOSoftpromptModel(AcceleratePPOModel):
 
         self.soft_dummy_token_id = 50256  # dummy token for padding soft prompts
 
-        # account for extra prefix tokens
-        self.config.method.gen_kwargs["max_length"] += self.n_soft_tokens
-        self.config.method.gen_kwargs["min_length"] += self.n_soft_tokens
-
     def get_arch(self, config: TRLConfig):
         # TODO: set only self.learned_embedding as learnable parameter in case of fully frozen layers model
         model = GPTHydraHeadWithValueModel(
             self.config.model.model_path, self.config.model.num_layers_unfrozen
         )
 
+        # if all layers are frozen, freeze all params. Softprompt will still be tuned
+        if self.config.model.num_layers_unfrozen == 0:
+            model.requires_grad_(False)
+
+            if self.config.tune_v_head:
+                model.v_head.requires_grad_(True) # unfreeze value head
+        
         # here, we setup softprompts by initializing learned softprompt embedding(s)
         # and the model's input embeddings.
         # the model will always concatenate learned softprompt embeddings as prefix to the prompt/query after it's set
@@ -133,12 +143,6 @@ class AcceleratePPOSoftpromptModel(AcceleratePPOModel):
         )
 
         model.gpt.set_input_embeddings(s_wte)
-
-        # if all layers are frozen, freeze other non-learned-embedding params in addition to layer params
-        if self.config.model.num_layers_unfrozen == 0:
-            transformer_layers = model.gpt.transformer
-            transformer_layers.wte.requires_grad_(False)
-            transformer_layers.wpe.requires_grad_(False)
 
         return model
     
@@ -174,4 +178,76 @@ class AcceleratePPOSoftpromptModel(AcceleratePPOModel):
             return self.accelerator.unwrap_model(self.model).generate(
                 input_ids=input_ids, attention_mask=attention_mask, use_cache=False, **kwargs
             ) # disable cache needed for softprompt compatibility
+
+    def evaluate(self):
+        """Samples model on `eval_prompts`, logs stats with `reward_fn` or `metric_fn` if provided"""
+        stats = {}
+        all_samples = []
+        generate_time = time()
+        for prompts in self.eval_dataloader:
+            if isinstance(prompts, torch.Tensor):
+                samples = self.generate(prompts)
+            else:
+                samples = self.generate(**prompts)
+
+            if isinstance(samples, tuple):
+                samples, *_ = samples
+
+            pad_token = self.tokenizer.eos_token_id if self.tokenizer else 0
+            all_samples.append(
+                F.pad(
+                    samples,
+                    (0, self.max_length - samples.shape[1]),
+                    value=pad_token,
+                )
+            )
+        stats["generate_time"] = time() - generate_time
+
+        samples = self.accelerator.gather(torch.vstack(all_samples))
+
+        if self.accelerator.is_main_process:
+            if self.tokenizer:
+                samples = self.tokenizer.batch_decode(samples, skip_special_tokens=True)
+
+            if isinstance(samples[0], str):
+                columns_data = [samples]
+            else:
+                columns_data = [samples.tolist()]
+            columns = ["samples"]
+
+            # in online setting, compute the reward for validation
+            if self.reward_fn:
+                rewards = torch.as_tensor(self.reward_fn(samples), dtype=torch.float)
+                mean_reward = rewards.mean()
+                columns.append("reward")
+                columns_data.append(rewards)
+                stats["mean_reward"] = mean_reward
+                print(f"{mean_reward=}")
+                # measure softprompt drift
+                softprompt = self.model.gpt.get_input_embeddings()
+                stats["softprompt_drift_dist"] = (softprompt.init_embedding - softprompt.learned_embedding).pow(2).sum(1).sqrt().mean()
+
+            # additionally log any other metrics
+            if self.metric_fn:
+                metric_time = time()
+                metrics = self.metric_fn(samples)
+                stats["metric_time"] = time() - metric_time
+
+                mean_metrics = {
+                    f"metrics/{k}": torch.as_tensor(xs).mean(-1)
+                    for k, xs in metrics.items()
+                }
+
+                stats.update(mean_metrics)
+
+                for metric, values in metrics.items():
+                    columns.append(metric)
+                    columns_data.append(values)
+
+            rows = list(zip(*columns_data))
+            stats["samples"] = wandb.Table(columns=columns, rows=rows)
+
+            print(rows[0])
+
+        return stats
 
