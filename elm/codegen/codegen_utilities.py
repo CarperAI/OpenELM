@@ -121,7 +121,7 @@ def sample(cfg, model, tokenizer, batch, add_def=False):
     device = torch.device("cuda" if cfg.cuda else "cpu")
 
     input_ids_len = batch["input_ids"].shape[1]
-    assert input_ids_len < cfg.max_length
+    assert input_ids_len < cfg.gen_max_len
     with torch.no_grad():
         batch = batch.to(device)
         if cfg.gpus > 1:
@@ -130,7 +130,7 @@ def sample(cfg, model, tokenizer, batch, add_def=False):
                 do_sample=True,
                 num_return_sequences=cfg.batch_size,
                 temperature=cfg.temp,
-                max_length=input_ids_len + cfg.max_length,
+                max_length=input_ids_len + cfg.gen_max_len,
                 top_p=cfg.top_p,
                 pad_token_id=cfg.pad_token,
                 use_cache=True,
@@ -141,7 +141,7 @@ def sample(cfg, model, tokenizer, batch, add_def=False):
                 do_sample=True,
                 num_return_sequences=cfg.batch_size,
                 temperature=cfg.temp,
-                max_length=input_ids_len + cfg.max_length,
+                max_length=input_ids_len + cfg.gen_max_len,
                 top_p=cfg.top_p,
                 pad_token_id=cfg.pad_token,
                 use_cache=True,

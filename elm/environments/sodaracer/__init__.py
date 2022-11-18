@@ -12,7 +12,7 @@ from elm.environments.sodaracer.simulator import IESoRWorld, SodaraceSimulator
 from elm.environments.sodaracer.walker import Walker
 
 SQUARE_SEED = {
-    "program_str": """from elm.environments.sodaracer.walker import walker_creator
+    "program_str": """from elm.environments.sodaracer.walker.walk_creator import walker_creator
 
 
 def make_square(wc, x0, y0, x1, y1):
@@ -40,11 +40,12 @@ def make_walker():
     wc.add_muscle(sides[3], center)
 
     # the other prongs from the center of the square are active
-    wc.add_muscle(sides[0], center, False, 5.0, 0.0)
-    wc.add_muscle(sides[1], center, False, 10.0, 0.0)
-    wc.add_muscle(sides[2], center, False, 2.0, 0.0)
+    wc.add_muscle(sides[0], center, 5.0, 0.0)
+    wc.add_muscle(sides[1], center, 10.0, 0.0)
+    wc.add_muscle(sides[2], center, 2.0, 0.0)
 
     return wc.get_walker()
+
 """,
     "result_dict": {
         "joints": [(0, 0), (0, 10), (10, 10), (10, 0), (5, 5)],

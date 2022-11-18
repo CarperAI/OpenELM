@@ -351,7 +351,7 @@ class Sodaracer(Genotype):
         return self.simulator.evaluate(timesteps)
 
     def __str__(self) -> str:
-        return self.program_str
+        return self.program_str[:10]
 
 
 class Sodarace(BaseEnvironment[Sodaracer]):
@@ -360,9 +360,9 @@ class Sodarace(BaseEnvironment[Sodaracer]):
         seed: dict,
         diff_model,
         eval_steps: int,
-        max_height: int = 100,
-        max_width: int = 100,
-        max_mass: int = 100,
+        max_height: int = 1000,
+        max_width: int = 1000,
+        max_mass: int = 2000,
         ndim: int = 3,
     ) -> None:
         self.seed = Sodaracer(**seed)
@@ -392,7 +392,6 @@ class Sodarace(BaseEnvironment[Sodaracer]):
 
     def to_behavior_space(self, x: Sodaracer) -> Phenotype:
         # Map from floats of h,w,m to behavior space grid cells.
-        # TODO: fix
         return np.array(
             [x.morphology["height"], x.morphology["width"], x.morphology["mass"]]
         ).astype(int)

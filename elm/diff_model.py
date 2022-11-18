@@ -42,7 +42,7 @@ def unsafe_execute(code_str: str, timeout: int = 5):
 
         # Disable functionalities that can make destructive changes to the test.
         # TODO: fix interaction between reliability guard and create_tempdir
-        # reliability_guard()
+        reliability_guard()
         try:
             # TODO: Check https://arxiv.org/pdf/2209.07753.pdf
             with swallow_io():
@@ -77,7 +77,7 @@ class DiffModel:
         self.model, self.tokenizer = model_setup(self.cfg)
 
     def generate_prompt_str(self, seed, tokenizer):
-        if self.cfg.env_name == "Sodarace":
+        if self.cfg.env_name == "sodarace":
             encoding = tokenizer(
                 [seed],
                 truncation=True,
@@ -85,7 +85,7 @@ class DiffModel:
                 max_length=2048,
                 return_tensors="pt",
             )
-        elif self.cfg.env_name == "Imagegen":
+        elif self.cfg.env_name == "imageoptim":
             encoding = tokenizer(
                 [seed],
                 truncation=True,
@@ -96,11 +96,11 @@ class DiffModel:
         return encoding
 
     def generate_program(self, seed_str: str) -> dict:
-        # encoding = self.generate_prompt_str(seed, self.tokenizer)
+        encoding = self.generate_prompt_str(seed_str, self.tokenizer)
         while True:
-            # completions = sample(self.cfg, self.model, self.tokenizer, encoding)
+            completion = sample(self.cfg, self.model, self.tokenizer, encoding)
             # truncation = truncate(completions[0])
-            execution_result = unsafe_execute(seed_str, timeout=self.cfg.timeout)
+            execution_result = unsafe_execute(completion, timeout=self.cfg.timeout)
             if isinstance(execution_result, Walker):
                 if execution_result.validate():
                     sodaracer_dict: dict = execution_result.to_dict()

@@ -13,10 +13,10 @@ For more details, see our full research proposal at https://carperai.notion.site
 
 Weekly meetings are in the EleutherAI discord at 20:00 UTC on Fridays.
 
-- [ ] Sodarace environment implemented
-- [ ] Stage 1: Diff Models & MAP-Elites
-  - [ ] Prompt Engineering on CodeGen
-  - [ ] Train diff model
-  - [ ] MAP-Elites implemented
+- [x] Sodarace environment implemented
+- [x] Stage 1: Diff Models & MAP-Elites
+  - [x] Prompt Engineering on CodeGen
+  - [x] Train diff model
+  - [x] MAP-Elites implemented
 - [ ] Stage 2: Train LLM on generated data
 - [ ] Stage 3: Conditional generation with PPO
