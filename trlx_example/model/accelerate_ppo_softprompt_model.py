@@ -2,7 +2,7 @@ import os
 from abc import abstractmethod
 from typing import Dict, Iterable, Tuple
 import copy
-import time
+from time import time
 
 import torch
 import torch.nn.functional as F
