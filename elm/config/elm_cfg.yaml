@@ -16,7 +16,7 @@ behavior_n_bins: 12
 evo_history_length: 10
 evaluation_steps: 1000
 pad_token: 50256
-env_name: "Sodarace"
+env_name: "sodarace"
 run_name: ???  # Mandatory string argument that describes the run.
 
 ###################################################################################################

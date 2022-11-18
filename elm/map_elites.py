@@ -1,3 +1,4 @@
+from collections import defaultdict
 from typing import Optional
 
 import numpy as np
@@ -58,7 +59,7 @@ class MAPElites:
     def __init__(
         self, env, n_bins: int, history_length: int, save_history: bool = False
     ):
-        self.env = env
+        self.env: BaseEnvironment = env
         self.n_bins = n_bins
         self.history_length = history_length
         self.save_history = save_history
@@ -103,12 +104,7 @@ class MAPElites:
         max_fitness = -np.inf
         max_genome = None
         if self.save_history:
-            self.history: Map = Map(
-                dims=self.fitnesses.dims,
-                fill_value=0.0,
-                dtype=object,
-                history_length=totalsteps,
-            )
+            self.history: dict = defaultdict(list)
 
         config = {"batch_size": batch_size}
 
@@ -133,7 +129,7 @@ class MAPElites:
                     continue
 
                 if self.save_history:
-                    self.history[map_ix] = individual
+                    self.history[map_ix].append(individual)
                 self.nonzero[map_ix] = True
 
                 f = self.env.fitness(individual)
@@ -180,7 +176,7 @@ if __name__ == "__main__":
 
     env: BaseEnvironment = MatchString(target="MAPElites")
     elites = MAPElites(env, n_bins=3, history_length=10)
-    print("Best string match:", elites.search(initsteps=10_000, totalsteps=50_000))
+    print("Best string match:", elites.search(initsteps=10_000, totalsteps=100_000))
     elites.plot()
 
     env = FunctionOptim(ndim=2)
