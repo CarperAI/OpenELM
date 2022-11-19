@@ -142,9 +142,7 @@ class MAPElites:
                     max_fitness = f
                     max_genome = individual
 
-                    tbar.set_description(
-                        f"{max_fitness=:.4f}"
-                    )  # of "{str(max_genome)}"')
+                    tbar.set_description(f"{max_fitness=:.4f}")
                 # If best fitness is within atol of the maximum possible fitness, stop.
                 if np.isclose(max_fitness, self.env.max_fitness, atol=atol):
                     break

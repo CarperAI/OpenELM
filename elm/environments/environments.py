@@ -225,6 +225,7 @@ class ImageOptim(BaseEnvironment[ImageGeneration]):
     def to_behavior_space(self, x: ImageGeneration) -> Phenotype:
         if self.behavior_mode == "3-channel":
             return x._three_channel_average()
+        return None
 
     def _generate_code(self, seed: str, num=1) -> list[str]:
         """
