@@ -1,0 +1,12 @@
+hydra-core
+wandb
+tree-sitter
+pygraphviz
+graphviz
+numpy
+ipython
+torch
+transformers
+tokenizers
+box2d
+Flask

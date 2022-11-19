@@ -8,6 +8,9 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools]
 packages = ["elm"]
 
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}
+
 [tool.setuptools_scm]
 
 [tool.pydocstyle]
@@ -20,7 +23,7 @@ description = "Evolution Through Large Models"
 readme = "README.md"
 requires-python = ">=3.9"
 license = {text = "MIT"}
-dynamic = ["version"]
+dynamic = ["version", "dependencies"]
 classifiers=[
     # Trove classifiers
     # Full list: https://pypi.python.org/pypi?%3Aaction=list_classifiers
@@ -39,20 +42,6 @@ classifiers=[
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Typing :: Typed",
     "Operating System :: Unix",
-]
-dependencies = [
-    "hydra-core",
-    "wandb",
-    "tree-sitter",
-    "pygraphviz",
-    "graphviz",
-    "numpy",
-    "ipython",
-    "torch",
-    "transformers",
-    "tokenizers",
-    "box2d",
-    "Flask",
 ]
 
 [project.optional-dependencies]
