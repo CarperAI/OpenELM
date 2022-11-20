@@ -4,7 +4,8 @@ from transformers import AutoTokenizer
 
 import trlx
 from trlx.data.configs import TRLConfig
-from trlx.model.accelerate_ppo_softprompt_model import AcceleratePPOSoftpromptModel
+from model.accelerate_ppo_softprompt_model import AcceleratePPOSoftpromptModel
+from orchestrator.ppo_softprompt_orchestrator import PPOSoftpromptOrchestrator
 from trlx.data.method_configs import register_method, PPOConfig
 from dataclasses import dataclass
 

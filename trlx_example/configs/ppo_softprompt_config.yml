@@ -7,7 +7,7 @@ model:
 train:
   # project_name: "trlx_elm"
   # run_name: "short_quotes"
-  seq_length: 48  # Size of LM context
+  seq_length: 128  # Size of LM context - should be longer than max_length + n_soft_tokens
   epochs: 5000  # Train for max(epochs, total_steps)
   total_steps: 30000  # Train for max(epochs, total_steps)
   batch_size: 128  # batch size
@@ -20,11 +20,11 @@ train:
   opt_betas: [0.9, 0.95] # adam betas
 
   checkpoint_interval: 10000  # checkpoint interval
-  checkpoint_dir: "ckpts/frozen"
+  checkpoint_dir: "ckpts"
   eval_interval: 16  # eval interval
 
   pipeline: "PPOPipeline"  # prompt pipeline to load
-  orchestrator: "PPOOrchestrator"  # orchestrator to load
+  orchestrator: "PPOSoftpromptOrchestrator"  # orchestrator to load
 
 method:
   name : 'pposoftpromptconfig'  # Name of RL method config

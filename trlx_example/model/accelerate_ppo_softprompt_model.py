@@ -125,7 +125,7 @@ class AcceleratePPOSoftpromptModel(AcceleratePPOModel):
         if self.config.model.num_layers_unfrozen == 0:
             model.requires_grad_(False)
 
-            if self.config.tune_v_head:
+            if self.config.method.tune_v_head:
                 model.v_head.requires_grad_(True) # unfreeze value head
         
         # here, we setup softprompts by initializing learned softprompt embedding(s)
