@@ -60,4 +60,5 @@ def make_walker():
             [2, 4, {"type": "muscle", "amplitude": 2.0, "phase": 0.0}],
         ],
     },
+    "error_code": 0
 }
