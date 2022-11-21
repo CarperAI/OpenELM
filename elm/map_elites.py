@@ -198,6 +198,6 @@ if __name__ == "__main__":
         for x in range(32):
             if (y - 16) ** 2 + (x - 16) ** 2 <= 100:  # a radius-10 circle
                 target[y, x] = np.array([1, 1, 0])
-    env = ImageOptim(seed, "elm_image_cfg.yaml", target_img=target, func_name="draw")
+    env = ImageOptim(seed, "elm_cfg.yaml", target_img=target, func_name="draw")
     elites = MAPElites(env, n_bins=2, history_length=10)
     print("Best image", elites.search(initsteps=5, totalsteps=10))

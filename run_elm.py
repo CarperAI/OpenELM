@@ -13,7 +13,7 @@ def main(cfg):
     print("----------------- Config ---------------")
     print(OmegaConf.to_yaml(cfg))
     print("-----------------  End -----------------")
-    elm = ELM(cfg, )
+    elm = ELM(cfg)
     print("Best Sodaracer: ", elm.run())
 
 
