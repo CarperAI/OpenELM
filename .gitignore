@@ -131,6 +131,7 @@ dmypy.json
 # Project dirs
 checkpoints/
 logs/
+archive/
 
 # generated dot files and tree graphs
 .gv
