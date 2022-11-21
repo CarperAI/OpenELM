@@ -3,6 +3,7 @@ from omegaconf import OmegaConf
 
 from elm import ELM
 from elm.constants import SRC_PATH
+from elm.diff_model import PromptMutationForSodarace
 
 
 # Load hydra config from yaml files and command line arguments.
@@ -13,7 +14,7 @@ def main(cfg):
     print("----------------- Config ---------------")
     print(OmegaConf.to_yaml(cfg))
     print("-----------------  End -----------------")
-    elm = ELM(cfg)
+    elm = ELM(cfg, PromptMutationForSodarace)
     print("Best Sodaracer: ", elm.run())
 
 

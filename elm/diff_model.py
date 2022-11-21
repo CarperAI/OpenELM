@@ -163,8 +163,9 @@ class PromptMutationForSodarace(PromptMutationModel):
             error_code = "0"
         elif resp.status_code == 500:  # Bad request
             try:
-                return_dict = json.loads(resp.text)
-                error_code = return_dict["unsafe_execute_error_code"]
+                msg = json.loads(resp.text)
+                return_dict = {"program_str": code, "result_dict": msg["message"]}
+                error_code = msg["unsafe_execute_error_code"]
             except Exception as e:
                 return_dict = {"program_str": code, "result_dict": str(e)}
                 error_code = 6
