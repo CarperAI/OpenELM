@@ -4,16 +4,13 @@ from elm.environments.sodaracer import SQUARE_SEED
 from elm.map_elites import MAPElites
 
 ENVS_DICT = {"sodarace": Sodarace, "imageoptim": ImageOptim}
-
+SEED_DICT = {"sodarace": SQUARE_SEED, "imageoptim": IMAGE_SEED}
 
 class ELM:
     def __init__(self, cfg) -> None:
         self.cfg = cfg
         self.diff_model = DiffModel(self.cfg)
-        if self.cfg.env_name == "sodarace":
-            self.seed = SQUARE_SEED
-        elif self.cfg.env_name == "imageoptim":
-            self.seed = IMAGE_SEED
+        self.seed = SEED_DICT[self.cfg.env_name]
         self.environment = ENVS_DICT[self.cfg.env_name](
             seed=self.seed,
             diff_model=self.diff_model,

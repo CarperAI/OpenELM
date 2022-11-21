@@ -52,7 +52,7 @@ class BaseEnvironment(ABC, Generic[GenoType]):
         raise NotImplementedError
 
     @abstractmethod
-    def to_behavior_space(self, x: GenoType) -> Phenotype:
+    def to_behavior_space(self, x: GenoType) -> Optional[Phenotype]:
         raise NotImplementedError
 
     @property
@@ -222,7 +222,7 @@ class ImageOptim(BaseEnvironment[ImageGeneration]):
             return -np.inf
         return -np.abs(x.result - self.target_img).sum()
 
-    def to_behavior_space(self, x: ImageGeneration) -> Phenotype:
+    def to_behavior_space(self, x: ImageGeneration) -> Optional[Phenotype]:
         if self.behavior_mode == "3-channel":
             return x._three_channel_average()
         return None
@@ -342,11 +342,24 @@ class MatchString(BaseEnvironment[StringArrayGenotype]):
 
 
 class Sodaracer(Genotype):
-    def __init__(self, program_str: str, result_dict: dict):
+    def __init__(self, program_str: str, result_dict: dict, valid: bool):
+        """
+        The Sodaracer genotype.
+        Args:
+            program_str: the string for the original code.
+            result_dict: the dict of sodaracer.
+            valid: whether the code executes in the sandbox.
+        """
         self.program_str = program_str
         self.result_dict = result_dict
-        self.simulator = SodaraceSimulator(body=self.result_dict)
-        self.morphology = self.simulator.morphology
+        self.valid = valid
+        try:
+            self.simulator = SodaraceSimulator(body=self.result_dict)
+            self.morphology = self.simulator.morphology
+            # TODO: maybe try the evaluation function of walkers?
+            self.evaluate(0)
+        except Exception as e:
+            self.valid = False
 
     def evaluate(self, timesteps: int) -> float:
         return self.simulator.evaluate(timesteps)
@@ -381,7 +394,10 @@ class Sodarace(BaseEnvironment[Sodaracer]):
 
     def fitness(self, x: Sodaracer) -> float:
         # Call Sodaracers environment to get the fitness.
-        return x.evaluate(self.eval_steps)
+        if x.valid:
+            return x.evaluate(self.eval_steps)
+        else:
+            return -np.inf
 
     def random(self, **kwarg) -> list[Sodaracer]:
         new_sodaracer = self.generate_program(self.seed.program_str)
@@ -391,8 +407,11 @@ class Sodarace(BaseEnvironment[Sodaracer]):
         new_sodaracer = self.generate_program(x.program_str)
         return [new_sodaracer]
 
-    def to_behavior_space(self, x: Sodaracer) -> Phenotype:
+    def to_behavior_space(self, x: Sodaracer) -> Optional[Phenotype]:
         # Map from floats of h,w,m to behavior space grid cells.
-        return np.array(
-            [x.morphology["height"], x.morphology["width"], x.morphology["mass"]]
-        ).astype(int)
+        if x.valid:
+            return np.array(
+                [x.morphology["height"], x.morphology["width"], x.morphology["mass"]]
+            ).astype(int)
+        else:
+            return None
