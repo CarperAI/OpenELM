@@ -17,6 +17,11 @@ dependencies = {file = ["requirements.txt"]}
 convention = "google"
 add-ignore = "D10"
 
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = "-rA" # --cov=elm"  # Uncomment this for coverage by default
+testpaths = ["tests"]
+
 [project]
 name = "ELM"
 description = "Evolution Through Large Models"
@@ -55,3 +60,4 @@ dev = [
     "pytest",
     "pytest-cov",
 ]
+notebook = ["ipython"]
