@@ -26,6 +26,7 @@ class Map:
             # Set starting top of buffer to 0 (% operator)
             self.top = np.full(dims, self.history_length - 1, dtype=int)
             self.array = np.full((history_length,) + dims, fill_value, dtype=dtype)
+        self.empty = True
 
     def __getitem__(self, map_ix):
         """If history length > 1, the history dim is an n-dim circular buffer."""
@@ -35,6 +36,7 @@ class Map:
             return self.array[(self.top[map_ix], *map_ix)]
 
     def __setitem__(self, map_ix, value):
+        self.empty = False
         if self.history_length == 1:
             self.array[map_ix] = value
         else:
@@ -63,6 +65,7 @@ class MAPElites:
         self.n_bins = n_bins
         self.history_length = history_length
         self.save_history = save_history
+        self.history = None  # self.history will be set/reset each time when calling `.search(...)`
 
         # discretization of space
         self.bins = np.linspace(*env.behavior_space, n_bins + 1)[1:-1].T
@@ -109,18 +112,19 @@ class MAPElites:
         config = {"batch_size": batch_size}
 
         for n_steps in tbar:
-            if n_steps < initsteps:
+            if n_steps < initsteps or self.genomes.empty:
                 # Initialise by generating initsteps random solutions.
-                x = self.env.random(**config)
+                # If map is still empty: force to do generation instead of mutation.
+                new_individuals = self.env.random(**config)
             else:
-                # Randomly select an elite from the map
+                # Randomly select an elite from the map.
                 map_ix = self.random_selection()
-                x = self.genomes[map_ix]
-                # Mutate the elite
-                x = self.env.mutate(x, **config)
+                selected_elite = self.genomes[map_ix]
+                # Mutate the elite.
+                new_individuals = self.env.mutate(selected_elite, **config)
 
-            # Now that `x` is a list, we put them into the behavior space one-by-one.
-            for individual in x:
+            # `new_individuals` is a list of generation/mutation. We put them into the behavior space one-by-one.
+            for individual in new_individuals:
                 map_ix = self.to_mapindex(self.env.to_behavior_space(individual))
                 # if the return is None, the individual is invalid and is thrown into the recycle bin.
                 if map_ix is None:
@@ -132,14 +136,14 @@ class MAPElites:
                     self.history[map_ix].append(individual)
                 self.nonzero[map_ix] = True
 
-                f = self.env.fitness(individual)
+                fitness = self.env.fitness(individual)
                 # If new fitness greater than old fitness in niche, replace.
-                if f > self.fitnesses[map_ix]:
-                    self.fitnesses[map_ix] = f
+                if fitness > self.fitnesses[map_ix]:
+                    self.fitnesses[map_ix] = fitness
                     self.genomes[map_ix] = individual
                 # If new fitness is the highest so far, update the tracker.
-                if f > max_fitness:
-                    max_fitness = f
+                if fitness > max_fitness:
+                    max_fitness = fitness
                     max_genome = individual
 
                     tbar.set_description(f"{max_fitness=:.4f}")
