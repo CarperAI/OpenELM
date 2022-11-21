@@ -239,7 +239,7 @@ class ImageOptim(BaseEnvironment[ImageGeneration]):
             [seed],
             truncation=True,
             padding=True,
-            max_length=self.config.max_length,
+            max_length=self.config.gen_max_len,
             return_tensors="pt",
         )
         self.config.batch_size = num
