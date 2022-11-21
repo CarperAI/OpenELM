@@ -21,7 +21,7 @@ PY_LANGUAGE = Language(os.path.dirname(__file__) + "/src/python_lib.so", "python
 def draw_func_tree(func, save_path="tree.png"):
     """
     Draws the naiive syntax tree parsed by pytree-sitter and save to a png file.
-    Parameters:
+    Args:
         func: The function to be parsed. Can be either an actual function or a string.
         save_path: The path to the saved png image.
     Returns:
@@ -53,7 +53,7 @@ def draw_func_tree(func, save_path="tree.png"):
 def construct_graph(graph: pgv.AGraph, node_id: int, cursor: TreeCursor):
     """
     Recursively construct the pygraphviz graph according to the TreeCursor.
-    Parameters:
+    Args:
         graph: the pygraphviz AGraph object.
         node_id: current node id.
         cursor: the pytree-sitter TreeCursor object.

@@ -154,7 +154,7 @@ class ImageOptim(BaseEnvironment[ImageGeneration]):
         behavior_mode: str = "3-channel",
     ):
         """
-        Parameters:
+        Args:
             seed: the seed string.
             config: the config file or dict.
             target_img: the target image.
@@ -208,7 +208,7 @@ class ImageOptim(BaseEnvironment[ImageGeneration]):
     def mutate(self, x: ImageGeneration, **kwargs) -> list[ImageGeneration]:
         """
         Randomly mutate a batch of codes from a given individual and evaluate their outputs.
-        Parameters:
+        Args:
             x: the individual to be mutated.
         Returns:
             a tuple of the code string and the returning result (None if there is error).
@@ -229,7 +229,7 @@ class ImageOptim(BaseEnvironment[ImageGeneration]):
 
     def _generate_code(self, seed: str, num=1) -> list[str]:
         """
-        Parameters:
+        Args:
             seed: the seed text.
             num: (Optional) batch size.
         Returns:
@@ -258,7 +258,7 @@ class ImageOptim(BaseEnvironment[ImageGeneration]):
     def _evaluate_code(self, code: str) -> Union[np.ndarray, Exception]:
         """
         Call the sandbox server to execute the code, and obtain the result.
-        Parameters:
+        Args:
             code: the full code string.
         Returns:
             a numpy array (if successful) or the exception object.
@@ -277,7 +277,7 @@ class ImageOptim(BaseEnvironment[ImageGeneration]):
 
     def _get_code_result_pair(self, prompt, batch_size=32) -> list[ImageGeneration]:
         """
-        Parameters:
+        Args:
             prompt: the prompt input.
             batch_size: (Optional) the batch size.
         Returns:
@@ -342,23 +342,29 @@ class MatchString(BaseEnvironment[StringArrayGenotype]):
 
 
 class Sodaracer(Genotype):
-    def __init__(self, program_str: str, result_dict: dict, valid: bool):
+    def __init__(self, program_str: str, result_dict: dict, error_code: bool):
         """
         The Sodaracer genotype.
         Args:
             program_str: the string for the original code.
             result_dict: the dict of sodaracer.
-            valid: whether the code executes in the sandbox.
+            error_code: whether the code executes in the sandbox.
         """
         self.program_str = program_str
         self.result_dict = result_dict
-        self.valid = valid
-        try:
-            self.simulator = SodaraceSimulator(body=self.result_dict)
-            self.morphology = self.simulator.morphology
-            # TODO: maybe try the evaluation function of walkers?
-            self.evaluate(0)
-        except Exception as e:
+        self.error_code = error_code
+
+        # Check whether the sodaracer is valid.
+        if self.error_code == 0:
+            try:
+                self.simulator = SodaraceSimulator(body=self.result_dict)
+                self.morphology = self.simulator.morphology
+                # TODO: maybe try the evaluation function of walkers?
+                self.evaluate(0)
+                self.valid = True
+            except Exception as e:
+                self.valid = False
+        else:
             self.valid = False
 
     def evaluate(self, timesteps: int) -> float:

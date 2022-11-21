@@ -6,6 +6,7 @@ from elm.map_elites import MAPElites
 ENVS_DICT = {"sodarace": Sodarace, "imageoptim": ImageOptim}
 SEED_DICT = {"sodarace": SQUARE_SEED, "imageoptim": IMAGE_SEED}
 
+
 class ELM:
     def __init__(self, cfg) -> None:
         self.cfg = cfg

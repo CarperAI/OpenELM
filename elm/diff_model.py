@@ -1,9 +1,11 @@
+import json
 import os
 import re
 import shutil
 from abc import abstractmethod, ABC
 from typing import Dict
 
+import requests
 import torch
 
 from elm.codegen.codegen_utilities import model_setup, sample, set_seed, truncate
@@ -79,13 +81,13 @@ class Model(ABC):
         pass
 
 
-class PromptMutationModel(ABC, Model):
+class PromptMutationModel(Model):
     func_name: str  # the name of the function that we want to execute
     import_line: str  # the import lines we add to the code
     func_preamble: str  # the function definition plus possibly a few initial lines to generate codes
     return_line: str  # the return line we add to the end of the code
 
-    def __init__(self, cfg, sandbox_server='localhost:5000') -> None:
+    def __init__(self, cfg, sandbox_server='http://localhost:5000') -> None:
         self.cfg = cfg
         set_seed(self.cfg.seed)
         self.sandbox_server = sandbox_server
@@ -149,16 +151,28 @@ class PromptMutationForSodarace(PromptMutationModel):
             a numpy array (if successful) or the exception object.
         """
         code = self.generate_prompt_str(code)[0]
-        print(code)
-        try:
-            x = requests.post(
-                f"http://{self.sandbox_server}/gen_racer",
-                json={"code": code, "timeout": 5.0},
-                timeout=5,
-            )
-            result = {**json.loads(x.text), 'valid': True}
-        except Exception as e:
-            result = {'program_str': code, 'result_dict': str(e), 'valid': False}
+
+        resp = requests.post(
+            f"{self.sandbox_server}/gen_racer",
+            json={"code": code, "timeout": 5.0},
+            timeout=5,
+        )
+
+        if resp.status_code == 200:
+            return_dict = json.loads(resp.text)
+            error_code = "0"
+        elif resp.status_code == 500:  # Bad request
+            try:
+                return_dict = json.loads(resp.text)
+                error_code = return_dict["unsafe_execute_error_code"]
+            except Exception as e:
+                return_dict = {"program_str": code, "result_dict": str(e)}
+                error_code = 6
+        else:
+            return_dict = {"program_str": code, "result_dict": resp.text}
+            error_code = 6
+
+        result = {**return_dict, "error_code": error_code}
 
         return result
 
