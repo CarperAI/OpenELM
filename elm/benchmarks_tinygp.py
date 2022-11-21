@@ -144,7 +144,7 @@ class GPTree:
 
     def compute_tree(self, b, arg_names=("b1", "b2", "b3", "b4")):
         """
-        Parameters:
+        Args:
             b: a list/tuple of inputs (b1, b2, b3, b4)
             arg_names: argument names.
         Returns:
@@ -237,7 +237,7 @@ def swap_node(
 ) -> bool:
     """
     Swap the name of a variable into another one (only apply to the first encounter of a DFS).
-    Parameters:
+    Args:
         tree: the GPTree node.
         tree_data: the variable name or the function.
         target_data: the target variable name or the function.
@@ -259,7 +259,7 @@ def swap_node(
 def eval_tree(tree: GPTree, dataset: Iterable) -> list:
     """
     Test the correctness of a GPTree against a dataset.
-    Parameters:
+    Args:
         tree: the tree to test against.
         dataset: (inputs, ground_truth)
     Returns
@@ -291,7 +291,7 @@ def mutate_compare(
 ) -> Tuple[float, float]:
     """
     Mutate (a copy) of the tree num_mutation times, and return the percentage of successful mutations.
-    Parameters:
+    Args:
         tree: the tree to mutate (will make a copy before mutation).
         num_mutation: number of times to mutate.
         dataset: the dataset to test against. Format: (input, ground_truth) where input and ground_truth are lists
