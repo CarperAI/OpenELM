@@ -7,7 +7,6 @@ translated to python
 import json
 import math
 import os
-from typing import List
 
 from Box2D import Box2D as b2
 from Box2D.examples.framework import Framework, main
@@ -1228,7 +1227,7 @@ def position_to_json_value(vec: b2.b2Vec2) -> dict:
     return {"x": vec.x, "y": vec.y}
 
 
-def list_of_points(points: List[b2.b2Vec2], length: int = 0) -> list:
+def list_of_points(points: list[b2.b2Vec2], length: int = 0) -> list:
     # //converts an array of points into a json array
     # Json::Value listOfPoints(b2Vec2* points, int length)
     # {

@@ -10,7 +10,7 @@ import sys
 from copy import deepcopy
 from random import randint, random
 from statistics import mean
-from typing import Callable, Iterable, List, Optional, Tuple, Union
+from typing import Callable, Iterable, Optional, Union
 
 from graphviz import Digraph, Source
 from IPython.display import Image, display
@@ -150,7 +150,7 @@ class GPTree:
         Returns:
             the evaluation at this node.
         """
-        if not isinstance(b, (List, Tuple)):
+        if not isinstance(b, (list, tuple)):
             raise TypeError(f"Input b must be a list or tuple. Got {type(b)} instead.")
 
         arg_dict = {name: value for name, value in zip(arg_names, b)}
@@ -287,8 +287,8 @@ def list_equal(l1, l2):
 
 
 def mutate_compare(
-    tree: GPTree, num_mutation: int, dataset: Tuple
-) -> Tuple[float, float]:
+    tree: GPTree, num_mutation: int, dataset: tuple
+) -> tuple[float, float]:
     """
     Mutate (a copy) of the tree num_mutation times, and return the percentage of successful mutations.
     Args:

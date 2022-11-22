@@ -2,7 +2,6 @@
 import os
 import re
 import shutil
-from typing import Dict
 
 from .codex_execute import (  # from codex_execute import (TimeoutException, create_tempdir, reliability_guard,
     TimeoutException,
@@ -58,7 +57,7 @@ def sandbox_unsafe_execute(code_str: str, func_name: str, timeout: int = 5):
     if len(code_str) == 0 or "def " not in code_str:
         print("No code found or no function found.")
         return 6  # No code found or no function found.
-    code_dct: Dict = {}
+    code_dct: dict = {}
     func_match = re.search(r"def (\w+)\s*\((.*?)\):", code_str)
     if not func_match:
         print("No proper function found in code.")

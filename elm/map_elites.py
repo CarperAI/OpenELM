@@ -6,7 +6,7 @@ from omegaconf import OmegaConf
 from tqdm import trange
 
 from elm.diff_model import PromptMutationForImgTask
-from elm.environments.environments import BaseEnvironment
+from elm.environments import image_init_args
 
 Phenotype = Optional[np.ndarray]
 Mapindex = Optional[tuple]
@@ -104,26 +104,24 @@ class MAPElites:
         ix = np.random.choice(np.flatnonzero(self.nonzero.array))
         return np.unravel_index(ix, self.nonzero.dims)
 
-    def search(self, initsteps: int, totalsteps: int, atol=1, batch_size=32):
+    def search(self, initsteps: int, totalsteps: int, atol=1):
         tbar = trange(int(totalsteps))
         max_fitness = -np.inf
         max_genome = None
         if self.save_history:
             self.history: dict = defaultdict(list)
 
-        config = {"batch_size": batch_size}
-
         for n_steps in tbar:
             if n_steps < initsteps or self.genomes.empty:
                 # Initialise by generating initsteps random solutions.
                 # If map is still empty: force to do generation instead of mutation.
-                new_individuals = self.env.random(**config)
+                new_individuals = self.env.random()
             else:
                 # Randomly select an elite from the map.
                 map_ix = self.random_selection()
                 selected_elite = self.genomes[map_ix]
                 # Mutate the elite.
-                new_individuals = self.env.mutate(selected_elite, **config)
+                new_individuals = self.env.mutate(selected_elite)
 
             # `new_individuals` is a list of generation/mutation. We put them into the behavior space one-by-one.
             for individual in new_individuals:
@@ -173,6 +171,8 @@ class MAPElites:
 
 
 if __name__ == "__main__":
+    # TODO: refactor them into unit tests?
+
     from elm.environments.environments import (
         BaseEnvironment,
         FunctionOptim,
@@ -192,20 +192,6 @@ if __name__ == "__main__":
     )
     elites.plot()
 
-    seed = """def draw_blue_rectangle() -> np.ndarray:
-\tpic = np.zeros((32, 32, 3))
-\tfor x in range(2, 30):
-\t\tfor y in range(2, 30):
-\t\t\tpic[x, y] = np.array([0, 0, 255])
-\treturn pic
-"""
-    target = np.zeros((32, 32, 3))
-    for y in range(32):
-        for x in range(32):
-            if (y - 16) ** 2 + (x - 16) ** 2 <= 100:  # a radius-10 circle
-                target[y, x] = np.array([1, 1, 0])
-    cfg = OmegaConf.load("elm/config/elm_image_cfg.yaml")
-    model = PromptMutationForImgTask(cfg)
-    env = ImageOptim(seed, cfg, diff_model=model, target_img=target)
+    env = ImageOptim(**image_init_args)
     elites = MAPElites(env, n_bins=2, history_length=10)
     print("Best image", elites.search(initsteps=5, totalsteps=10))

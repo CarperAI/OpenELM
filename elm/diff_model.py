@@ -3,11 +3,10 @@ import os
 import re
 import shutil
 from abc import abstractmethod, ABC
-from typing import Dict
 
 import requests
 import torch
-from omegaconf import OmegaConf
+from omegaconf import OmegaConf, DictConfig
 import numpy as np
 
 from elm.codegen.codegen_utilities import model_setup, sample, set_seed, truncate
@@ -18,7 +17,6 @@ from elm.codegen.codex_execute import (
     swallow_io,
     time_limit,
 )
-from elm.environments.sodaracer import Walker
 
 
 def reset_os_funcs(rmtree, rmdir, chdir):
@@ -30,7 +28,7 @@ def reset_os_funcs(rmtree, rmdir, chdir):
 def unsafe_execute(code_str: str, timeout: int = 5):
     if len(code_str) == 0 or "def " not in code_str:
         return 6  # No code found or no function found.
-    code_dct: Dict = {}
+    code_dct: dict = {}
     func_match = re.search(r"def (\w+)\s*\((.*?)\):", code_str)
     if func_match:
         func_name = func_match.group(1)
@@ -90,7 +88,13 @@ class PromptMutationModel(Model):
     return_line: str  # the return line we add to the end of the code
 
     def __init__(self, cfg, sandbox_server='http://localhost:5000') -> None:
-        self.cfg = cfg
+        if isinstance(cfg, str):
+            self.cfg = OmegaConf.load(cfg)
+        elif isinstance(cfg, (dict, DictConfig)):
+            self.cfg = DictConfig(cfg)
+        else:
+            raise ValueError
+
         set_seed(self.cfg.seed)
         # Use RNG to rotate random seeds during inference.
         self.rng = np.random.default_rng(seed=self.cfg.seed)
@@ -213,11 +217,10 @@ class PromptMutationForImgTask(PromptMutationModel):
         response_dict['result_obj'] = np.array(response_dict['result_obj'])
 
 
+# TODO: complete diff model (when it's available)
 class DiffModel(Model):
     def __init__(self, cfg) -> None:
-        self.cfg = cfg
-        set_seed(self.cfg.seed)
-        self.model, self.tokenizer = model_setup(self.cfg)
+        raise NotImplementedError()
 
     def generate_prompt_str(self, seed, tokenizer):
         if self.cfg.env_name == "sodarace":

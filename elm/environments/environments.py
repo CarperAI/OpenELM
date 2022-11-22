@@ -1,17 +1,13 @@
-import functools
-import json
 import math
 import string
 from abc import ABC, abstractmethod
-from typing import Generic, Optional, TypeVar, Union, List
+from typing import Generic, Optional, TypeVar, Union
 
 import numpy as np
-import requests
-import torch
 from omegaconf import DictConfig, OmegaConf
 
-from elm.codegen.codegen_utilities import model_setup, sample, truncate
 from elm.environments.sodaracer import SodaraceSimulator
+from elm.diff_model import PromptMutationForImgTask, PromptMutationForSodarace
 
 Phenotype = Optional[np.ndarray]
 
@@ -68,6 +64,15 @@ class BaseEnvironment(ABC, Generic[GenoType]):
     def behavior_ndim(self) -> int:
         return self.behavior_space.shape[1]
 
+    @staticmethod
+    def _load_config(config):
+        if isinstance(config, str):
+            return OmegaConf.load(config)
+        elif isinstance(config, (dict, DictConfig)):
+            return DictConfig(config)
+        else:
+            raise ValueError
+
 
 class ArrayGenotype(Genotype, np.ndarray):
     def __new__(cls, input_array):
@@ -101,6 +106,9 @@ class FunctionOptim(BaseEnvironment[ArrayGenotype]):
 
 
 class ImageGeneration(Genotype):
+    """
+    Genotype for generated images.
+    """
     def __init__(self, program_str: str, result_obj: dict, error_code: bool):
         self.program_str = program_str
         self.result_obj = result_obj
@@ -142,43 +150,40 @@ class ImageOptim(BaseEnvironment[ImageGeneration]):
         values of RGB channels in each block will be put together as a point in the behavior space (average-pooling).
     Other modes are to be added...
     """
-
+    default_diff_model_cls = PromptMutationForImgTask
     # Record different definitions of behavior spaces in a dict. Feel free to add.
     behavior_mode_spec = {"3-channel": {"genotype_ndim": 3}}
 
     def __init__(
         self,
-        seed: Union[dict, str],
+        seed: dict,
         config: Union[str, dict, DictConfig],
         target_img: np.ndarray,
-        diff_model: "Model",
+        diff_model,
         behavior_mode: str = "3-channel",
     ):
         """
         Args:
-            seed: the seed dict or seed string.
+            seed: the seed dict.
             config: the config file or dict.
             target_img: the target image.
             diff_model: the diff model (or alternatives).
             behavior_mode: (Optional) a string indicating the way an individual is mapped into behavior space.
         """
         if isinstance(seed, dict):
-            self.seed = seed
-        elif isinstance(seed, str):
-            self.seed = {"program_str": seed, "result_obj": None, "error_code": 0}
+            self.seed = ImageGeneration(**seed)
         else:
             raise TypeError
 
-        if isinstance(config, str):
-            self.config = OmegaConf.load(config)
-        elif isinstance(config, (dict, DictConfig)):
-            self.config = DictConfig(config)
-        else:
-            raise ValueError
+        self.config = self._load_config(config)
 
         self.target_img = target_img
         self.shape = target_img.shape
-        self.diff_model = diff_model
+
+        if diff_model is None:
+            self.diff_model = self.default_diff_model_cls(**self.config)
+        else:
+            self.diff_model = diff_model
 
         self.behavior_mode = behavior_mode
         self.genotype_ndim: int = self.behavior_mode_spec[self.behavior_mode][
@@ -186,23 +191,23 @@ class ImageOptim(BaseEnvironment[ImageGeneration]):
         ]
         self.genotype_space = np.repeat([[0, 255]], self.genotype_ndim, axis=0).T
 
-    def generate_program(self, code: str) -> List[ImageGeneration]:
+    def generate_program(self, code: str) -> list[ImageGeneration]:
         """
         Call LM to generate a new program and run it, returning an ImageGeneration object containing the code, the
         resulting image and the error code.
         """
         return [ImageGeneration(**generated) for generated in self.diff_model.generate_program(code)]
 
-    def random(self, **kwargs) -> List[ImageGeneration]:
+    def random(self) -> list[ImageGeneration]:
         """
         Randomly generate a batch of codes and evaluate their outputs.
         Returns:
             a tuple of the code string and the returning result (None if there is error).
         """
-        new_images = self.generate_program(self.seed["program_str"])
+        new_images = self.generate_program(self.seed.program_str)
         return new_images
 
-    def mutate(self, x: ImageGeneration, **kwargs) -> List[ImageGeneration]:
+    def mutate(self, x: ImageGeneration) -> list[ImageGeneration]:
         """
         Randomly mutate a batch of codes from a given individual and evaluate their outputs.
         Args:
@@ -245,10 +250,10 @@ class MatchString(BaseEnvironment[StringArrayGenotype]):
             [[0, len(self.alphabet)]], self.genotype_ndim, axis=0
         ).T
 
-    def random(self, **kwarg) -> List[StringArrayGenotype]:
+    def random(self, **kwarg) -> list[StringArrayGenotype]:
         return [StringArrayGenotype(np.random.uniform(*self.genotype_space))]
 
-    def mutate(self, x: StringArrayGenotype, **kwarg) -> List[StringArrayGenotype]:
+    def mutate(self, x: StringArrayGenotype, **kwarg) -> list[StringArrayGenotype]:
         x = x.copy()
         ix = np.random.randint(self.genotype_ndim)
         x[ix] = x[ix] + np.random.uniform(-5, 5)
@@ -274,12 +279,12 @@ class Sodaracer(Genotype):
         self.result_obj = result_obj
         self.error_code = error_code
 
-        # Check whether the sodaracer is valid.
+        # Check whether the Sodaracer is valid.
         if self.error_code == 0:
             try:
+                # Test the Sodaracer by actually invoking all the necessary simulations/evaluations.
                 self.simulator = SodaraceSimulator(body=self.result_obj)
                 self.morphology = self.simulator.morphology
-                # TODO: maybe try the evaluation function of walkers?
                 self.evaluate(0)
                 self.valid = True
             except Exception as e:
@@ -295,9 +300,12 @@ class Sodaracer(Genotype):
 
 
 class Sodarace(BaseEnvironment[Sodaracer]):
+    default_diff_model_cls = PromptMutationForSodarace
+
     def __init__(
         self,
         seed: dict,
+        config: Union[str, dict, DictConfig],
         diff_model,
         eval_steps: int,
         max_height: int = 1000,
@@ -305,15 +313,24 @@ class Sodarace(BaseEnvironment[Sodaracer]):
         max_mass: int = 2000,
         ndim: int = 3,
     ) -> None:
-        self.seed = Sodaracer(**seed)
-        self.diff_model = diff_model
+        if isinstance(seed, dict):
+            self.seed = Sodaracer(**seed)
+        else:
+            raise TypeError
+        self.config = self._load_config(config)
+
+        if diff_model is None:
+            self.diff_model = self.default_diff_model_cls(**self.config)
+        else:
+            self.diff_model = diff_model
+
         self.eval_steps = eval_steps
         self.genotype_ndim = ndim
         self.genotype_space = np.array(
             [[0, max_height], [0, max_width], [0, max_mass]]
         ).T
 
-    def generate_program(self, code: str) -> List[Sodaracer]:
+    def generate_program(self, code: str) -> list[Sodaracer]:
         # Call LM to generate a new program and run it, returning a dict containing the program string
         # and the dict from running it.
         return [Sodaracer(**generated) for generated in self.diff_model.generate_program(code)]
@@ -325,11 +342,11 @@ class Sodarace(BaseEnvironment[Sodaracer]):
         else:
             return -np.inf
 
-    def random(self, **kwarg) -> List[Sodaracer]:
+    def random(self) -> list[Sodaracer]:
         new_sodaracers = self.generate_program(self.seed.program_str)
         return new_sodaracers
 
-    def mutate(self, x: Sodaracer, **kwarg) -> List[Sodaracer]:
+    def mutate(self, x: Sodaracer) -> list[Sodaracer]:
         new_sodaracers = self.generate_program(x.program_str)
         return new_sodaracers
 

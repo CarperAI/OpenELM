@@ -1,27 +1,34 @@
-from elm.diff_model import DiffModel
-from elm.environments import IMAGE_SEED, ImageOptim, Sodarace
-from elm.environments.sodaracer import SQUARE_SEED
+from elm.environments import ImageOptim, Sodarace, image_init_args, sodarace_init_args
 from elm.map_elites import MAPElites
 
 ENVS_DICT = {"sodarace": Sodarace, "imageoptim": ImageOptim}
-SEED_DICT = {"sodarace": SQUARE_SEED, "imageoptim": IMAGE_SEED}
+ARG_DICT = {"sodarace": sodarace_init_args, "imageoptim": image_init_args}
 
 
 class ELM:
-    def __init__(self, cfg, diff_model_cls=DiffModel) -> None:
+    def __init__(self, cfg, diff_model_cls=None, env_args: dict = None) -> None:
         """
         Args:
             cfg: the config (e.g. OmegaConf who uses dot to access members).
             diff_model_cls: (Optional) The class of diff model. One can apply alternative models here for comparison.
+            env_args: (Optional) The argument dict for Environment.
         """
         self.cfg = cfg
-        self.diff_model = diff_model_cls(self.cfg)
-        self.seed = SEED_DICT[self.cfg.env_name]
-        self.environment = ENVS_DICT[self.cfg.env_name](
-            seed=self.seed,
-            diff_model=self.diff_model,
-            eval_steps=self.cfg.evaluation_steps,
-        )
+
+        # Get the defaults if `env_args` is not specified.
+        if env_args is None:
+            env_args = ARG_DICT[self.cfg.env_name]
+
+        # Override diff model if `diff_model_cls` is specified.
+        if diff_model_cls is not None:
+            self.diff_model = diff_model_cls(self.cfg)
+            env_args = {**env_args, "diff_model": self.diff_model}
+        else:
+            self.diff_model = None
+
+        self.seed = env_args["seed"]
+
+        self.environment = ENVS_DICT[self.cfg.env_name](**env_args)
         self.map_elites = MAPElites(
             self.environment,
             n_bins=self.cfg.behavior_n_bins,
