@@ -165,7 +165,7 @@ class ImageOptim(BaseEnvironment[ImageGeneration]):
         """
         if isinstance(seed, dict):
             self.seed = seed
-        elif isinstance(seed, str)
+        elif isinstance(seed, str):
             self.seed = {"program_str": seed, "return_obj": None, "error_code": 0}
         else:
             raise TypeError
