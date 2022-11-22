@@ -393,10 +393,10 @@ class Sodarace(BaseEnvironment[Sodaracer]):
             [[0, max_height], [0, max_width], [0, max_mass]]
         ).T
 
-    def generate_program(self, x: str) -> Sodaracer:
+    def generate_program(self, x: str) -> list[Sodaracer]:
         # Call LM to generate a new program and run it, returning a dict containing the program string
         # and the dict from running it.
-        return Sodaracer(**self.diff_model.generate_program(x))
+        return [Sodaracer(**generated) for generated in self.diff_model.generate_program(x)]
 
     def fitness(self, x: Sodaracer) -> float:
         # Call Sodaracers environment to get the fitness.
@@ -406,12 +406,12 @@ class Sodarace(BaseEnvironment[Sodaracer]):
             return -np.inf
 
     def random(self, **kwarg) -> list[Sodaracer]:
-        new_sodaracer = self.generate_program(self.seed.program_str)
-        return [new_sodaracer]
+        new_sodaracers = self.generate_program(self.seed.program_str)
+        return new_sodaracers
 
     def mutate(self, x: Sodaracer, **kwarg) -> list[Sodaracer]:
-        new_sodaracer = self.generate_program(x.program_str)
-        return [new_sodaracer]
+        new_sodaracers = self.generate_program(x.program_str)
+        return new_sodaracers
 
     def to_behavior_space(self, x: Sodaracer) -> Optional[Phenotype]:
         # Map from floats of h,w,m to behavior space grid cells.

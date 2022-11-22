@@ -9,7 +9,7 @@ top_p: 0.95
 temp: 0.85
 timeout: 5.0  # Seconds
 gen_max_len: 1024
-batch_size: 1
+batch_size: 32
 evo_init_steps: 10
 evo_n_steps: 20
 behavior_n_bins: 12

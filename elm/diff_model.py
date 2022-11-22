@@ -132,7 +132,14 @@ class PromptMutationModel(Model):
         return truncation
 
     @abstractmethod
-    def generate_program(self, code: str) -> dict:
+    def generate_program(self, code: str) -> list[dict]:
+        """
+        Given a piece of code, implement this to manipulate the prompt and let LM produce a batch of new codes.
+        Args:
+            code: the original code.
+        Returns:
+            a batch of newly generated codes.
+        """
         pass
 
 
@@ -142,7 +149,7 @@ class PromptMutationForSodarace(PromptMutationModel):
     func_preamble: str = f'def {func_name}():\n\twc = walker_creator()\n'
     return_line: str = '\treturn wc.get_walker()\n'
 
-    def generate_program(self, code: str) -> dict:
+    def generate_program(self, code: str) -> list[dict]:
         """
         Given a piece of code, do prompt mutation, call the sandbox server to execute the code and return the result.
         Args:
@@ -150,32 +157,31 @@ class PromptMutationForSodarace(PromptMutationModel):
         Returns:
             a numpy array (if successful) or the exception object.
         """
-        code = self.generate_prompt_str(code)[0]
-
-        resp = requests.post(
-            f"{self.sandbox_server}/gen_racer",
-            json={"code": code, "timeout": 5.0},
-            timeout=5,
-        )
-
-        if resp.status_code == 200:
-            return_dict = json.loads(resp.text)
-            error_code = "0"
-        elif resp.status_code == 500:  # Bad request
-            try:
-                msg = json.loads(resp.text)
-                return_dict = {"program_str": code, "result_dict": msg["message"]}
-                error_code = msg["unsafe_execute_error_code"]
-            except Exception as e:
-                return_dict = {"program_str": code, "result_dict": str(e)}
+        results = []
+        for code in self.generate_prompt_str(code):
+            resp = requests.post(
+                f"{self.sandbox_server}/gen_racer",
+                json={"code": code, "timeout": 5.0},
+                timeout=5,
+            )
+            if resp.status_code == 200:
+                return_dict = json.loads(resp.text)
+                error_code = "0"
+            elif resp.status_code == 500:  # Bad request
+                try:
+                    msg = json.loads(resp.text)
+                    return_dict = {"program_str": code, "result_dict": msg["message"]}
+                    error_code = msg["unsafe_execute_error_code"]
+                except Exception as e:
+                    return_dict = {"program_str": code, "result_dict": str(e)}
+                    error_code = 6
+            else:
+                return_dict = {"program_str": code, "result_dict": resp.text}
                 error_code = 6
-        else:
-            return_dict = {"program_str": code, "result_dict": resp.text}
-            error_code = 6
 
-        result = {**return_dict, "error_code": error_code}
+            results.append({**return_dict, "error_code": error_code})
 
-        return result
+        return results
 
 
 class DiffModel(Model):
