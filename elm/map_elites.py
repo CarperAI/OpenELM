@@ -2,8 +2,10 @@ from collections import defaultdict
 from typing import Optional
 
 import numpy as np
+from omegaconf import OmegaConf
 from tqdm import trange
 
+from elm.diff_model import PromptMutationForImgTask
 from elm.environments.environments import BaseEnvironment
 
 Phenotype = Optional[np.ndarray]
@@ -202,6 +204,8 @@ if __name__ == "__main__":
         for x in range(32):
             if (y - 16) ** 2 + (x - 16) ** 2 <= 100:  # a radius-10 circle
                 target[y, x] = np.array([1, 1, 0])
-    env = ImageOptim(seed, "elm_image_cfg.yaml", target_img=target, func_name="draw")
+    cfg = OmegaConf.load("elm/config/elm_image_cfg.yaml")
+    model = PromptMutationForImgTask(cfg)
+    env = ImageOptim(seed, cfg, diff_model=model, target_img=target)
     elites = MAPElites(env, n_bins=2, history_length=10)
     print("Best image", elites.search(initsteps=5, totalsteps=10))

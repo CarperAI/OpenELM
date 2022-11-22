@@ -12,7 +12,6 @@ from omegaconf import DictConfig, OmegaConf
 
 from elm.codegen.codegen_utilities import model_setup, sample, truncate
 from elm.environments.sodaracer import SodaraceSimulator
-from elm.diff_model import Model
 
 Phenotype = Optional[np.ndarray]
 
@@ -152,7 +151,7 @@ class ImageOptim(BaseEnvironment[ImageGeneration]):
         seed: Union[dict, str],
         config: Union[str, dict, DictConfig],
         target_img: np.ndarray,
-        diff_model: Model,
+        diff_model: "Model",
         behavior_mode: str = "3-channel",
     ):
         """

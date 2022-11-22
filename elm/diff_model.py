@@ -196,7 +196,7 @@ class PromptMutationForSodarace(PromptMutationModel):
 class PromptMutationForImgTask(PromptMutationModel):
     func_name: str = "draw"
     import_line: str = "import math\nimport numpy as np"
-    func_preamble: str = f'def {func_name}():\n\t"""Draw a yellow circle.\n\t"""\n\tpic = np.zeros((32, 32))\n'
+    func_preamble: str = f'def {func_name}():\n\t"""Draw a yellow circle.\n\t"""\n\tpic = np.zeros((32, 32, 3))\n'
     return_line: str = ""
 
     def reset_shape(self, shape: tuple):
@@ -205,7 +205,7 @@ class PromptMutationForImgTask(PromptMutationModel):
     def _get_response(self, code: str, timeout: int) -> requests.models.Response:
         return requests.post(
                 f"{self.sandbox_server}/eval_imageoptim_func",
-                json={"code": code, "func_name": timeout},
+                json={"code": code, "func_name": self.func_name, "timeout": timeout},
                 timeout=timeout,
         )
 
