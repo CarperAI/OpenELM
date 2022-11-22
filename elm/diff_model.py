@@ -8,6 +8,7 @@ from typing import Dict
 import requests
 import torch
 from omegaconf import OmegaConf
+import numpy as np
 
 from elm.codegen.codegen_utilities import model_setup, sample, set_seed, truncate
 from elm.codegen.codex_execute import (
@@ -91,6 +92,8 @@ class PromptMutationModel(Model):
     def __init__(self, cfg, sandbox_server='http://localhost:5000') -> None:
         self.cfg = cfg
         set_seed(self.cfg.seed)
+        # Use RNG to rotate random seeds during inference.
+        self.rng = np.random.default_rng(seed=self.cfg.seed)
         self.sandbox_server = sandbox_server
         self.model, self.tokenizer = model_setup(self.cfg)
 
@@ -118,6 +121,8 @@ class PromptMutationModel(Model):
         cfg = OmegaConf.merge(self.cfg, {"batch_size": self.cfg.batch_size if batch_size is None else batch_size})
         with torch.no_grad():
             completion = sample(cfg, self.model, self.tokenizer, encoding)
+        # Reset random seed
+        set_seed(int(self.rng.integers(0, 1e8)))
 
         if without_trunc:
             truncation = completion
@@ -131,24 +136,6 @@ class PromptMutationModel(Model):
 
         return truncation
 
-    @abstractmethod
-    def generate_program(self, code: str) -> list[dict]:
-        """
-        Given a piece of code, implement this to manipulate the prompt and let LM produce a batch of new codes.
-        Args:
-            code: the original code.
-        Returns:
-            a batch of newly generated codes.
-        """
-        pass
-
-
-class PromptMutationForSodarace(PromptMutationModel):
-    func_name: str = 'make_walker'
-    import_line: str = 'from .walker import walker_creator'
-    func_preamble: str = f'def {func_name}():\n\twc = walker_creator()\n'
-    return_line: str = '\treturn wc.get_walker()\n'
-
     def generate_program(self, code: str) -> list[dict]:
         """
         Given a piece of code, do prompt mutation, call the sandbox server to execute the code and return the result.
@@ -159,29 +146,71 @@ class PromptMutationForSodarace(PromptMutationModel):
         """
         results = []
         for code in self.generate_prompt_str(code):
-            resp = requests.post(
-                f"{self.sandbox_server}/gen_racer",
-                json={"code": code, "timeout": 5.0},
-                timeout=5,
-            )
+            resp = self._get_response(code, self.cfg.timeout)
             if resp.status_code == 200:
                 return_dict = json.loads(resp.text)
+                self._post_process(return_dict)
                 error_code = "0"
             elif resp.status_code == 500:  # Bad request
                 try:
                     msg = json.loads(resp.text)
-                    return_dict = {"program_str": code, "result_dict": msg["message"]}
+                    return_dict = {"program_str": code, "result_obj": msg["message"]}
                     error_code = msg["unsafe_execute_error_code"]
                 except Exception as e:
-                    return_dict = {"program_str": code, "result_dict": str(e)}
+                    return_dict = {"program_str": code, "result_obj": str(e)}
                     error_code = 6
             else:
-                return_dict = {"program_str": code, "result_dict": resp.text}
+                return_dict = {"program_str": code, "result_obj": resp.text}
                 error_code = 6
 
             results.append({**return_dict, "error_code": error_code})
 
         return results
+
+    @abstractmethod
+    def _get_response(self, code: str, timeout: int) -> requests.models.Response:
+        pass
+
+    @abstractmethod
+    def _post_process(self, response_dict: dict) -> dict:
+        pass
+
+
+class PromptMutationForSodarace(PromptMutationModel):
+    func_name: str = "make_walker"
+    import_line: str = "from .walker import walker_creator"
+    func_preamble: str = f"def {func_name}():\n\twc = walker_creator()\n"
+    return_line: str = "\treturn wc.get_walker()\n"
+
+    def _get_response(self, code: str, timeout: int) -> requests.models.Response:
+        return requests.post(
+            f"{self.sandbox_server}/gen_racer",
+            json={"code": code, "timeout": timeout},
+            timeout=timeout,
+        )
+
+    def _post_process(self, response_dict: dict) -> dict:
+        pass
+
+
+class PromptMutationForImgTask(PromptMutationModel):
+    func_name: str = "draw"
+    import_line: str = "import math\nimport numpy as np"
+    func_preamble: str = f'def {func_name}():\n\t"""Draw a yellow circle.\n\t"""\n\tpic = np.zeros((32, 32))\n'
+    return_line: str = ""
+
+    def reset_shape(self, shape: tuple):
+        self.func_preamble = f'def {self.func_name}():\n\t"""Draw a yellow circle.\n\t"""\n\tpic = np.zeros({shape})\n'
+
+    def _get_response(self, code: str, timeout: int) -> requests.models.Response:
+        return requests.post(
+                f"{self.sandbox_server}/eval_imageoptim_func",
+                json={"code": code, "func_name": timeout},
+                timeout=timeout,
+        )
+
+    def _post_process(self, response_dict: dict) -> dict:
+        response_dict['return_obj'] = np.array(response_dict['return_obj'])
 
 
 class DiffModel(Model):
@@ -220,5 +249,5 @@ class DiffModel(Model):
                     sodaracer_dict: dict = execution_result.to_dict()
                     return {
                         "program_str": seed_str,
-                        "result_dict": sodaracer_dict,
+                        "result_obj": sodaracer_dict,
                     }

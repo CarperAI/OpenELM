@@ -47,7 +47,7 @@ def make_walker():
     return wc.get_walker()
 
 """,
-    "result_dict": {
+    "result_obj": {
         "joints": [(0, 0), (0, 10), (10, 10), (10, 0), (5, 5)],
         "muscles": [
             [0, 1, {"type": "distance", "amplitude": 0.0, "phase": 0.0}],

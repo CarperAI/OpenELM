@@ -3,7 +3,7 @@ import json
 import math
 import string
 from abc import ABC, abstractmethod
-from typing import Generic, Optional, TypeVar, Union
+from typing import Generic, Optional, TypeVar, Union, List
 
 import numpy as np
 import requests
@@ -12,6 +12,7 @@ from omegaconf import DictConfig, OmegaConf
 
 from elm.codegen.codegen_utilities import model_setup, sample, truncate
 from elm.environments.sodaracer import SodaraceSimulator
+from elm.diff_model import Model
 
 Phenotype = Optional[np.ndarray]
 
@@ -101,70 +102,74 @@ class FunctionOptim(BaseEnvironment[ArrayGenotype]):
 
 
 class ImageGeneration(Genotype):
-    def __init__(self, input_str: str, result: Optional[np.ndarray]):
-        self.input_str = input_str
-        self.result = result
+    def __init__(self, program_str: str, result_obj: dict, error_code: bool):
+        self.program_str = program_str
+        self.result_obj = result_obj
+        self.error_code = error_code
         self.valid = self.validate()
 
     def __str__(self) -> str:
         if self.valid:
-            return str(self.result.reshape((-1, 3)).mean(axis=0).astype(int))
+            assert isinstance(self.result_obj, np.ndarray)
+            return str(self.result_obj.reshape((-1, 3)).mean(axis=0).astype(int))
         else:
             return ""
 
     def validate(self) -> bool:
         return (
-            isinstance(self.result, np.ndarray)
-            and len(self.result.shape) == 3
-            and self.result.shape[2] == 3
+            isinstance(self.result_obj, np.ndarray)
+            and len(self.result_obj.shape) == 3
+            and self.result_obj.shape[2] == 3
         )
 
-    def _three_channel_average(self) -> Phenotype:
+    def three_channel_average(self) -> Phenotype:
         """
         Assume the input is of shape (height, width, channel), and we average each channel to get (channel,)
         """
         # Code with invalid return -> return a `None` Phenotype.
-        return np.average(self.result.reshape((-1, 3)), axis=0) if self.valid else None
+        if self.valid:
+            assert isinstance(self.result_obj, np.ndarray)
+            return np.average(self.result_obj.reshape((-1, 3)), axis=0)
+        else:
+            return None
 
 
 class ImageOptim(BaseEnvironment[ImageGeneration]):
     """
     This will try to mutate programs that return images. Fitness is simply the absolute difference between the returning
     image and the target image.
-    To map into the behavior space, the image will be divided into blocks (specified in `block_size`), and average
-    values of RGB channels in each block will be put together as a point in the behavior space (basically it is
-    average-pooling).
+    To map into the behavior space,
+        if behavior_mode=="3-channel", the image will be divided into blocks (specified in `block_size`), and average
+        values of RGB channels in each block will be put together as a point in the behavior space (average-pooling).
+    Other modes are to be added...
     """
-
-    default_docstring = '\t"""Draw a yellow circle.\n\t"""'
-    default_import = "import math\nimport numpy as np\n"
 
     # Record different definitions of behavior spaces in a dict. Feel free to add.
     behavior_mode_spec = {"3-channel": {"genotype_ndim": 3}}
 
     def __init__(
         self,
-        seed: str,
+        seed: Union[dict, str],
         config: Union[str, dict, DictConfig],
         target_img: np.ndarray,
-        func_name: str,
-        docstring=default_docstring,
-        import_text=default_import,
-        sandbox_server="localhost:5000",
+        diff_model: Model,
         behavior_mode: str = "3-channel",
     ):
         """
         Args:
-            seed: the seed string.
+            seed: the seed dict or seed string.
             config: the config file or dict.
             target_img: the target image.
-            func_name: the name of the function to be called to return images.
-            docstring: (Optional) the extra docstring attached under the function definition in a prompt.
-            import_text: (Optional) the import lines to run the codes.
-            sandbox_server: (Optional) the address of sandbox server: 'domain:port'.
+            diff_model: the diff model (or alternatives).
+            behavior_mode: (Optional) a string indicating the way an individual is mapped into behavior space.
         """
-        self.seed = seed
-        # TODO: test config loading types
+        if isinstance(seed, dict):
+            self.seed = seed
+        elif isinstance(seed, str)
+            self.seed = {"program_str": seed, "return_obj": None, "error_code": 0}
+        else:
+            raise TypeError
+
         if isinstance(config, str):
             self.config = OmegaConf.load(config)
         elif isinstance(config, (dict, DictConfig)):
@@ -174,20 +179,7 @@ class ImageOptim(BaseEnvironment[ImageGeneration]):
 
         self.target_img = target_img
         self.shape = target_img.shape
-        self.func_name = func_name
-        self.import_text = import_text + "\n"
-        # These prompts can probably be improved.
-        self.def_and_docstring = (
-            f"\ndef {self.func_name}():\n{docstring}\n\tpic = np.zeros({self.shape})\n"
-        )
-        self.def_for_mutation = (
-            f"\ndef {self.func_name}_old():\n\tpic = np.zeros({self.shape})\n"
-        )
-
-        self.model, self.tokenizer = model_setup(self.config)
-
-        # Use RNG to rotate random seeds during inference.
-        self.rng = np.random.default_rng(seed=self.config.seed)
+        self.diff_model = diff_model
 
         self.behavior_mode = behavior_mode
         self.genotype_ndim: int = self.behavior_mode_spec[self.behavior_mode][
@@ -195,17 +187,23 @@ class ImageOptim(BaseEnvironment[ImageGeneration]):
         ]
         self.genotype_space = np.repeat([[0, 255]], self.genotype_ndim, axis=0).T
 
-        self.sandbox_server = sandbox_server
+    def generate_program(self, code: str) -> List[ImageGeneration]:
+        """
+        Call LM to generate a new program and run it, returning an ImageGeneration object containing the code, the
+        resulting image and the error code.
+        """
+        return [ImageGeneration(**generated) for generated in self.diff_model.generate_program(code)]
 
-    def random(self, **kwargs) -> list[ImageGeneration]:
+    def random(self, **kwargs) -> List[ImageGeneration]:
         """
         Randomly generate a batch of codes and evaluate their outputs.
         Returns:
             a tuple of the code string and the returning result (None if there is error).
         """
-        return self._get_code_result_pair(self.seed + self.def_and_docstring, **kwargs)
+        new_images = self.generate_program(self.seed["program_str"])
+        return new_images
 
-    def mutate(self, x: ImageGeneration, **kwargs) -> list[ImageGeneration]:
+    def mutate(self, x: ImageGeneration, **kwargs) -> List[ImageGeneration]:
         """
         Randomly mutate a batch of codes from a given individual and evaluate their outputs.
         Args:
@@ -213,96 +211,18 @@ class ImageOptim(BaseEnvironment[ImageGeneration]):
         Returns:
             a tuple of the code string and the returning result (None if there is error).
         """
-        return self._get_code_result_pair(
-            self.def_for_mutation + x.input_str + self.def_and_docstring, **kwargs
-        )
+        new_images = self.generate_program(x["program_str"])
+        return new_images
 
     def fitness(self, x: ImageGeneration) -> float:
-        if not x.valid or x.result.shape != self.shape:
+        if not x.valid or x.result_obj.shape != self.shape:
             return -np.inf
-        return -np.abs(x.result - self.target_img).sum()
+        return -np.abs(x.result_obj - self.target_img).sum()
 
     def to_behavior_space(self, x: ImageGeneration) -> Optional[Phenotype]:
         if self.behavior_mode == "3-channel":
-            return x._three_channel_average()
+            return x.three_channel_average()
         return None
-
-    def _generate_code(self, seed: str, num=1) -> list[str]:
-        """
-        Args:
-            seed: the seed text.
-            num: (Optional) batch size.
-        Returns:
-            a list of code(s) generated by the model.
-        """
-        encoding = self.tokenizer(
-            [seed],
-            truncation=True,
-            padding=True,
-            max_length=self.config.gen_max_len,
-            return_tensors="pt",
-        )
-        self.config.batch_size = num
-        self._update_seed()
-        with torch.no_grad():
-            completion = sample(self.config, self.model, self.tokenizer, encoding)
-        truncation = list(
-            map(
-                functools.partial(truncate, print_num=np.inf, only_local_scope=True),
-                completion,
-            )
-        )
-
-        return truncation
-
-    def _evaluate_code(self, code: str) -> Union[np.ndarray, Exception]:
-        """
-        Call the sandbox server to execute the code, and obtain the result.
-        Args:
-            code: the full code string.
-        Returns:
-            a numpy array (if successful) or the exception object.
-        """
-        try:
-            x = requests.post(
-                f"http://{self.sandbox_server}/eval_imageoptim_func",
-                json={"code": code, "func_name": self.func_name},
-                timeout=5,
-            )
-            result = np.array(json.loads(x.text))
-        except Exception as e:
-            result = e
-
-        return result
-
-    def _get_code_result_pair(self, prompt, batch_size=32) -> list[ImageGeneration]:
-        """
-        Args:
-            prompt: the prompt input.
-            batch_size: (Optional) the batch size.
-        Returns:
-            a list of tuples (code, result).
-            `result` is a numpy array if the code returns an array or a list (uniform size).
-            `result` is None if otherwise.
-        """
-        codes = self._generate_code(prompt, num=batch_size)
-        results = []
-        for i in range(len(codes)):
-            result = self._evaluate_code(
-                self.import_text + self.def_and_docstring + codes[i]
-            )
-            if isinstance(result, np.ndarray):
-                results.append(ImageGeneration(codes[i], result))
-            else:
-                results.append(ImageGeneration(codes[i], None))
-        # If needed, the result can be further classified based on the error type.
-        return results
-
-    def _update_seed(self):
-        """
-        Update the random seed in `self.config.seed` using `self.rng`.
-        """
-        self.config.seed = int(self.rng.integers(0, 1e8))
 
 
 class StringArrayGenotype(ArrayGenotype):
@@ -314,8 +234,9 @@ class StringArrayGenotype(ArrayGenotype):
         )
 
 
-# find a string by mutating one character at a time
 class MatchString(BaseEnvironment[StringArrayGenotype]):
+    # find a string by mutating one character at a time
+
     def __init__(self, target: str):
         self.alphabet = string.ascii_letters
 
@@ -325,10 +246,10 @@ class MatchString(BaseEnvironment[StringArrayGenotype]):
             [[0, len(self.alphabet)]], self.genotype_ndim, axis=0
         ).T
 
-    def random(self, **kwarg) -> list[StringArrayGenotype]:
+    def random(self, **kwarg) -> List[StringArrayGenotype]:
         return [StringArrayGenotype(np.random.uniform(*self.genotype_space))]
 
-    def mutate(self, x: StringArrayGenotype, **kwarg) -> list[StringArrayGenotype]:
+    def mutate(self, x: StringArrayGenotype, **kwarg) -> List[StringArrayGenotype]:
         x = x.copy()
         ix = np.random.randint(self.genotype_ndim)
         x[ix] = x[ix] + np.random.uniform(-5, 5)
@@ -342,22 +263,22 @@ class MatchString(BaseEnvironment[StringArrayGenotype]):
 
 
 class Sodaracer(Genotype):
-    def __init__(self, program_str: str, result_dict: dict, error_code: bool):
+    def __init__(self, program_str: str, result_obj: dict, error_code: bool):
         """
         The Sodaracer genotype.
         Args:
             program_str: the string for the original code.
-            result_dict: the dict of sodaracer.
+            result_obj: the dict of sodaracer.
             error_code: whether the code executes in the sandbox.
         """
         self.program_str = program_str
-        self.result_dict = result_dict
+        self.result_obj = result_obj
         self.error_code = error_code
 
         # Check whether the sodaracer is valid.
         if self.error_code == 0:
             try:
-                self.simulator = SodaraceSimulator(body=self.result_dict)
+                self.simulator = SodaraceSimulator(body=self.result_obj)
                 self.morphology = self.simulator.morphology
                 # TODO: maybe try the evaluation function of walkers?
                 self.evaluate(0)
@@ -393,10 +314,10 @@ class Sodarace(BaseEnvironment[Sodaracer]):
             [[0, max_height], [0, max_width], [0, max_mass]]
         ).T
 
-    def generate_program(self, x: str) -> list[Sodaracer]:
+    def generate_program(self, code: str) -> List[Sodaracer]:
         # Call LM to generate a new program and run it, returning a dict containing the program string
         # and the dict from running it.
-        return [Sodaracer(**generated) for generated in self.diff_model.generate_program(x)]
+        return [Sodaracer(**generated) for generated in self.diff_model.generate_program(code)]
 
     def fitness(self, x: Sodaracer) -> float:
         # Call Sodaracers environment to get the fitness.
@@ -405,11 +326,11 @@ class Sodarace(BaseEnvironment[Sodaracer]):
         else:
             return -np.inf
 
-    def random(self, **kwarg) -> list[Sodaracer]:
+    def random(self, **kwarg) -> List[Sodaracer]:
         new_sodaracers = self.generate_program(self.seed.program_str)
         return new_sodaracers
 
-    def mutate(self, x: Sodaracer, **kwarg) -> list[Sodaracer]:
+    def mutate(self, x: Sodaracer, **kwarg) -> List[Sodaracer]:
         new_sodaracers = self.generate_program(x.program_str)
         return new_sodaracers
 
