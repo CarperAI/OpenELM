@@ -56,7 +56,7 @@ def evaluate_function():
         )
         if isinstance(execution_result, ndarray):
             return {"program_str": req_json["code"],
-                    "return_obj": execution_result.tolist().__repr__()}, 200
+                    "result_obj": execution_result.tolist().__repr__()}, 200
         elif isinstance(execution_result, int):
             return bad_request(
                 f"failed sandbox_unsafe_execute", unsafe_execute_error_code=execution_result

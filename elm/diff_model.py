@@ -210,7 +210,7 @@ class PromptMutationForImgTask(PromptMutationModel):
         )
 
     def _post_process(self, response_dict: dict) -> dict:
-        response_dict['return_obj'] = np.array(response_dict['return_obj'])
+        response_dict['result_obj'] = np.array(response_dict['result_obj'])
 
 
 class DiffModel(Model):
