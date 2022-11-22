@@ -18,6 +18,7 @@ class ELM:
         # Get the defaults if `env_args` is not specified.
         if env_args is None:
             env_args = ARG_DICT[self.cfg.env_name]
+        env_args["config"] = self.cfg  # Override default environment config
 
         # Override diff model if `diff_model_cls` is specified.
         if diff_model_cls is not None:

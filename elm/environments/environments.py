@@ -65,7 +65,7 @@ class BaseEnvironment(ABC, Generic[GenoType]):
         return self.behavior_space.shape[1]
 
     @staticmethod
-    def _load_config(config):
+    def _load_config(config) -> DictConfig:
         if isinstance(config, str):
             return OmegaConf.load(config)
         elif isinstance(config, (dict, DictConfig)):
@@ -161,14 +161,16 @@ class ImageOptim(BaseEnvironment[ImageGeneration]):
         target_img: np.ndarray,
         diff_model,
         behavior_mode: str = "3-channel",
+        run_name: Optional[str] = None
     ):
         """
         Args:
             seed: the seed dict.
-            config: the config file or dict.
+            config: the config file path or dict.
             target_img: the target image.
             diff_model: the diff model (or alternatives).
             behavior_mode: (Optional) a string indicating the way an individual is mapped into behavior space.
+            run_name: (Optional) override the run_name in config.
         """
         if isinstance(seed, dict):
             self.seed = ImageGeneration(**seed)
@@ -176,12 +178,14 @@ class ImageOptim(BaseEnvironment[ImageGeneration]):
             raise TypeError
 
         self.config = self._load_config(config)
+        if run_name is not None:
+            self.config.run_name = run_name
 
         self.target_img = target_img
         self.shape = target_img.shape
 
         if diff_model is None:
-            self.diff_model = self.default_diff_model_cls(**self.config)
+            self.diff_model = self.default_diff_model_cls(self.config)
         else:
             self.diff_model = diff_model
 
@@ -312,15 +316,31 @@ class Sodarace(BaseEnvironment[Sodaracer]):
         max_width: int = 1000,
         max_mass: int = 2000,
         ndim: int = 3,
+        run_name: Optional[str] = None
     ) -> None:
+        """
+        Sodarace environment.
+        Args:
+            seed: the seed dict.
+            config: the config file path or dict.
+            diff_model: the diff model (or alternatives).
+            eval_steps: the number of steps for sodaracer evaluation.
+            max_height: (Optional) the maximal height.
+            max_width: (Optional) the maximal width.
+            max_mass: (Optional) the maximal mass.
+            ndim: (Optional) the dimension of behavior space.
+            run_name: (Optional) override the run_name in config.
+        """
         if isinstance(seed, dict):
             self.seed = Sodaracer(**seed)
         else:
             raise TypeError
         self.config = self._load_config(config)
+        if run_name is not None:
+            self.config.run_name = run_name
 
         if diff_model is None:
-            self.diff_model = self.default_diff_model_cls(**self.config)
+            self.diff_model = self.default_diff_model_cls(self.config)
         else:
             self.diff_model = diff_model
 

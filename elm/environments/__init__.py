@@ -8,9 +8,10 @@ from .environments import (
 
 # ----- Generate sample seeds and init args for environments -----
 # They are simple template arguments to initialize several environments.
-# But make sure to instantiate the diff model (or alternatives) by yourself.
+# But please make sure to set the `run_name` in config by yourself.
 # Sample usage:
 #   from elm.environment import sodarace_init_args
+#   sodarace_init_args["config"].run_name = "test"
 #   sodarace = Sodarace(**sodarace_init_args)
 
 
@@ -94,6 +95,8 @@ def make_walker():
 
 # A sample init args for Sodarace
 sodarace_init_args = {"seed": SQUARE_SEED,
+                      "config": "elm/config/elm_sodarace_cfg.yaml",
+                      "diff_model": None,
                       "eval_steps": 1000}
 
 # ----- (Sample init args end) -----
