@@ -33,13 +33,6 @@ for y in range(32):
         if (y - 16) ** 2 + (x - 16) ** 2 <= 100:  # a radius-10 circle
             target[y, x] = np.array([1, 1, 0])
 
-# A sample init args for ImageOptim
-image_init_args = {"seed": IMAGE_SEED,
-                   "config": "elm/config/elm_image_cfg.yaml",
-                   "target_img": target,
-                   "diff_model": None,
-                   "behavior_mode": "3-channel"}
-
 
 SQUARE_SEED = {
     "program_str": """from elm.environments.sodaracer.walker.walk_creator import walker_creator
@@ -92,6 +85,13 @@ def make_walker():
     },
     "error_code": 0
 }
+
+# A sample init args for ImageOptim
+image_init_args = {"seed": IMAGE_SEED,
+                   "config": "elm/config/elm_image_cfg.yaml",
+                   "target_img": target,
+                   "diff_model": None,
+                   "behavior_mode": "3-channel"}
 
 # A sample init args for Sodarace
 sodarace_init_args = {"seed": SQUARE_SEED,
