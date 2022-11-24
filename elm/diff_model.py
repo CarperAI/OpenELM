@@ -152,8 +152,7 @@ class PromptMutationModel(Model):
         for code in self.generate_prompt_str(code):
             resp = self._get_response(code, self.cfg.timeout)
             if resp.status_code == 200:
-                return_dict = json.loads(resp.text)
-                self._post_process(return_dict)
+                return_dict = self._post_process(json.loads(resp.text))
                 error_code = "0"
             elif resp.status_code == 500:  # Bad request
                 try:
@@ -215,6 +214,7 @@ class PromptMutationForImgTask(PromptMutationModel):
 
     def _post_process(self, response_dict: dict) -> dict:
         response_dict['result_obj'] = np.array(response_dict['result_obj'])
+        return response_dict
 
 
 # TODO: complete diff model (when it's available)
