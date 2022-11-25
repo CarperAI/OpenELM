@@ -1,5 +1,5 @@
 [![DOI](https://zenodo.org/badge/532259603.svg)](https://zenodo.org/badge/latestdoi/532259603)
-# ELM
+# OpenELM
 
 This repository is a replication of [Evolution Through Large Models](https://arxiv.org/abs/2206.08896), a recent paper from OpenAI exploring the links between large language models (LLMs) and evolutionary computing, particularly focused on code generation.
 
