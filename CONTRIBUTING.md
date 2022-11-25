@@ -1,6 +1,6 @@
-# Contributing to `OpenEvolve`
+# Contributing to `OpenELM`
 
-Looking to improve `OpenEvolve`? Thanks for considering!
+Looking to improve `OpenELM`? Thanks for considering!
 
 There are many ways to contribute, from writing tutorials in [Colab notebooks](https://colab.research.google.com) to improving the project's documentation, submitting bug reports and feature requests, or implementing new features themselves. See the outstanding [issues](https://github.com/CarperAI/ELM/issues) for ideas on where to begin.
 
@@ -18,9 +18,9 @@ Follow these steps to start contributing code:
 
 1. Create your own [fork](https://docs.github.com/en/get-started/quickstart/fork-a-repo#forking-a-repository) of the repository and clone it to your local machine.
     ```bash
-    git clone https://github.com/<YOUR-USERNAME>/OpenEvolve.git
-    cd OpenEvolve
-    git remote add upstream https://github.com/CarperAI/OpenEvolve.git
+    git clone https://github.com/<YOUR-USERNAME>/OpenELM.git
+    cd OpenELM
+    git remote add upstream https://github.com/CarperAI/OpenELM.git
     ```
 2. Create a new branch for your changes and give it a concise name that reflects your contribution.
     ```bash
@@ -47,7 +47,7 @@ Follow these steps to start contributing code:
 
 6. Push the changes to your fork.
 
-Finally ... 🥁 ... Create a [pull request](https://docs.github.com/en/github/collaborating-with-issues-and-pull-requests/creating-a-pull-request) to the `OpenEvolve` repository! Make sure to include a description of your changes and link to any relevant issues.
+Finally ... 🥁 ... Create a [pull request](https://docs.github.com/en/github/collaborating-with-issues-and-pull-requests/creating-a-pull-request) to the `OpenELM` repository! Make sure to include a description of your changes and link to any relevant issues.
 
 ## Asking questions
 
