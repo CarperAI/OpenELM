@@ -13,15 +13,15 @@ For more details, see our full research proposal at https://carperai.notion.site
 # Architecture
 Roughly, ELM consists of a pipeline of different components:
 ```html
-+-------------+                    +-------------+         
-|  MapElites  | <----------------> | Environment | 
-+------+------+                    +------+------+         
-       |                                  ^                         
-       | collect samples                  |                         
-       v                                  v                         
-+------+---------+     finetune    +------+---------+    mutate and execute   +--------+-------+
++-------------+                     +-------------+         
+|  MapElites  | <-----------------> | Environment | 
++------+------+                     +------+------+         
+       |                                   ^                         
+       | collect samples                   |                         
+       v                                   v                         
++------+---------+     finetune    +-------+--------+    mutate and execute   +----------------+
 | Conditional RL | --------------> | Language model | <---------------------> | Sandbox server |
-+----------------+                 +--------+-------+                         +----------------+
++----------------+                 +----------------+                         +----------------+
 ```
 We currently implemented MapElites, Environment, a part of the Language model mutation operator (prompt mutation), and the sandbox server.
 
