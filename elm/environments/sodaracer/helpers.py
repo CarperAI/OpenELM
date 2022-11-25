@@ -1,5 +1,4 @@
 from enum import Enum
-from typing import List
 
 import Box2D.Box2D as b2
 
@@ -44,7 +43,7 @@ class Entity:
         body_id: str,
         x_scale: float,
         y_scale: float,
-        points: List[b2.b2Vec2],
+        points: list[b2.b2Vec2],
         angle: float,
     ) -> dict:
         # static Json::Value PolygonEntity(std::string bodyID, float xScale, float yScale, std::vector<b2Vec2>* points, float angle)

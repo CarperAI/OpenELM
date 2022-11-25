@@ -4,7 +4,7 @@ from typing import Optional
 import numpy as np
 from tqdm import trange
 
-from elm.environments.environments import BaseEnvironment
+from elm.environments import image_init_args
 
 Phenotype = Optional[np.ndarray]
 Mapindex = Optional[tuple]
@@ -26,6 +26,7 @@ class Map:
             # Set starting top of buffer to 0 (% operator)
             self.top = np.full(dims, self.history_length - 1, dtype=int)
             self.array = np.full((history_length,) + dims, fill_value, dtype=dtype)
+        self.empty = True
 
     def __getitem__(self, map_ix):
         """If history length > 1, the history dim is an n-dim circular buffer."""
@@ -35,6 +36,7 @@ class Map:
             return self.array[(self.top[map_ix], *map_ix)]
 
     def __setitem__(self, map_ix, value):
+        self.empty = False
         if self.history_length == 1:
             self.array[map_ix] = value
         else:
@@ -63,6 +65,8 @@ class MAPElites:
         self.n_bins = n_bins
         self.history_length = history_length
         self.save_history = save_history
+        # self.history will be set/reset each time when calling `.search(...)`
+        self.history: dict = defaultdict(list)
 
         # discretization of space
         self.bins = np.linspace(*env.behavior_space, n_bins + 1)[1:-1].T
@@ -99,28 +103,27 @@ class MAPElites:
         ix = np.random.choice(np.flatnonzero(self.nonzero.array))
         return np.unravel_index(ix, self.nonzero.dims)
 
-    def search(self, initsteps: int, totalsteps: int, atol=1, batch_size=32):
+    def search(self, initsteps: int, totalsteps: int, atol=1):
         tbar = trange(int(totalsteps))
         max_fitness = -np.inf
         max_genome = None
         if self.save_history:
-            self.history: dict = defaultdict(list)
-
-        config = {"batch_size": batch_size}
+            self.history = defaultdict(list)
 
         for n_steps in tbar:
-            if n_steps < initsteps:
+            if n_steps < initsteps or self.genomes.empty:
                 # Initialise by generating initsteps random solutions.
-                x = self.env.random(**config)
+                # If map is still empty: force to do generation instead of mutation.
+                new_individuals = self.env.random()
             else:
-                # Randomly select an elite from the map
+                # Randomly select an elite from the map.
                 map_ix = self.random_selection()
-                x = self.genomes[map_ix]
-                # Mutate the elite
-                x = self.env.mutate(x, **config)
+                selected_elite = self.genomes[map_ix]
+                # Mutate the elite.
+                new_individuals = self.env.mutate(selected_elite)
 
-            # Now that `x` is a list, we put them into the behavior space one-by-one.
-            for individual in x:
+            # `new_individuals` is a list of generation/mutation. We put them into the behavior space one-by-one.
+            for individual in new_individuals:
                 map_ix = self.to_mapindex(self.env.to_behavior_space(individual))
                 # if the return is None, the individual is invalid and is thrown into the recycle bin.
                 if map_ix is None:
@@ -132,14 +135,14 @@ class MAPElites:
                     self.history[map_ix].append(individual)
                 self.nonzero[map_ix] = True
 
-                f = self.env.fitness(individual)
+                fitness = self.env.fitness(individual)
                 # If new fitness greater than old fitness in niche, replace.
-                if f > self.fitnesses[map_ix]:
-                    self.fitnesses[map_ix] = f
+                if fitness > self.fitnesses[map_ix]:
+                    self.fitnesses[map_ix] = fitness
                     self.genomes[map_ix] = individual
                 # If new fitness is the highest so far, update the tracker.
-                if f > max_fitness:
-                    max_fitness = f
+                if fitness > max_fitness:
+                    max_fitness = fitness
                     max_genome = individual
 
                     tbar.set_description(f"{max_fitness=:.4f}")
@@ -167,6 +170,8 @@ class MAPElites:
 
 
 if __name__ == "__main__":
+    # TODO: refactor them into unit tests?
+
     from elm.environments.environments import (
         BaseEnvironment,
         FunctionOptim,
@@ -186,18 +191,6 @@ if __name__ == "__main__":
     )
     elites.plot()
 
-    seed = """def draw_blue_rectangle() -> np.ndarray:
-\tpic = np.zeros((32, 32, 3))
-\tfor x in range(2, 30):
-\t\tfor y in range(2, 30):
-\t\t\tpic[x, y] = np.array([0, 0, 255])
-\treturn pic
-"""
-    target = np.zeros((32, 32, 3))
-    for y in range(32):
-        for x in range(32):
-            if (y - 16) ** 2 + (x - 16) ** 2 <= 100:  # a radius-10 circle
-                target[y, x] = np.array([1, 1, 0])
-    env = ImageOptim(seed, "elm_cfg.yaml", target_img=target, func_name="draw")
+    env = ImageOptim(**image_init_args)
     elites = MAPElites(env, n_bins=2, history_length=10)
     print("Best image", elites.search(initsteps=5, totalsteps=10))
