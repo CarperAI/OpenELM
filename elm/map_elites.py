@@ -2,10 +2,8 @@ from collections import defaultdict
 from typing import Optional
 
 import numpy as np
-from omegaconf import OmegaConf
 from tqdm import trange
 
-from elm.diff_model import PromptMutationForImgTask
 from elm.environments import image_init_args
 
 Phenotype = Optional[np.ndarray]
@@ -67,7 +65,8 @@ class MAPElites:
         self.n_bins = n_bins
         self.history_length = history_length
         self.save_history = save_history
-        self.history = None  # self.history will be set/reset each time when calling `.search(...)`
+        # self.history will be set/reset each time when calling `.search(...)`
+        self.history: dict = defaultdict(list)
 
         # discretization of space
         self.bins = np.linspace(*env.behavior_space, n_bins + 1)[1:-1].T
@@ -109,7 +108,7 @@ class MAPElites:
         max_fitness = -np.inf
         max_genome = None
         if self.save_history:
-            self.history: dict = defaultdict(list)
+            self.history = defaultdict(list)
 
         for n_steps in tbar:
             if n_steps < initsteps or self.genomes.empty:

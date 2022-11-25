@@ -6,8 +6,8 @@ from typing import Generic, Optional, TypeVar, Union
 import numpy as np
 from omegaconf import DictConfig, OmegaConf
 
-from elm.environments.sodaracer import SodaraceSimulator
 from elm.diff_model import PromptMutationForImgTask, PromptMutationForSodarace
+from elm.environments.sodaracer import SodaraceSimulator
 
 Phenotype = Optional[np.ndarray]
 
@@ -109,6 +109,7 @@ class ImageGeneration(Genotype):
     """
     Genotype for generated images.
     """
+
     def __init__(self, program_str: str, result_obj: dict, error_code: bool):
         self.program_str = program_str
         self.result_obj = result_obj
@@ -150,6 +151,7 @@ class ImageOptim(BaseEnvironment[ImageGeneration]):
         values of RGB channels in each block will be put together as a point in the behavior space (average-pooling).
     Other modes are to be added...
     """
+
     default_diff_model_cls = PromptMutationForImgTask
     # Record different definitions of behavior spaces in a dict. Feel free to add.
     behavior_mode_spec = {"3-channel": {"genotype_ndim": 3}}
@@ -161,7 +163,7 @@ class ImageOptim(BaseEnvironment[ImageGeneration]):
         target_img: np.ndarray,
         diff_model,
         behavior_mode: str = "3-channel",
-        run_name: Optional[str] = None
+        run_name: Optional[str] = None,
     ):
         """
         Args:
@@ -200,7 +202,10 @@ class ImageOptim(BaseEnvironment[ImageGeneration]):
         Call LM to generate a new program and run it, returning an ImageGeneration object containing the code, the
         resulting image and the error code.
         """
-        return [ImageGeneration(**generated) for generated in self.diff_model.generate_program(code)]
+        return [
+            ImageGeneration(**generated)
+            for generated in self.diff_model.generate_program(code)
+        ]
 
     def random(self) -> list[ImageGeneration]:
         """
@@ -300,7 +305,7 @@ class Sodaracer(Genotype):
         return self.simulator.evaluate(timesteps)
 
     def __str__(self) -> str:
-        return self.program_str[:10]
+        return self.program_str
 
 
 class Sodarace(BaseEnvironment[Sodaracer]):
@@ -316,7 +321,7 @@ class Sodarace(BaseEnvironment[Sodaracer]):
         max_width: int = 1000,
         max_mass: int = 2000,
         ndim: int = 3,
-        run_name: Optional[str] = None
+        run_name: Optional[str] = None,
     ) -> None:
         """
         Sodarace environment.
@@ -353,7 +358,10 @@ class Sodarace(BaseEnvironment[Sodaracer]):
     def generate_program(self, code: str) -> list[Sodaracer]:
         # Call LM to generate a new program and run it, returning a dict containing the program string
         # and the dict from running it.
-        return [Sodaracer(**generated) for generated in self.diff_model.generate_program(code)]
+        return [
+            Sodaracer(**generated)
+            for generated in self.diff_model.generate_program(code)
+        ]
 
     def fitness(self, x: Sodaracer) -> float:
         # Call Sodaracers environment to get the fitness.

@@ -203,7 +203,7 @@ def reliability_guard(maximum_memory_bytes=None):
     os.putenv = None
     os.remove = None
     os.removedirs = None
-    os.rmdir = None
+    # os.rmdir = None
     os.fchdir = None
     os.setuid = None
     os.fork = None
@@ -224,11 +224,11 @@ def reliability_guard(maximum_memory_bytes=None):
     os.lchmod = None
     os.lchown = None
     os.getcwd = None
-    os.chdir = None
+    # os.chdir = None
 
     import shutil
 
-    shutil.rmtree = None
+    # shutil.rmtree = None
     shutil.move = None
     shutil.chown = None
 

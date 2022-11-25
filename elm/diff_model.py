@@ -2,12 +2,12 @@ import json
 import os
 import re
 import shutil
-from abc import abstractmethod, ABC
+from abc import ABC, abstractmethod
 
+import numpy as np
 import requests
 import torch
-from omegaconf import OmegaConf, DictConfig
-import numpy as np
+from omegaconf import DictConfig, OmegaConf
 
 from elm.codegen.codegen_utilities import model_setup, sample, set_seed, truncate
 from elm.codegen.codex_execute import (
@@ -17,6 +17,7 @@ from elm.codegen.codex_execute import (
     swallow_io,
     time_limit,
 )
+from elm.environments.sodaracer import Walker
 
 
 def reset_os_funcs(rmtree, rmdir, chdir):
@@ -87,7 +88,7 @@ class PromptMutationModel(Model):
     func_preamble: str  # the function definition plus possibly a few initial lines to generate codes
     return_line: str  # the return line we add to the end of the code
 
-    def __init__(self, cfg, sandbox_server='http://localhost:5000') -> None:
+    def __init__(self, cfg, sandbox_server="http://localhost:5000") -> None:
         if isinstance(cfg, str):
             self.cfg = OmegaConf.load(cfg)
         elif isinstance(cfg, (dict, DictConfig)):
@@ -101,8 +102,14 @@ class PromptMutationModel(Model):
         self.sandbox_server = sandbox_server
         self.model, self.tokenizer = model_setup(self.cfg)
 
-    def generate_prompt_str(self, seed: str, tokenizer=None, batch_size=None,
-                            append_return=True, without_trunc=False) -> list[str]:
+    def generate_prompt_str(
+        self,
+        seed: str,
+        tokenizer=None,
+        batch_size=None,
+        append_return=True,
+        without_trunc=True,
+    ) -> list[str]:
         """
         Args:
             seed: the seed text.
@@ -115,14 +122,17 @@ class PromptMutationModel(Model):
         """
         tokenizer = self.tokenizer if tokenizer is None else tokenizer
         encoding = tokenizer(
-            [seed + '\n\n' + self.func_preamble],
+            [seed + "\n\n" + self.func_preamble],
             truncation=True,
             padding=True,
             max_length=self.cfg.gen_max_len,
             return_tensors="pt",
         )
 
-        cfg = OmegaConf.merge(self.cfg, {"batch_size": self.cfg.batch_size if batch_size is None else batch_size})
+        cfg = OmegaConf.merge(
+            self.cfg,
+            {"batch_size": self.cfg.batch_size if batch_size is None else batch_size},
+        )
         with torch.no_grad():
             completion = sample(cfg, self.model, self.tokenizer, encoding)
         # Reset random seed
@@ -131,12 +141,18 @@ class PromptMutationModel(Model):
         if without_trunc:
             truncation = completion
         else:
-            truncation = [truncate(code, print_num=float('inf'), only_local_scope=True) for code in completion]
+            truncation = [
+                truncate(code, print_num=float("inf"), only_local_scope=True)
+                for code in completion
+            ]
 
-        truncation = [self.import_line + '\n' + self.func_preamble + '\n' + code for code in truncation]
+        truncation = [
+            self.import_line + "\n" + self.func_preamble + "\n" + code
+            for code in truncation
+        ]
 
         if append_return:
-            truncation = [code + '\n' + self.return_line for code in truncation]
+            truncation = [code + "\n" + self.return_line for code in truncation]
 
         return truncation
 
@@ -152,7 +168,8 @@ class PromptMutationModel(Model):
         for code in self.generate_prompt_str(code):
             resp = self._get_response(code, self.cfg.timeout)
             if resp.status_code == 200:
-                return_dict = self._post_process(json.loads(resp.text))
+                return_dict = json.loads(resp.text)
+                self._post_process(return_dict)
                 error_code = "0"
             elif resp.status_code == 500:  # Bad request
                 try:
@@ -207,13 +224,13 @@ class PromptMutationForImgTask(PromptMutationModel):
 
     def _get_response(self, code: str, timeout: int) -> requests.models.Response:
         return requests.post(
-                f"{self.sandbox_server}/eval_imageoptim_func",
-                json={"code": code, "func_name": self.func_name, "timeout": timeout},
-                timeout=timeout,
+            f"{self.sandbox_server}/eval_imageoptim_func",
+            json={"code": code, "func_name": self.func_name, "timeout": timeout},
+            timeout=timeout,
         )
 
     def _post_process(self, response_dict: dict) -> dict:
-        response_dict['result_obj'] = np.array(response_dict['result_obj'])
+        response_dict["result_obj"] = np.array(response_dict["result_obj"])
         return response_dict
 
 
