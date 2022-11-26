@@ -5,7 +5,8 @@ import trlx
 from trlx.data.configs import TRLConfig
 from model.accelerate_ppo_softprompt_model import AcceleratePPOSoftpromptModel
 from orchestrator.ppo_softprompt_orchestrator import PPOSoftpromptOrchestrator
-from trlx.data.method_configs import register_method, PPOConfig
+from trlx.data.method_configs import register_method
+from trlx.model.nn.ppo_models import PPOConfig
 from dataclasses import dataclass
 
 

@@ -1,50 +1,50 @@
 model:
   model_path: "lvwerra/gpt2-imdb"  # Name of hf model to load
   tokenizer_path: "gpt2"  # Name of hf tokenizer to load
-  model_type : "AcceleratePPOSoftpromptModel"  # Name of accelerate model type to load
+  model_type: "AcceleratePPOSoftpromptModel"  # Name of accelerate model type to load
   num_layers_unfrozen: 0  # Number of bottom layers to freeze during training
 
 train:
-  # project_name: "trlx_elm"
-  # run_name: "short_quotes"
-  seq_length: 128  # Size of LM context - should be longer than max_length + n_soft_tokens
-  epochs: 5000  # Train for max(epochs, total_steps)
+  seq_length: 128  # Size of LM context
+  epochs: 5000 # Train for max(epochs, total_steps)
   total_steps: 30000  # Train for max(epochs, total_steps)
   batch_size: 128  # batch size
 
-  lr_ramp_steps: 100  # learning rate warm up
-  lr_decay_steps: 79000  # learning rate decay
-  weight_decay: 1.0e-6  # weight decay param
-  learning_rate_init: 1.412e-4  # init learning rate
-  learning_rate_target: 1.412e-4  # target final learning rate
+  lr_init: 1.0e-4  # init learning rate
+  lr_target: 1.0e-4  # target final learning rate
   opt_betas: [0.9, 0.95] # adam betas
+  opt_eps: 1.0e-8  # adam eps
+  weight_decay: 1.0e-6  # weight decay param
 
   checkpoint_interval: 10000  # checkpoint interval
-  checkpoint_dir: "ckpts"
-  eval_interval: 16  # eval interval
+  eval_interval: 100  # eval interval
 
-  pipeline: "PPOPipeline"  # prompt pipeline to load
+  pipeline: "PromptPipeline"  # prompt pipeline to load
   orchestrator: "PPOSoftpromptOrchestrator"  # orchestrator to load
 
 method:
-  name : 'pposoftpromptconfig'  # Name of RL method config
+  name: 'pposoftpromptconfig'  # Name of RL method config
   n_soft_tokens: 40  # Number of (prefix) soft prompt tokens
-  initialize_from_vocab: True  # Initialize learned soft prompt embeddings from vocab
+  initialize_from_vocab: False  # Initialize learned soft prompt embeddings from vocab
   tune_v_head: True # if whole model is frozen (except for softprompt), this can be set
   num_rollouts: 128  # Number of rollouts to collect per epoch
   chunk_size: 128  # Number of rollouts to collect in one loop of orchestrator
   ppo_epochs: 4  # Number of ppo epochs
-  init_kl_coef: 0.2  # init kl coefficient
+  init_kl_coef: 0.05  # init kl coefficient
   target: 6  # target kl coefficient, set None for fixed kl coef
   horizon: 10000  # PPO horizon
   gamma: 1  # PPO discount
   lam: 0.95  # PPO lambda
   cliprange: 0.2  # clip range
   cliprange_value: 0.2  # clip range
-  vf_coef: 2.3  # value term weight
+  vf_coef: 1  # value term weight
+  scale_reward: False # False | "ref" | "running" estimate against which to scale rewards
+  ref_mean: null
+  ref_std: null # rescale rewards with this deviation
+  cliprange_reward: 10
   gen_kwargs:
-    max_length: 48  # LM max sample gen length, n_soft_tokens will be added
-    min_length: 0  # LM min sample gen length, n_soft_tokens will be added
+    max_length: 48  # LM max sample gen length
+    min_length: 0  # LM min sample gen length
     top_k: 0.0  # top k
     top_p: 1.0  # top p
     do_sample: True  # sample
