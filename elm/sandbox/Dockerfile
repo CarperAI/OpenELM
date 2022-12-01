@@ -2,7 +2,7 @@
 FROM python:3.9-slim
 
 # Installing packages
-RUN apk update
+RUN apt update
 RUN pip install --no-cache-dir pipenv
 
 # Defining working directory and adding source code
