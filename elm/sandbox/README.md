@@ -11,8 +11,12 @@ Evaluation can in principle be done outside of the sandbox since the arbitrary c
 - [Install gVisor](https://gvisor.dev/docs/user_guide/install/)
 - Make sure you have [docker](https://docs.docker.com/get-docker/) installed
 - `pip install --user pipenv` for package management
+- `pipenv shell`
+- `pipenv install`
+- `sudo runsc install`
 
 ## Working on the server
+- Start docker - `service docker start`
 - Run `scripts/build.sh` whenever you make changes to server code.
 - Run `scripts/launch.sh` to launch the server in a sandboxed container.
 
