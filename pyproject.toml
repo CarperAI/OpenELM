@@ -60,4 +60,8 @@ dev = [
     "pytest",
     "pytest-cov",
 ]
+full = [
+    "pygraphviz",
+    "graphviz"
+]
 notebook = ["ipython"]

@@ -1,10 +1,8 @@
 hydra-core>=1.2.0
 wandb>=0.13
-tree-sitter
-pygraphviz
-graphviz
 numpy
 transformers>=4.22.0
 tokenizers
+swig
 box2d
 Flask
