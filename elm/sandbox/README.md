@@ -17,7 +17,7 @@ Evaluation can in principle be done outside of the sandbox since the arbitrary c
 
 ## Working on the server
 - Start docker - `service docker start`
-- Run `scripts/build.sh` whenever you make changes to server code.
+- Run `./elm/sandbox/scripts/build.sh` whenever you make changes to server code. (call it from the root of the repo or else it won't work)
 - Run `scripts/launch.sh` to launch the server in a sandboxed container.
 
 
