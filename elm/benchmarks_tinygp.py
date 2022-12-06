@@ -12,7 +12,7 @@ from random import randint, random
 from statistics import mean
 from typing import Callable, Iterable, Optional, Union
 
-from graphviz import Digraph, Source
+from graphviz import Digraph
 from IPython.display import Image, display
 
 MIN_DEPTH = 0  # minimal initial random tree depth
@@ -193,9 +193,9 @@ class GPTree:
     def size(self):  # tree size in nodes
         if self.data in self.terminals:
             return 1
-        l = self.left.size() if self.left else 0
-        r = self.right.size() if self.right else 0
-        return 1 + l + r
+        left_size = self.left.size() if self.left else 0
+        right_size = self.right.size() if self.right else 0
+        return 1 + left_size + right_size
 
     def build_subtree(self):  # count is list in order to pass "by reference"
         t = GPTree(self.functions, self.terminals)

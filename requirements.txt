@@ -5,4 +5,6 @@ transformers>=4.22.0
 tokenizers
 swig
 box2d
+box2d-py
+requests
 Flask
