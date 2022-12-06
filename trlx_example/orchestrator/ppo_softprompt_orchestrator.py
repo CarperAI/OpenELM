@@ -10,6 +10,9 @@ from trlx.utils import Clock
 from trlx.utils.modeling import logprobs_from_logits
 from trlx.orchestrator.ppo_orchestrator import PPOOrchestrator
 
+from time import time
+import ray
+
 @register_orchestrator
 class PPOSoftpromptOrchestrator(PPOOrchestrator):
     def __init__(
@@ -21,7 +24,7 @@ class PPOSoftpromptOrchestrator(PPOOrchestrator):
         chunk_size: int = 512,
     ):
         super().__init__(model, pipeline, reward_fn, metric_fn, chunk_size)
-        self.n_soft_tokens = model.model.gpt.get_input_embeddings().n_tokens
+        self.n_soft_tokens = model.model.base_model.get_input_embeddings().n_tokens
     
     def make_experience(self, num_rollouts: int = 1024, iter_count: int = 0):
         """
@@ -38,31 +41,66 @@ class PPOSoftpromptOrchestrator(PPOOrchestrator):
                 self.pipeline_iterator = iter(self.pipeline_loader)
                 batch = next(self.pipeline_iterator)
 
+            exp_generate_time = time()
             samples = self.rl_model.generate(**batch)
+            stats["exp_generate_time"] = time() - exp_generate_time
 
+            # here, we take care to handle additional softprompt indices
             query_len = batch.input_ids.shape[1] + self.n_soft_tokens
             query_tensors = samples[:, : query_len]
             response_tensors = samples[:, query_len :] # ignore softprompt padding index tokens
             texts = self.rl_model.tokenizer.batch_decode(
                 samples, skip_special_tokens=True
             )
-            scores = torch.as_tensor(self.score(texts))
+            exp_score_time = time()
+            scores = torch.as_tensor(self.score(texts), device=samples.device)
+            stats["exp_score_time"] = time() - exp_score_time
+
+            # store statistics of the initial rollout as reference
+            if self.ref_mean is None:
+                self.ref_mean, self.ref_std = scores.mean(), scores.std()
+            all_scores_mean, all_scores_std = self.running.update(scores)
+            stats["exp_scores_mean"] = all_scores_mean
+            stats["exp_scores_std"] = all_scores_std
+            stats["running_mean"] = self.running.mean
+            stats["running_std"] = self.running.std
+
+            if self.rl_model.config.method.scale_reward == "running":
+                scores /= self.running.std
+            elif self.rl_model.config.method.scale_reward == "ref":
+                scores /= self.ref_std
+
+            clip_reward = self.rl_model.config.method.cliprange_reward
+            if clip_reward:
+                scores = torch.clip(scores, -clip_reward, clip_reward)
 
             # Precompute logprobs, values
+            all_tokens, attention_mask, position_ids = self.rl_model.get_model_inputs(
+                query_tensors.to(response_tensors.device), response_tensors
+            )
             with torch.no_grad():
-                logits, _, v = self.rl_model.model(samples)
+                logits, *_, v = self.rl_model.model(
+                    all_tokens, attention_mask=attention_mask, position_ids=position_ids
+                )
                 # TODO(dahoas): When hydra model works need to also support generation on hydra head
                 if hasattr(self.rl_model.model, "frozen_head"):
                     ref_logits = self.rl_model.model.forward_hydra(
-                        samples, return_dict=False
+                        all_tokens,
+                        attention_mask=attention_mask,
+                        position_ids=position_ids,
+                        return_dict=False,
                     )
                 else:
-                    ref_logits, _, _ = self.ref_model(samples.cpu())
+                    ref_logits, _, *_ = self.ref_model(
+                        all_tokens.cpu(),
+                        attention_mask=attention_mask.cpu(),
+                        position_ids=position_ids.cpu(),
+                    )
 
             ref_logits = ref_logits.to(self.rl_model.accelerator.device)
-            logprobs = logprobs_from_logits(logits[:, :-1, :], samples[:, 1:])
+            logprobs = logprobs_from_logits(logits[:, :-1, :], all_tokens[:, 1:])
             ref_logprobs = logprobs_from_logits(
-                ref_logits[:, :-1, :], samples[:, 1:]
+                ref_logits[:, :-1, :], all_tokens[:, 1:]
             )
             start = query_tensors.size()[1] - 1
             end = query_tensors.size()[1] + response_tensors.size()[1] - 1
@@ -96,8 +134,11 @@ class PPOSoftpromptOrchestrator(PPOOrchestrator):
             ]
             ppo_rl_elements += new_ppo_rl_elements
 
-        stats = {"exp_time": exp_time}
-        self.rl_model.accelerator.log(stats, step=iter_count)
+        stats["kl_ctl_value"] = self.rl_model.kl_ctl.value
+        stats["exp_time"] = exp_time
+
+        if not ray.is_initialized():
+            self.rl_model.accelerator.log(stats, step=iter_count)
 
         # Push samples and rewards to model's rollout storage
         self.rl_model.push_to_store(ppo_rl_elements)

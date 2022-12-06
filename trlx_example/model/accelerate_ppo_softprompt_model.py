@@ -1,28 +1,17 @@
-import os
-from abc import abstractmethod
-from typing import Dict, Iterable, Tuple
 import copy
 from time import time
 
 import torch
 import torch.nn.functional as F
 from torch import nn
-from accelerate import Accelerator
-from torch.utils.data import DataLoader
-from torchtyping import TensorType
-from tqdm import tqdm
-from transformers import AutoConfig, AutoTokenizer
 
 import wandb
-from trlx.data.accelerate_base_datatypes import PromptBatch
 from trlx.data.configs import TRLConfig
-from trlx.model import BaseRLModel, register_model
-from trlx.model.accelerate_base_model import AccelerateRLModel
+from trlx.model import register_model
+from trlx.model.nn.ppo_models import CausalLMHydraWithValueHead
 from trlx.model.accelerate_ppo_model import AcceleratePPOModel
-from trlx.model.nn.ppo_models import GPTHeadWithValueModel, GPTHydraHeadWithValueModel
-from trlx.pipeline.ppo_pipeline import PPORolloutStorage
-from trlx.utils import Clock, rampup_decay, safe_mkdir, topk_mask
-from trlx.utils.modeling import clip_by_value, logprobs_from_logits, whiten
+
+import ray
 
 
 class SoftEmbedding(nn.Module):
@@ -117,15 +106,15 @@ class AcceleratePPOSoftpromptModel(AcceleratePPOModel):
 
     def get_arch(self, config: TRLConfig):
         # TODO: set only self.learned_embedding as learnable parameter in case of fully frozen layers model
-        model = GPTHydraHeadWithValueModel(
-            self.config.model.model_path, self.config.model.num_layers_unfrozen
+        model = CausalLMHydraWithValueHead(
+            config.model.model_path, config.model.num_layers_unfrozen
         )
 
         # if all layers are frozen, freeze all params. Softprompt will still be tuned
-        if self.config.model.num_layers_unfrozen == 0:
+        if config.model.num_layers_unfrozen == 0:
             model.requires_grad_(False)
 
-            if self.config.method.tune_v_head:
+            if config.method.tune_v_head:
                 model.v_head.requires_grad_(True) # unfreeze value head
         
         # here, we setup softprompts by initializing learned softprompt embedding(s)
@@ -137,12 +126,12 @@ class AcceleratePPOSoftpromptModel(AcceleratePPOModel):
         )  # number of prefix tokens added to prompt, with learned embeddings
 
         s_wte = SoftEmbedding(
-            model.gpt.get_input_embeddings(),
+            model.base_model.get_input_embeddings(),
             n_tokens=self.n_soft_tokens,
             initialize_from_vocab=config.method.initialize_from_vocab,
         )
 
-        model.gpt.set_input_embeddings(s_wte)
+        model.base_model.set_input_embeddings(s_wte)
 
         return model
     
@@ -224,7 +213,7 @@ class AcceleratePPOSoftpromptModel(AcceleratePPOModel):
                 stats["mean_reward"] = mean_reward
                 print(f"{mean_reward=}")
                 # measure softprompt drift
-                softprompt = self.model.gpt.get_input_embeddings()
+                softprompt = self.model.base_model.get_input_embeddings()
                 stats["softprompt_drift_dist"] = (softprompt.init_embedding - softprompt.learned_embedding).pow(2).sum(1).sqrt().mean()
 
             # additionally log any other metrics
@@ -245,9 +234,9 @@ class AcceleratePPOSoftpromptModel(AcceleratePPOModel):
                     columns_data.append(values)
 
             rows = list(zip(*columns_data))
-            stats["samples"] = wandb.Table(columns=columns, rows=rows)
-
             print(rows[0])
+            if not ray.is_initialized():
+                stats["samples"] = wandb.Table(columns=columns, rows=rows)
 
         return stats
 
