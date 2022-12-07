@@ -1,9 +1,11 @@
+from typing import Tuple
 import copy
 from time import time
 
 import torch
 import torch.nn.functional as F
 from torch import nn
+from torchtyping import TensorType
 
 import wandb
 from trlx.data.configs import TRLConfig
@@ -168,6 +170,27 @@ class AcceleratePPOSoftpromptModel(AcceleratePPOModel):
                 input_ids=input_ids, attention_mask=attention_mask, use_cache=False, **kwargs
             ) # disable cache needed for softprompt compatibility
 
+    def get_model_inputs(
+        self,
+        query_tensors: TensorType["batch_size", "query_size"],
+        response_tensors: TensorType["batch_size", "response_size"],
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        tokens = torch.cat((query_tensors, response_tensors), dim=1)
+        attention_mask = (
+            tokens.not_equal(self.tokenizer.pad_token_id).long().to(tokens.device)
+        )
+        # to handle extra softprompts, set attention at softprompt indices
+        first_non_pad_indices = torch.argmax(attention_mask, dim=1)
+        for batch_idx, first_non_pad_idx in enumerate(first_non_pad_indices.tolist()):
+            start = first_non_pad_idx - self.n_soft_tokens
+            end = first_non_pad_idx
+            attention_mask[batch_idx, start:end] = 1.
+
+        # For a proper positional encoding in case of left padding
+        position_ids = attention_mask.cumsum(-1) - 1
+        position_ids.masked_fill_(attention_mask.eq(0), 0)
+        return tokens, attention_mask, position_ids
+    
     def evaluate(self):
         """Samples model on `eval_prompts`, logs stats with `reward_fn` or `metric_fn` if provided"""
         stats = {}
