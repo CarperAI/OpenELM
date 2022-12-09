@@ -1,5 +1,5 @@
 model: codegen-350M-mono
-checkpoints_dir: ./checkpoints/
+checkpoints_dir: checkpoints
 device: cuda
 seed: 42
 deterministic: False
