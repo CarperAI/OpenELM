@@ -1,4 +1,5 @@
-# ELM
+[![DOI](https://zenodo.org/badge/532259603.svg)](https://zenodo.org/badge/latestdoi/532259603)
+# OpenELM
 
 This repository is a replication of [Evolution Through Large Models](https://arxiv.org/abs/2206.08896), a recent paper from OpenAI exploring the links between large language models (LLMs) and evolutionary computing, particularly focused on code generation.
 
@@ -7,16 +8,51 @@ evolutionary algorithms provide a way to generate code by making mutations to kn
 
 This project aims to replicate the ELM paper in the original [Sodarace](https://doi.org/10.1162/ARTL_a_00185) environment, before applying the technique to more complex code generation problems.
 
-For more details, see our full research proposal at https://carperai.notion.site/ELM-e8f37b2649944259b1abf9ccaa4edae2
+For more details, see our full research proposal at https://carperai.notion.site/ELM-e8f37b2649944259b1abf9ccaa4edae2. The release blog post: https://carper.ai/openelm-release.
+
+# Architecture
+Roughly, ELM consists of a pipeline of different components:
+```html
++-------------+                     +-------------+         
+|  MapElites  | <-----------------> | Environment | 
++------+------+                     +------+------+         
+       |                                   ^                         
+       | collect samples                   |                         
+       v                                   v                         
++------+---------+     finetune    +-------+--------+    mutate and execute   +----------------+
+| Conditional RL | --------------> | Language model | <---------------------> | Sandbox server |
++----------------+                 +----------------+                         +----------------+
+```
+We currently implemented MapElites, Environment, a part of the Language model mutation operator (prompt mutation), and the sandbox server.
+
+In the next stage, we will complete the conditional generation with RL pipeline.
+
+# Running ELM
+Currently, we can run the MAP-Elites algorithm on [a few environments](https://github.com/CarperAI/OpenELM/blob/main/elm/environments/environments.py), apply [prompt mutations](https://github.com/CarperAI/OpenELM/blob/main/elm/diff_model.py), and connect with [sandbox server](https://github.com/CarperAI/OpenELM/tree/main/elm/sandbox). The RL components are still on-going.
+
+## Setting up the sandbox
+Ideally, please follow the [sandboxing readme](https://github.com/CarperAI/OpenELM/tree/main/elm/sandbox) to set it up in a docker container. But for quick testing purpose, one may try the following:
+```python
+cd elm/sandbox/server
+export FLASK_APP=index.py
+flask run
+```
+## Running the MAP-Elites
+We have a few toy environments implemented as well as the Sodarace environment in the ELM paper. One may try to run the following (after setting up with the sandbox server in the same machine).
+```python
+python3 run_elm.py run_name=test
+python3 run_elm.py --config-name=elm_image_cfg  run_name=test
+```
+
 
 # Milestones & Progress
 
 Weekly meetings are in the EleutherAI discord at 20:00 UTC on Fridays.
 
-- [ ] Sodarace environment implemented
-- [ ] Stage 1: Diff Models & MAP-Elites
-  - [ ] Prompt Engineering on CodeGen
-  - [ ] Train diff model
-  - [ ] MAP-Elites implemented
+- [x] Sodarace environment implemented
+- [x] Stage 1: Diff Models & MAP-Elites
+  - [x] Prompt Engineering on CodeGen
+  - [x] Train diff model
+  - [x] MAP-Elites implemented
 - [ ] Stage 2: Train LLM on generated data
 - [ ] Stage 3: Conditional generation with PPO
