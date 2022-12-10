@@ -224,7 +224,7 @@ class ImageOptim(BaseEnvironment[ImageGeneration]):
         Returns:
             a tuple of the code string and the returning result (None if there is error).
         """
-        new_images = self.generate_program(x["program_str"])
+        new_images = self.generate_program(x.program_str)
         return new_images
 
     def fitness(self, x: ImageGeneration) -> float:
