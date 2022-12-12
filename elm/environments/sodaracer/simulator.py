@@ -856,7 +856,7 @@ class IESoRWorld:
         #     }
         #
         #     //We now have everything we need to identify our initial morphology
-        #     //we can see the inital width/height of the object
+        #     //we can see the initial width/height of the object
         #     //as well as the offset (startx, starty) of the object
         #     initMorph["width"] = maxX - minX;
         initial_morphology["width"] = max_x - min_x
@@ -1031,7 +1031,7 @@ class IESoRWorld:
             body_def.type = b2.b2_dynamicBody
         # }
         #
-        # //we set the position to the intial x,y coordinate
+        # //we set the position to the initial x,y coordinate
         # bodyDef->position.Set(entity["x"].asDouble(), entity["y"].asDouble());
         body_def.position = b2.b2Vec2(entity["x"], entity["y"])
         #
