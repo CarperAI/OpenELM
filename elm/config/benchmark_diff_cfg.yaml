@@ -1,5 +1,4 @@
-model: codegen-350M-mono
-checkpoints_dir: checkpoints
+model: CarperAI/diff-codegen-350m-v1
 cuda: True
 seed: 42
 deterministic: False
@@ -15,6 +14,9 @@ fp16: False
 pad_token: 50256
 tasks: ["parity"]
 run_name: ???  # Mandatory string argument that describes the run.
+
+# diff parameters
+num_process: 5
 
 ###################################################################################################
 # Hydra config overrides:
