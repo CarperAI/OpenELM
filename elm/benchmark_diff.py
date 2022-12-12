@@ -104,7 +104,7 @@ def main(cfg):
     mutated_encoding = tokenizer(
         [mutated_str],
         return_tensors="pt",
-    )
+    ).to(device)
     token_len = mutated_encoding['input_ids'].shape[1]
 
     # Generate codes
@@ -127,8 +127,12 @@ def main(cfg):
             # split the diff text according to <NME>, <BEF>, <MSG>, <DFF>.
             parsed = split_diff(text)
             # truncate the diff hunk at the first line not starting with " ", "+", "-", or "@".
-            diff_hunk = end_of_diff.split(parsed["diff"])[0]
-            codes.append(apply_diff(function_str, diff_hunk))
+            if parsed and all([s in parsed for s in ["name", "file", "message", "diff"]]):
+                diff_hunk = end_of_diff.split(parsed["diff"])[0]
+                codes.append(apply_diff(function_str, diff_hunk))
+            else:
+                # Invalid format. No patching.
+                codes.append(function_str)
 
     # Evaluate the codes in threads (most importantly, separate reliability_guard in separate
     # threads as it would otherwise disable things in this current thread).
