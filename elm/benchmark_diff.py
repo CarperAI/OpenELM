@@ -13,7 +13,7 @@ from omegaconf import OmegaConf
 
 from elm.codegen.codegen_utilities import set_seed
 from elm.constants import SRC_PATH
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import AutoTokenizer, AutoModelForCausalLM, AutoConfig
 from benchmarks import parity_reference, eval_code_string
 from elm.util.diff_eval import split_diff, apply_diff
 
@@ -90,14 +90,18 @@ def main(cfg):
     print("-----------------  End -----------------")
 
     device = torch.device("cuda" if cfg.cuda else "cpu")
+    config = AutoConfig.from_pretrained(cfg.model)
+    # Sometimes our model just fresh came out of training. Force use_cache to be true.
+    config.use_cache = True
     tokenizer = AutoTokenizer.from_pretrained(cfg.model)
     if cfg.gpus > 1:
         model = torch.nn.DataParallel(
-            AutoModelForCausalLM.from_pretrained(cfg.model)
+            AutoModelForCausalLM.from_pretrained(cfg.model, config=config),
+            device_ids=list(range(cfg.gpus))
         ).to(device)
         model.generate = model.module.generate
     else:
-        model = AutoModelForCausalLM.from_pretrained(cfg.model).to(device)
+        model = AutoModelForCausalLM.from_pretrained(cfg.model, config=config).to(device)
 
     # Prepare the mutated codes with cfg.n_bugs bugs.
     mutated_str, function_str = mutate_code(n_bugs=cfg.n_bugs, task=cfg.tasks[0])
