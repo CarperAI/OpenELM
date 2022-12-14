@@ -7,7 +7,7 @@ from typing import Iterator
 import hydra
 import numpy as np
 import torch
-from constants import SRC_PATH
+from elm.constants import SRC_PATH
 from omegaconf import OmegaConf
 from tqdm import tqdm
 
