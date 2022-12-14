@@ -1,0 +1,39 @@
+# See https://pre-commit.com for more information
+# See https://pre-commit.com/hooks.html for more hooks
+# This should be the _latest_ version of python supported by us
+default_language_version:
+  python: python3.9
+repos:
+-   repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.3.0
+    hooks:
+    -   id: trailing-whitespace
+    -   id: end-of-file-fixer
+    -   id: check-yaml
+-   repo: https://github.com/psf/black
+    rev: 22.10.0
+    hooks:
+    -   id: black
+        files: ^(elm|test|setup.py)/
+-   repo: https://github.com/pycqa/isort
+    rev: 5.10.1
+    hooks:
+      - id: isort
+        name: isort (python)
+-   repo: https://github.com/pycqa/flake8
+    rev: 5.0.4
+    hooks:
+      - id: flake8
+        args:
+          - '--ignore=E203,E501,W503,F811'
+          - '--max-line-length=88'
+          - '--statistics'
+          - '--count'
+          - '--show-source'
+-   repo: https://github.com/pycqa/pydocstyle
+    rev: 6.1.1
+    hooks:
+    -   id: pydocstyle
+        args:
+          - '--convention=google'
+          - '--add-ignore=D10'
