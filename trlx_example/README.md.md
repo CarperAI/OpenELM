@@ -23,7 +23,7 @@ Besides the PPO-specific settings, we can experiment with some main config optio
 - Tested so far using trlx on this [commit](https://github.com/CarperAI/trlx/tree/33deeb1a3534ee46555e40a70c64d12bcabd73db)
 - In the config, the `seq_length` is manually edited to be equal to `max_length` + `n_soft_tokens`
 - Caching in `generate` function is disabled as it currently breaks the forward pass with Soft Prompts
-- Soft prompt embeddings in sequence are set between padding token embeddings, and main prompt embeddings 
+- Soft prompt embeddings in sequence are set between padding token embeddings, and main prompt embeddings
 
 ## Acknowledgements
 Thanks to Kip for an [example implementation](https://github.com/kipgparker/soft-prompt-tuning) of a Soft Prompt module used in the experiments here.

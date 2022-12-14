@@ -1,15 +1,15 @@
-from datasets import load_dataset
-from transformers import pipeline
+from dataclasses import dataclass
 
 import trlx
-from trlx.data.configs import TRLConfig
-from trlx.data.method_configs import register_method
-from trlx.model.nn.ppo_models import PPOConfig
-from dataclasses import dataclass
+from datasets import load_dataset
 
 # to register the added softprompt model, and supported orchestrator, need to import here
 from model.accelerate_ppo_softprompt_model import AcceleratePPOSoftpromptModel
 from orchestrator.ppo_softprompt_orchestrator import PPOSoftpromptOrchestrator
+from transformers import pipeline
+from trlx.data.configs import TRLConfig
+from trlx.data.method_configs import register_method
+from trlx.model.nn.ppo_models import PPOConfig
 
 
 @dataclass
@@ -22,9 +22,7 @@ class PPOSoftpromptConfig(PPOConfig):
 
 
 if __name__ == "__main__":
-    sentiment_fn = pipeline(
-        "sentiment-analysis", "lvwerra/distilbert-imdb", device=-1
-    )
+    sentiment_fn = pipeline("sentiment-analysis", "lvwerra/distilbert-imdb", device=-1)
 
     def reward_fn(samples):
         outputs = sentiment_fn(samples, return_all_scores=True)
@@ -36,13 +34,13 @@ if __name__ == "__main__":
     prompts = [" ".join(review.split()[:4]) for review in imdb["text"]]
 
     config = TRLConfig.load_yaml("configs/ppo_softprompt_config.yml")
-    
+
     model = trlx.train(
         "lvwerra/gpt2-imdb",
         reward_fn=reward_fn,
         prompts=prompts,
         eval_prompts=["I don't know much about Hungarian underground"] * 64,
-        config=config
+        config=config,
     )
 
     print("DONE!")

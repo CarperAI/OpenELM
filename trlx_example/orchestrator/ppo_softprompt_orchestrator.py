@@ -1,17 +1,17 @@
+from time import time
 from typing import Callable
 
+import ray
 import torch
 from trlx.data.accelerate_base_datatypes import PromptBatch
 from trlx.data.ppo_types import PPORLElement
 from trlx.model import BaseRLModel
 from trlx.orchestrator import register_orchestrator
+from trlx.orchestrator.ppo_orchestrator import PPOOrchestrator
 from trlx.pipeline import BasePipeline
 from trlx.utils import Clock
 from trlx.utils.modeling import logprobs_from_logits
-from trlx.orchestrator.ppo_orchestrator import PPOOrchestrator
 
-from time import time
-import ray
 
 @register_orchestrator
 class PPOSoftpromptOrchestrator(PPOOrchestrator):
@@ -25,7 +25,7 @@ class PPOSoftpromptOrchestrator(PPOOrchestrator):
     ):
         super().__init__(model, pipeline, reward_fn, metric_fn, chunk_size)
         self.n_soft_tokens = model.model.base_model.get_input_embeddings().n_tokens
-    
+
     def make_experience(self, num_rollouts: int = 1024, iter_count: int = 0):
         """
         Takes `num_rollouts` prompts from `pipeline`, samples model, computes KL againts a reference model appends PPOElements to model's `store`
@@ -49,8 +49,10 @@ class PPOSoftpromptOrchestrator(PPOOrchestrator):
 
             # here, we take care to handle additional softprompt indices
             query_len = batch.input_ids.shape[1] + self.n_soft_tokens
-            query_tensors = samples[:, : query_len]
-            response_tensors = samples[:, query_len :] # ignore softprompt padding index tokens
+            query_tensors = samples[:, :query_len]
+            response_tensors = samples[
+                :, query_len:
+            ]  # ignore softprompt padding index tokens
             texts = self.rl_model.tokenizer.batch_decode(
                 samples, skip_special_tokens=True
             )
