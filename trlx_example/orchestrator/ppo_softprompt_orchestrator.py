@@ -29,6 +29,8 @@ class PPOSoftpromptOrchestrator(PPOOrchestrator):
     def make_experience(self, num_rollouts: int = 1024, iter_count: int = 0):
         """
         Takes `num_rollouts` prompts from `pipeline`, samples model, computes KL againts a reference model appends PPOElements to model's `store`
+
+        Modified to handle indices containing soft prompts
         """
         ppo_rl_elements = []
         stats = {}

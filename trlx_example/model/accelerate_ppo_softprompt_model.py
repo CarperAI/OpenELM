@@ -24,7 +24,8 @@ class SoftEmbedding(nn.Module):
         random_range: float = 0.5,
         initialize_from_vocab: bool = True,
     ):
-        """appends learned embedding as prefix
+        """
+        appends learned embedding as prefix
 
         From: https://github.com/kipgparker/soft-prompt-tuning
 
@@ -38,7 +39,7 @@ class SoftEmbedding(nn.Module):
         self.wte = wte
         self.n_tokens = n_tokens
         self.padding_token_id = 50256 # used when input tensors are prefix padded
-        self.learned_embedding = nn.parameter.Parameter(
+        self.learned_embedding = nn.parameter.Parameter( # dim: (n_tokens, embedding_dim)
             self.initialize_embedding(
                 wte, n_tokens, random_range, initialize_from_vocab
             )
@@ -52,7 +53,9 @@ class SoftEmbedding(nn.Module):
         random_range: float = 0.5,
         initialize_from_vocab: bool = True,
     ):
-        """initializes learned embedding
+        """
+        initializes learned embedding
+        
         Args:
             same as __init__
         Returns:
@@ -65,30 +68,48 @@ class SoftEmbedding(nn.Module):
         )
 
     def forward(self, tokens):
-        """run forward pass
+        """
+        run forward pass
+        
         Args:
             tokens (torch.long): input tokens before encoding
         Returns:
-            torch.float: encoding of text concatenated with learned task specifc embedding
+            seq_embedding (torch.float): encoding of text concatenated with learned task specifc embedding
         """
-        prompt_tokens = tokens[:, self.n_tokens :] # without extra soft prompt padding
+        prompt_tokens = tokens[:, self.n_tokens :] # dim: (batch_size, seq_length) - without soft prompt padding indices
         if self.padding_token_id in prompt_tokens[:, 0]: # padding is applied as prefix
-            seq_embedding = self.wte(tokens)
+            seq_embedding = self.wte(tokens) # dim: (batch_size, seq_length, embedding_dim)
             padding_tensor = torch.tensor([self.padding_token_id]).to(seq_embedding.device)
             
             # index in each sequence in tokens just after last prefix padding
             # this would be where the (first) soft prompt embedding should be set
             first_prompt_indices = (prompt_tokens == padding_tensor).int().argmin(axis=1)
-            
-            # replace embeddings at soft prompt indices with correct soft embeddings
-            for batch_idx, first_prompt_idx in enumerate(first_prompt_indices.tolist()):
-                seq_embedding[batch_idx, first_prompt_idx:first_prompt_idx+self.n_tokens] = self.learned_embedding
 
-            return seq_embedding
+            # for asserting that the first main sequence token embedding isn't modified by accident
+            first_prompt_indices_full_seq = (tokens == padding_tensor).int().argmin(axis=1)
+            first_item_idx = first_prompt_indices_full_seq[0]
+            main_embedding_before_soft_prompt_assign = seq_embedding[0, first_item_idx]
+            
+            # for each batch sequence, replace embeddings at soft prompt indices with correct soft embeddings
+            for batch_idx, first_prompt_idx in enumerate(first_prompt_indices.tolist()):
+                # indices for assigning soft embeddings
+                start = first_prompt_idx
+                end = first_prompt_idx + self.n_tokens
+
+                seq_embedding[batch_idx, start:end] = self.learned_embedding
+
+                # debug only
+                if batch_idx == 0:
+                    first_main_embedding_after_soft_embedding_assign = seq_embedding[0, first_item_idx]
+                    assert torch.equal(main_embedding_before_soft_prompt_assign, first_main_embedding_after_soft_embedding_assign), "Error: soft prompt overwrote main prompt embeddings"
         else:
             input_embedding = self.wte(prompt_tokens)
             learned_embedding = self.learned_embedding.repeat(input_embedding.size(0), 1, 1)
-            return torch.cat([learned_embedding, input_embedding], 1)
+            seq_embedding = torch.cat([learned_embedding, input_embedding], 1)
+        
+        assert seq_embedding.shape[1] == prompt_tokens.shape[1] + self.n_tokens, "Number of token embeddings with soft prompts should be number of prompt tokens + number of soft tokens"
+        
+        return seq_embedding
 
 
 @register_model
@@ -105,9 +126,12 @@ class AcceleratePPOSoftpromptModel(AcceleratePPOModel):
         ), "Number of soft prompt tokens should be >=1"
 
         self.soft_dummy_token_id = 50256  # dummy token for padding soft prompts
+        self.measure_soft_embedding_drift = config.method.measure_soft_embedding_drift
 
     def get_arch(self, config: TRLConfig):
-        # TODO: set only self.learned_embedding as learnable parameter in case of fully frozen layers model
+        """
+        Load model, and set Soft Prompt module for input embeddings
+        """
         model = CausalLMHydraWithValueHead(
             config.model.model_path, config.model.num_layers_unfrozen
         )
@@ -137,9 +161,18 @@ class AcceleratePPOSoftpromptModel(AcceleratePPOModel):
 
         return model
     
-    def generate(self, input_ids, attention_mask=None, **kwargs):
-        """Wraps hf's `generate` adding some specific method's defaults"""
-        # pad for soft prompts (using same token as for padding)
+    def generate(
+        self, 
+        input_ids: TensorType["batch_size", "seq_length"], 
+        attention_mask: TensorType["batch_size", "seq_length"]=None, 
+        **kwargs
+    ):
+        """
+        Wraps hf's `generate` adding some specific method's defaults
+        
+        Modified to handle indices containing soft prompts
+        """
+        # pad for soft prompt indices (using same token as for padding)
         input_ids = torch.cat(
             [
                 torch.full(
@@ -151,7 +184,7 @@ class AcceleratePPOSoftpromptModel(AcceleratePPOModel):
         )
         input_ids = input_ids.to(self.accelerator.device)
         if attention_mask is not None:
-            # extend for soft prompts (by extending mask at the end of tensor)
+            # extend for soft prompt indices (by extending mask at the end of tensor)
             attention_mask = torch.cat(
                 [
                     attention_mask,
@@ -175,6 +208,11 @@ class AcceleratePPOSoftpromptModel(AcceleratePPOModel):
         query_tensors: TensorType["batch_size", "query_size"],
         response_tensors: TensorType["batch_size", "response_size"],
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """
+        Used in orchestrator and loss calculation, to compute logprobs and values
+        
+        Modified to handle indices containing soft prompts
+        """
         tokens = torch.cat((query_tensors, response_tensors), dim=1)
         attention_mask = (
             tokens.not_equal(self.tokenizer.pad_token_id).long().to(tokens.device)
@@ -192,7 +230,11 @@ class AcceleratePPOSoftpromptModel(AcceleratePPOModel):
         return tokens, attention_mask, position_ids
     
     def evaluate(self):
-        """Samples model on `eval_prompts`, logs stats with `reward_fn` or `metric_fn` if provided"""
+        """
+        Samples model on `eval_prompts`, logs stats with `reward_fn` or `metric_fn` if provided
+        
+        Modified to support plotting of metrics involving soft prompts
+        """
         stats = {}
         all_samples = []
         generate_time = time()
@@ -235,10 +277,12 @@ class AcceleratePPOSoftpromptModel(AcceleratePPOModel):
                 columns_data.append(rewards)
                 stats["mean_reward"] = mean_reward
                 print(f"{mean_reward=}")
-                # measure softprompt drift
+
+            # log Euclidean distance between init and current Soft Prompt embedding parameters
+            if self.measure_soft_embedding_drift:
                 softprompt = self.model.base_model.get_input_embeddings()
                 stats["softprompt_drift_dist"] = (softprompt.init_embedding - softprompt.learned_embedding).pow(2).sum(1).sqrt().mean()
-
+            
             # additionally log any other metrics
             if self.metric_fn:
                 metric_time = time()
