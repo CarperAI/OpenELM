@@ -18,6 +18,7 @@ class PPOSoftpromptConfig(PPOConfig):
     n_soft_tokens: int = None
     initialize_from_vocab: bool = True  # of softprompt
     tune_v_head: bool = True  # set in case whole model is frozen (except softprompt)
+    measure_soft_embedding_drift: bool = True  # for debugging purposes
 
 
 if __name__ == "__main__":

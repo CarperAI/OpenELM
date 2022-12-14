@@ -5,7 +5,7 @@ model:
   num_layers_unfrozen: 0  # Number of bottom layers to freeze during training
 
 train:
-  seq_length: 128  # Size of LM context
+  seq_length: 68  # Size of LM context
   epochs: 5000 # Train for max(epochs, total_steps)
   total_steps: 30000  # Train for max(epochs, total_steps)
   batch_size: 128  # batch size
@@ -24,9 +24,10 @@ train:
 
 method:
   name: 'pposoftpromptconfig'  # Name of RL method config
-  n_soft_tokens: 40  # Number of (prefix) soft prompt tokens
-  initialize_from_vocab: False  # Initialize learned soft prompt embeddings from vocab
+  n_soft_tokens: 20  # Number of (prefix) soft prompt tokens
+  initialize_from_vocab: True  # Initialize learned soft prompt embeddings from vocab
   tune_v_head: True # if whole model is frozen (except for softprompt), this can be set
+  measure_soft_embedding_drift: True # enable logging of distance between init and learned soft prompt
   num_rollouts: 128  # Number of rollouts to collect per epoch
   chunk_size: 128  # Number of rollouts to collect in one loop of orchestrator
   ppo_epochs: 4  # Number of ppo epochs
