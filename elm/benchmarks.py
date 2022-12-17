@@ -112,6 +112,7 @@ def mutate_code(n_bugs: int = 5, task: str = "parity"):
     """Mutate code to create n bugs."""
     mutation_template = [
         "# A buggy implementation\n#!/usr/bin/python3\n",
+        "",  # placeholder for the context, e.g., the buggy code
         "\n# Fixed bugs\ndef",
     ]
     if task == "parity":
@@ -123,7 +124,7 @@ def mutate_code(n_bugs: int = 5, task: str = "parity"):
             ' Return 0 for even parity, 1 for odd parity."""\n    bit_sum = sum(['
             "{}1,{}2,{}3,{}4])\n    return bit_sum % {}".format(*vars)
         )
-        mutation_template.insert(1, func_str)
+        mutation_template[1] = func_str
         return "".join(mutation_template)
     else:
         raise ValueError(f"Unknown task: {task}")

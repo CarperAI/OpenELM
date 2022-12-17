@@ -1,5 +1,6 @@
 import re
 from typing import Optional
+from enum import Enum
 
 line_number_pattern = re.compile(r"(?m)^@@ -(\d*?),(\d*?) \+(\d*?),(\d*?) @@")
 diff_pattern = re.compile(r"""<NME> (?P<name>.*?)
@@ -7,6 +8,26 @@ diff_pattern = re.compile(r"""<NME> (?P<name>.*?)
 <MSG> (?P<message>(.|\n)*?)
 <DFF> (?P<diff>(.|\n)*)""")
 hunk_split_pattern = re.compile(r"(?m)^(@@ .*? @@).*\n")
+
+
+class DiffState(Enum):
+    """
+    An Enum keeping track of the validity of the diff data. It is the return of the helper function `verify_diff`.
+    Binary codes help internally, as some errors are additive (e.g., can have both invalid text and invalid line num).
+    But we convert the binary codes into Enum for better readability.
+    """
+    VALID = 0b000  # valid diff
+
+    # The following are errors that can still be either ignored or fixed.
+    INVALID_TEXT = 0b001  # pre-diff texts cannot be found in the context.
+    INVALID_LINE_NUM = 0b010  # the numbers in @@ -x,y +a,b @@ are invalid (but can be parsed).
+    INVALID_TEXT_AND_LINE_NUM = 0b011  # both 0b001 and 0b010.
+
+    # The following are format errors that cannot be ignored.
+    BAD_FORMAT = 0b100  # cannot be parsed according to <NME> ...\n<BEF> ...\n<MSG> ...\n<DFF> @@ ... @@\n...
+    BAD_DIFF_HUNK_FORMAT = 0b101  # diff hunk contains lines whose initial character is not one of ' ', '+', '-'
+    BAD_LINE_NUM_FORMAT = 0b110  # the @@ ... @@ bracket can be found but numbers cannot be parsed.
+    BAD_HUNK_AND_LINE_FORMAT = 0b111  # both 0b110 and 0b101.
 
 
 def split_diff(content: str) -> dict:
@@ -172,7 +193,7 @@ def apply_diff(file: str, diff: str, use_line_number=False, allow_add_file=True)
     return file
 
 
-def verify_diff(diff_text: str) -> int:
+def verify_diff(diff_text: str) -> DiffState:
     """
     Verify the validity of a complete diff text.
 
@@ -181,16 +202,7 @@ def verify_diff(diff_text: str) -> int:
             The overall format conforms "<NME> ...\n<BEF> ...\n<MSG> ...\n<DFF> ..." and the text
             after <DFF> has 1 or more lines of "@@ -x,y +a,b @@" followed by the corresponding hunk.
     Returns:
-        a custom status code (binary):
-            0b000: valid diff.
-            0b001: pre-diff texts cannot be found in the context.
-            0b010: the numbers in @@ -x,y +a,b @@ are invalid.
-            0b011: both 0b001 and 0b010.
-            0b100: cannot be parsed according to <NME> ...\n<BEF> ...\n<MSG> ...\n<DFF> @@ ... @@\n...
-            0b101: diff hunk contains lines whose initial character is not one of ' ', '+', '-'
-            0b110: the @@ ... @@ bracket can be found but numbers cannot be parsed.
-            0b111: both 0b110 and 0b101.
-        For convenience, we return the code as a Python int.
+        A DiffState (see above).
     """
     diff_dict = split_diff(diff_text)
     line_offset = 0
@@ -198,15 +210,14 @@ def verify_diff(diff_text: str) -> int:
     keys = ["name", "file", "message", "diff"]
     for key in keys:
         if key not in diff_dict:
-            return 0b100  # Invalid overall format
+            return DiffState(0b100)  # Invalid overall format
 
     diff_parts = hunk_split_pattern.split(diff_dict["diff"].lstrip())
     if not diff_parts:
-        return 0b100  # Invalid overall format
+        return DiffState(0b100)  # Invalid overall format
 
     context_mismatch, line_number_mismatch = False, False
     bad_diff_hunk, bad_line_number = False, False
-    file_by_line = diff_dict["file"].split("\n")
 
     i = 0 if diff_parts[0] else 1
     while i < len(diff_parts) - 1:  # Need at least a pair of '@@ ... @@' and diff hunk to continue
@@ -218,9 +229,9 @@ def verify_diff(diff_text: str) -> int:
         if diff_dict["file"] == "ADDFILE":
             if len(diff_parts) != i or not line_info or line_info[:3] != (0, 0, 0) or \
                     line_info[3] != len(diff_content[1].strip("\n").split("\n")) or diff_content[0]:
-                return 0b110
+                return DiffState(0b110)
             else:
-                return 0b000
+                return DiffState(0b000)
 
         if not line_info or len(line_info) != 4:
             bad_line_number = True
@@ -251,6 +262,6 @@ def verify_diff(diff_text: str) -> int:
                 line_offset += len(diff_content[1]) - line_info[1]
 
     if bad_diff_hunk or bad_line_number:
-        return bad_diff_hunk * 0b001 + bad_line_number * 0b010 + 0b100
+        return DiffState(bad_diff_hunk * 0b001 + bad_line_number * 0b010 + 0b100)
     else:
-        return context_mismatch * 0b001 + line_number_mismatch * 0b010
+        return DiffState(context_mismatch * 0b001 + line_number_mismatch * 0b010)

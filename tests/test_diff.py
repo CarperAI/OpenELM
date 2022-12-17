@@ -1,6 +1,6 @@
 import itertools
 
-from elm.util.diff_eval import apply_diff, parse_line_info, replace_text, split_diff, verify_diff
+from elm.util.diff_eval import apply_diff, parse_line_info, replace_text, split_diff, verify_diff, DiffState
 
 
 def test_diff():
@@ -89,60 +89,60 @@ def test_verify_diff():
         "<NME> test.py\n<BEF> cccccc\n<MSG> asldkjf\n<DFF> @@ -1,1 +1,3 @@\n"
         "+aaaaaaa\n+bbbbbbb\n cccccc\n"
     )
-    assert verify_diff(test) == 0
+    assert verify_diff(test) == DiffState(0)
     # Multiple valid
     test = (
         "<NME> test.py\n<BEF> cccccc\ndddddd\n<MSG> asldkjf\n<DFF> @@ -1,1 +1,3 @@\n"
         "+aaaaaaa\n+bbbbbbb\n cccccc\n@@ -2,1 +4,1 @@\n-dddddd\n+eeeeee\n"
     )
-    assert verify_diff(test) == 0
+    assert verify_diff(test) == DiffState(0)
 
     # Test ADDFILE
     test = (
         "<NME> test.py\n<BEF> ADDFILE\n<MSG> asldkjf\n<DFF> @@ -1,1 +1,3 @@\n"
         "+aaaaaaa\n+bbbbbbb\n cccccc\n"
     )
-    assert verify_diff(test) == 6  # Wrong line numbers
+    assert verify_diff(test) == DiffState(6)  # Wrong line numbers
     test = (
         "<NME> test.py\n<BEF> ADDFILE\n<MSG> asldkjf\n<DFF> @@ -0,0 +0,3 @@\n"
         "+aaaaaaa\n+bbbbbbb\n cccccc\n"
     )
-    assert verify_diff(test) == 6  # Contains lines not starting with "+"
+    assert verify_diff(test) == DiffState(6)  # Contains lines not starting with "+"
     test = (
         "<NME> test.py\n<BEF> ADDFILE\n<MSG> asldkjf\n<DFF> @@ -0,0 +0,3 @@\n"
         "+aaaaaaa\n+bbbbbbb\n+cccccc\n"
     )
-    assert verify_diff(test) == 0
+    assert verify_diff(test) == DiffState(0)
 
     test = (
         "<NME> test.py\n<BEF> cccccc\n<MSG> asldkjf\n<DFF> @@ -1,1 +1,3 @@\n"
         "+aaaaaaa\n+bbbbbbb\n ccccc\n"
     )
-    assert verify_diff(test) == 1
+    assert verify_diff(test) == DiffState(1)
     for a, b, c, d in itertools.product([0, 2], repeat=4):
         for e in ["c", ""]:
             test = (
                 f"<NME> test.py\n<BEF> cccccc\n<MSG> asldkjf\n<DFF> @@ -{a},{b} +{c},{d} @@\n"
                 f"+aaaaaaa\n+bbbbbbb\n ccccc{e}\n"
             )
-            assert verify_diff(test) == 2 if e == "c" else 3
+            assert verify_diff(test) == DiffState(2) if e == "c" else DiffState(3)
     test = (
         "<NME> test.py\n<BFE> cccccc\n<MSG> asldkjf\n<DFF> @@ -1,1 +1,4 @@\n"
         "+aaaaaaa\n+bbbbbbb\n cccccc\n"
     )
-    assert verify_diff(test) == 4  # Invalid format (BFE instead of BEF)
+    assert verify_diff(test) == DiffState(4)  # Invalid format (BFE instead of BEF)
     test = (
         "<NME> test.py\n<BEF> cccccc\n<MSG> asldkjf\n<DFF> @@ -1,1 +1,3 @@\n"
         "+aaaaaaa\n+bbbbbbb\n*cccccc\n"
     )
-    assert verify_diff(test) == 5  # Invalid hunk (start with other char)
+    assert verify_diff(test) == DiffState(5)  # Invalid hunk (start with other char)
     test = (
         "<NME> test.py\n<BEF> cccccc\n<MSG> asldkjf\n<DFF> @@ +1,1 -1,4 @@\n"
         "+aaaaaaa\n+bbbbbbb\n cccccc\n"
     )
-    assert verify_diff(test) == 6  # Invalid format (wrong format in @@ ... @@)
+    assert verify_diff(test) == DiffState(6)  # Invalid format (wrong format in @@ ... @@)
     test = (
         "<NME> test.py\n<BEF> cccccc\n<MSG> asldkjf\n<DFF> @@ +1,1 -1,4 @@\n"
         "+aaaaaaa\n+bbbbbbb\n*cccccc\n"
     )
-    assert verify_diff(test) == 7  # Both
+    assert verify_diff(test) == DiffState(7)  # Both

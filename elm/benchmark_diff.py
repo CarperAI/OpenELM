@@ -62,6 +62,7 @@ def mutate_code(n_bugs: int = 5, task: str = "parity") -> tuple:
     """
     mutation_template = [
         f"<NME> {task}.py\n<BEF> ",
+        "",  # placeholder for the context, e.g., the buggy code
         "\n<MSG> Fixed bugs",
     ]
     if task == "parity":
@@ -73,7 +74,7 @@ def mutate_code(n_bugs: int = 5, task: str = "parity") -> tuple:
             ' Return 0 for even parity, 1 for odd parity."""\n    bit_sum = sum(['
             "{}1,{}2,{}3,{}4])\n    return bit_sum % {}".format(*variables)
         )
-        mutation_template.insert(1, func_str)
+        mutation_template[1] = func_str
         return "".join(mutation_template), func_str
     else:
         raise ValueError(f"Unknown task: {task}")
