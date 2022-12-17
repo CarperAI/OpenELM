@@ -1,5 +1,7 @@
 import numpy as np
 from .environments import (
+    Genotype,
+    BaseEnvironment,
     FunctionOptim,
     ImageOptim,
     MatchString,
@@ -99,6 +101,7 @@ sodarace_init_args = {"seed": SQUARE_SEED,
 
 # ----- (Sample init args end) -----
 
-__all__ = [FunctionOptim, ImageOptim, MatchString, Sodarace,
+__all__ = [Genotype, BaseEnvironment,
+           FunctionOptim, ImageOptim, MatchString, Sodarace,
            IMAGE_SEED, image_init_args,
            SQUARE_SEED, sodarace_init_args]

@@ -1,23 +1,22 @@
-model: codegen-350M-mono
-checkpoints_dir: checkpoints
+model: CarperAI/diff-codegen-350m-v1
 cuda: True
-gpus: 1
 seed: 42
 deterministic: False
-fp16: False
 top_p: 0.95
 temp: 0.85
-timeout: 5.0  # Seconds
-gen_max_len: 1024
+timeout: 5  # Seconds
+gpus: 1
+gen_max_len: 128
 batch_size: 32
-evo_init_steps: 10
-evo_n_steps: 20
-behavior_n_bins: 12
-evo_history_length: 10
-evaluation_steps: 1000
+n_trials: 3200
+n_bugs: 1
+fp16: False
 pad_token: 50256
-env_name: "sodarace"
+tasks: ["parity"]
 run_name: ???  # Mandatory string argument that describes the run.
+
+# diff parameters
+num_process: 5
 
 ###################################################################################################
 # Hydra config overrides:
