@@ -34,5 +34,4 @@ jobs:
           flake8 . --count --exit-zero --ignore=E203,E501,F811 --show-source --statistics --max-line-length=88
       - name: Test with pytest
         run: |
-          pip install box2d-py -U
           pytest
