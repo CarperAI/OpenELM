@@ -3,7 +3,6 @@ wandb>=0.13
 numpy
 transformers>=4.22.0
 tokenizers
-torch
 swig==4.1.0
 box2d
 box2d-py
