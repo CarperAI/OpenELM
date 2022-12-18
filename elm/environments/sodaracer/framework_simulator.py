@@ -2,6 +2,7 @@
 Simulator.py, mostly just https://github.com/OptimusLime/iesor-physics
 translated to python
 
+Deprecated file. See simulator.py.
 """
 
 import json
