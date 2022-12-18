@@ -60,7 +60,7 @@ dev = [
     "pytest",
     "pytest-cov",
 ]
-full = [
+tinygp = [
     "pygraphviz",
     "graphviz"
 ]
