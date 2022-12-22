@@ -227,7 +227,7 @@ def verify_diff(diff_text: str) -> DiffState:
 
         # Special treatment if we are adding a new file
         if diff_dict["file"] == "ADDFILE":
-            if len(diff_parts) != i or not line_info or line_info[:3] != (0, 0, 0) or \
+            if len(diff_parts) != i or not line_info or line_info[:3] != (0, 0, 1) or \
                     line_info[3] != len(diff_content[1].strip("\n").split("\n")) or diff_content[0]:
                 return DiffState(0b110)
             else:
