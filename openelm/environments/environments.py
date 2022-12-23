@@ -106,9 +106,7 @@ class FunctionOptim(BaseEnvironment[ArrayGenotype]):
 
 
 class ImageGeneration(Genotype):
-    """
-    Genotype for generated images.
-    """
+    """Genotype for generated images."""
 
     def __init__(self, program_str: str, result_obj: dict, error_code: bool):
         self.program_str = program_str
@@ -132,6 +130,8 @@ class ImageGeneration(Genotype):
 
     def three_channel_average(self) -> Phenotype:
         """
+        Average RGB channels.
+
         Assume the input is of shape (height, width, channel), and we average each channel to get (channel,)
         """
         # Code with invalid return -> return a `None` Phenotype.
@@ -144,12 +144,12 @@ class ImageGeneration(Genotype):
 
 class ImageOptim(BaseEnvironment[ImageGeneration]):
     """
-    This will try to mutate programs that return images. Fitness is simply the absolute difference between the returning
-    image and the target image.
-    To map into the behavior space,
-        if behavior_mode=="3-channel", the image will be divided into blocks (specified in `block_size`), and average
-        values of RGB channels in each block will be put together as a point in the behavior space (average-pooling).
-    Other modes are to be added...
+    Mutate programs that return images.
+
+    Fitness is simply the absolute difference between the returning
+    image and the target image. To map into the behavior space,
+    if behavior_mode=="3-channel", the image will be divided into blocks (specified in `block_size`), and average
+    values of RGB channels in each block will be put together as a point in the behavior space (average-pooling).
     """
 
     default_diff_model_cls = PromptMutationForImgTask
@@ -199,8 +199,11 @@ class ImageOptim(BaseEnvironment[ImageGeneration]):
 
     def generate_program(self, code: str) -> list[ImageGeneration]:
         """
-        Call LM to generate a new program and run it, returning an ImageGeneration object containing the code, the
-        resulting image and the error code.
+        Call LM to generate a new program and run it.
+
+        Returns:
+            An ImageGeneration object containing the code, the resulting image
+            and the error code.
         """
         return [
             ImageGeneration(**generated)
@@ -210,6 +213,7 @@ class ImageOptim(BaseEnvironment[ImageGeneration]):
     def random(self) -> list[ImageGeneration]:
         """
         Randomly generate a batch of codes and evaluate their outputs.
+
         Returns:
             a tuple of the code string and the returning result (None if there is error).
         """
@@ -219,8 +223,10 @@ class ImageOptim(BaseEnvironment[ImageGeneration]):
     def mutate(self, x: ImageGeneration) -> list[ImageGeneration]:
         """
         Randomly mutate a batch of codes from a given individual and evaluate their outputs.
+
         Args:
             x: the individual to be mutated.
+
         Returns:
             a tuple of the code string and the returning result (None if there is error).
         """
@@ -279,6 +285,7 @@ class Sodaracer(Genotype):
     def __init__(self, program_str: str, result_obj: dict, error_code: bool):
         """
         The Sodaracer genotype.
+
         Args:
             program_str: the string for the original code.
             result_obj: the dict of sodaracer.

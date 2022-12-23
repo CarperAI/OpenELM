@@ -10,6 +10,7 @@ Welcome to OpenELM's documentation!
    :maxdepth: 2
    :caption: Contents:
 
+   openelm
 
 
 Indices and tables
