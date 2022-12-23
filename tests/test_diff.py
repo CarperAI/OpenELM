@@ -1,6 +1,13 @@
 import itertools
 
-from openelm.utils.diff_eval import apply_diff, parse_line_info, replace_text, split_diff, verify_diff, DiffState
+from openelm.utils.diff_eval import (
+    DiffState,
+    apply_diff,
+    parse_line_info,
+    replace_text,
+    split_diff,
+    verify_diff,
+)
 
 
 def test_diff():
@@ -38,7 +45,10 @@ def test_diff():
         result["file"], result["diff"], use_line_number=False
     ) == apply_diff(result["file"], result["diff"], use_line_number=True)
     # Reject if pre-diff lines don't fully match
-    assert apply_diff(result["file"], result["diff"] + " ", use_line_number=True) == result["file"]
+    assert (
+        apply_diff(result["file"], result["diff"] + " ", use_line_number=True)
+        == result["file"]
+    )
 
     # Test ADDFILE
     test = (
@@ -46,7 +56,10 @@ def test_diff():
         "+aaaaaaa\n+bbbbbbb"
     )
     result = split_diff(test)
-    assert apply_diff(result["file"], result["diff"], use_line_number=False) == "aaaaaaa\nbbbbbbb"
+    assert (
+        apply_diff(result["file"], result["diff"], use_line_number=False)
+        == "aaaaaaa\nbbbbbbb"
+    )
     assert apply_diff(result["file"], result["diff"], use_line_number=True) == ""
 
     # Test the loose patching (still performs the patching until invalid diff lines)
@@ -55,9 +68,15 @@ def test_diff():
         "+aaaaaaa\n+bbbbbbb\n cccccc\ninvalid\n"
     )
     result = split_diff(test)
-    assert apply_diff(result["file"], result["diff"], use_line_number=False) == "aaaaaaa\nbbbbbbb\ncccccc"
+    assert (
+        apply_diff(result["file"], result["diff"], use_line_number=False)
+        == "aaaaaaa\nbbbbbbb\ncccccc"
+    )
     # the first part -1,1 is consistent, so perform the patching
-    assert apply_diff(result["file"], result["diff"], use_line_number=True) == "aaaaaaa\nbbbbbbb\ncccccc"
+    assert (
+        apply_diff(result["file"], result["diff"], use_line_number=True)
+        == "aaaaaaa\nbbbbbbb\ncccccc"
+    )
 
     # Test multiple @@ ... @@
     test = (
@@ -65,8 +84,14 @@ def test_diff():
         "+aaaaaaa\n+bbbbbbb\n cccccc\n@@ -2,1 +4,1 @@\n-dddddd\n+eeeeee\n"
     )
     result = split_diff(test)
-    assert apply_diff(result["file"], result["diff"], use_line_number=False) == "aaaaaaa\nbbbbbbb\ncccccc\neeeeee"
-    assert apply_diff(result["file"], result["diff"], use_line_number=True) == "aaaaaaa\nbbbbbbb\ncccccc\neeeeee"
+    assert (
+        apply_diff(result["file"], result["diff"], use_line_number=False)
+        == "aaaaaaa\nbbbbbbb\ncccccc\neeeeee"
+    )
+    assert (
+        apply_diff(result["file"], result["diff"], use_line_number=True)
+        == "aaaaaaa\nbbbbbbb\ncccccc\neeeeee"
+    )
 
 
 def test_replace_text():
@@ -140,7 +165,9 @@ def test_verify_diff():
         "<NME> test.py\n<BEF> cccccc\n<MSG> asldkjf\n<DFF> @@ +1,1 -1,4 @@\n"
         "+aaaaaaa\n+bbbbbbb\n cccccc\n"
     )
-    assert verify_diff(test) == DiffState(6)  # Invalid format (wrong format in @@ ... @@)
+    assert verify_diff(test) == DiffState(
+        6
+    )  # Invalid format (wrong format in @@ ... @@)
     test = (
         "<NME> test.py\n<BEF> cccccc\n<MSG> asldkjf\n<DFF> @@ +1,1 -1,4 @@\n"
         "+aaaaaaa\n+bbbbbbb\n*cccccc\n"

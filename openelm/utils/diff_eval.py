@@ -1,12 +1,14 @@
 import re
-from typing import Optional
 from enum import Enum
+from typing import Optional
 
 line_number_pattern = re.compile(r"(?m)^@@ -(\d*?),(\d*?) \+(\d*?),(\d*?) @@")
-diff_pattern = re.compile(r"""<NME> (?P<name>.*?)
+diff_pattern = re.compile(
+    r"""<NME> (?P<name>.*?)
 <BEF> (?P<file>(.|\n)*?)
 <MSG> (?P<message>(.|\n)*?)
-<DFF> (?P<diff>(.|\n)*)""")
+<DFF> (?P<diff>(.|\n)*)"""
+)
 hunk_split_pattern = re.compile(r"(?m)^(@@ .*? @@).*\n")
 
 
@@ -16,17 +18,22 @@ class DiffState(Enum):
     Binary codes help internally, as some errors are additive (e.g., can have both invalid text and invalid line num).
     But we convert the binary codes into Enum for better readability.
     """
+
     VALID = 0b000  # valid diff
 
     # The following are errors that can still be either ignored or fixed.
     INVALID_TEXT = 0b001  # pre-diff texts cannot be found in the context.
-    INVALID_LINE_NUM = 0b010  # the numbers in @@ -x,y +a,b @@ are invalid (but can be parsed).
+    INVALID_LINE_NUM = (
+        0b010  # the numbers in @@ -x,y +a,b @@ are invalid (but can be parsed).
+    )
     INVALID_TEXT_AND_LINE_NUM = 0b011  # both 0b001 and 0b010.
 
     # The following are format errors that cannot be ignored.
     BAD_FORMAT = 0b100  # cannot be parsed according to <NME> ...\n<BEF> ...\n<MSG> ...\n<DFF> @@ ... @@\n...
     BAD_DIFF_HUNK_FORMAT = 0b101  # diff hunk contains lines whose initial character is not one of ' ', '+', '-'
-    BAD_LINE_NUM_FORMAT = 0b110  # the @@ ... @@ bracket can be found but numbers cannot be parsed.
+    BAD_LINE_NUM_FORMAT = (
+        0b110  # the @@ ... @@ bracket can be found but numbers cannot be parsed.
+    )
     BAD_HUNK_AND_LINE_FORMAT = 0b111  # both 0b110 and 0b101.
 
 
@@ -68,7 +75,9 @@ def parse_line_info(content: str) -> tuple:
         return ()
 
 
-def parse_diff_content(hunk: str, separate_lines=False, reject_invalid=False) -> Optional[tuple]:
+def parse_diff_content(
+    hunk: str, separate_lines=False, reject_invalid=False
+) -> Optional[tuple]:
     """
     Parse a diff content to turn it into (before_diff, after_diff) based on '+', '-' at the beginning of each line.
 
@@ -82,25 +91,27 @@ def parse_diff_content(hunk: str, separate_lines=False, reject_invalid=False) ->
         None if reject_invalid==True and the diff hunk contains invalid format.
     """
     # Remove trailing \n at the beginning and the end.
-    hunk = hunk.split('\n')
+    hunk = hunk.split("\n")
     before_diff, after_diff = [], []
     for line in hunk:
         if not line:
             continue
-        if line[0] == '-' or line[0] == ' ':
+        if line[0] == "-" or line[0] == " ":
             before_diff.append(line[1:])
-        if line[0] == '+' or line[0] == ' ':
+        if line[0] == "+" or line[0] == " ":
             after_diff.append(line[1:])
         if reject_invalid:
-            if all([line[0] != c for c in [' ', '-', '+']]):
+            if all([line[0] != c for c in [" ", "-", "+"]]):
                 return None
     if separate_lines:
         return before_diff, after_diff
     else:
-        return '\n'.join(before_diff), '\n'.join(after_diff)
+        return "\n".join(before_diff), "\n".join(after_diff)
 
 
-def replace_text(text: str, before: str, after: str, start_pointer: int) -> tuple[str, int]:
+def replace_text(
+    text: str, before: str, after: str, start_pointer: int
+) -> tuple[str, int]:
     """
     Try to match `before` within `text` and replace the content into `after`.
     If not found, return the original text.
@@ -119,7 +130,7 @@ def replace_text(text: str, before: str, after: str, start_pointer: int) -> tupl
         return text, start_pointer
     else:
         # Even if idx + len(before) is out-of-bound, the list slicing would return []
-        return text[:idx] + after + text[idx + len(before):], idx + len(after)
+        return text[:idx] + after + text[idx + len(before) :], idx + len(after)
 
 
 def apply_diff(file: str, diff: str, use_line_number=False, allow_add_file=True) -> str:
@@ -141,14 +152,18 @@ def apply_diff(file: str, diff: str, use_line_number=False, allow_add_file=True)
     diff = hunk_split_pattern.split(diff.lstrip().lstrip("\n"))
 
     # If we use the line numbers, we match-and-replace in a line-by-line fashion.
-    file_by_line = file.split('\n') if use_line_number else None
+    file_by_line = file.split("\n") if use_line_number else None
     line_offset = 0  # the offset between pre-/post-patching line numbers
 
     # If we do not use the line numbers, for multiple diff hunk, we only move forward in a greedy manner.
     patch_pointer = 0
 
-    i = 0 if diff[0] else 1  # We have delimiter at the beginning, causing empty initial string
-    while i < len(diff) - 1:  # Need at least a pair of '@@ ... @@' and diff hunk to continue
+    i = (
+        0 if diff[0] else 1
+    )  # We have delimiter at the beginning, causing empty initial string
+    while (
+        i < len(diff) - 1
+    ):  # Need at least a pair of '@@ ... @@' and diff hunk to continue
         # Expect a string with '@@ ... @@' followed by a diff hunk
         line_info = parse_line_info(diff[i])
         diff_content = diff[i + 1]
@@ -181,12 +196,17 @@ def apply_diff(file: str, diff: str, use_line_number=False, allow_add_file=True)
             # We ignore the second pair "+a, b" just to be lenient.
             if valid and len(parsed_diff[0]) == line_info[1]:
                 # Update the list of lines
-                file_by_line = file_by_line[: start_idx - 1] + parsed_diff[1] + \
-                               file_by_line[start_idx - 1 + line_info[1] :]
+                file_by_line = (
+                    file_by_line[: start_idx - 1]
+                    + parsed_diff[1]
+                    + file_by_line[start_idx - 1 + line_info[1] :]
+                )
                 line_offset += len(parsed_diff[1]) - line_info[1]
         else:
             # Directly (and naively) apply patch by match-and-replace.
-            file, patch_pointer = replace_text(file, parsed_diff[0], parsed_diff[1], patch_pointer)
+            file, patch_pointer = replace_text(
+                file, parsed_diff[0], parsed_diff[1], patch_pointer
+            )
 
     if use_line_number:
         file = "\n".join(file_by_line)
@@ -220,15 +240,22 @@ def verify_diff(diff_text: str) -> DiffState:
     bad_diff_hunk, bad_line_number = False, False
 
     i = 0 if diff_parts[0] else 1
-    while i < len(diff_parts) - 1:  # Need at least a pair of '@@ ... @@' and diff hunk to continue
+    while (
+        i < len(diff_parts) - 1
+    ):  # Need at least a pair of '@@ ... @@' and diff hunk to continue
         line_info = parse_line_info(diff_parts[i])
         diff_content = parse_diff_content(diff_parts[i + 1], reject_invalid=True)
         i += 2
 
         # Special treatment if we are adding a new file
         if diff_dict["file"] == "ADDFILE":
-            if len(diff_parts) != i or not line_info or line_info[:3] != (0, 0, 1) or \
-                    line_info[3] != len(diff_content[1].strip("\n").split("\n")) or diff_content[0]:
+            if (
+                len(diff_parts) != i
+                or not line_info
+                or line_info[:3] != (0, 0, 1)
+                or line_info[3] != len(diff_content[1].strip("\n").split("\n"))
+                or diff_content[0]
+            ):
                 return DiffState(0b110)
             else:
                 return DiffState(0b000)
@@ -244,8 +271,10 @@ def verify_diff(diff_text: str) -> DiffState:
 
         # Try to see if there is a match in the file context. Must match complete lines or till EOF.
         match_idx = diff_dict["file"].find(diff_content[0])
-        if match_idx == -1 or (match_idx + len(diff_content[0]) != len(diff_dict["file"]) and
-                               diff_dict["file"][match_idx + len(diff_content[0])] != "\n"):
+        if match_idx == -1 or (
+            match_idx + len(diff_content[0]) != len(diff_dict["file"])
+            and diff_dict["file"][match_idx + len(diff_content[0])] != "\n"
+        ):
             context_mismatch = True
 
         if line_info[0] <= 0:
@@ -256,7 +285,10 @@ def verify_diff(diff_text: str) -> DiffState:
             # Check the line numbers regardless of whether the context matches.
             pre_diff_line_number = len(diff_content[0].strip("\n").split("\n"))
             post_diff_line_number = len(diff_content[1].strip("\n").split("\n"))
-            if (pre_diff_line_number, post_diff_line_number) != (line_info[1], line_info[3]):
+            if (pre_diff_line_number, post_diff_line_number) != (
+                line_info[1],
+                line_info[3],
+            ):
                 line_number_mismatch = True
             else:
                 line_offset += len(diff_content[1]) - line_info[1]
