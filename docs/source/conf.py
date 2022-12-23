@@ -6,8 +6,8 @@
 
 # -- Path setup --------------------------------------------------------------
 
-# import os
-# import sys
+import os
+import sys
 
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
@@ -15,7 +15,7 @@
 #
 import sphinx_rtd_theme  # noqa: F401
 
-# sys.path.insert(0, os.path.abspath(".."))
+sys.path.insert(0, os.path.abspath(".."))
 
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
