@@ -109,7 +109,7 @@ def test_verify_diff():
     )
     assert verify_diff(test) == DiffState(6)  # Contains lines not starting with "+"
     test = (
-        "<NME> test.py\n<BEF> ADDFILE\n<MSG> asldkjf\n<DFF> @@ -0,0 +0,3 @@\n"
+        "<NME> test.py\n<BEF> ADDFILE\n<MSG> asldkjf\n<DFF> @@ -0,0 +1,3 @@\n"
         "+aaaaaaa\n+bbbbbbb\n+cccccc\n"
     )
     assert verify_diff(test) == DiffState(0)
