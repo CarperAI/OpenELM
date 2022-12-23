@@ -12,7 +12,7 @@ To submit a bug report or a feature request, please open an [issue](https://gith
 
 ## Submitting code
 
-> **Note**: Make sure to first search through the [issue tracker](https://github.com/CarperAI/ELM/issues) and [PR list](https://github.com/CarperAI/ELM/pulls) to avoid duplicating work. If you want to work on a non-trivial feature, we highly recommended that you first open an issue in the [issue tracker](https://github.com/CarperAI/ELM/issues) to get feedback from core developers.
+> **Note**: Make sure to first search through the [issue tracker](https://github.com/CarperAI/OpenELM/issues) and [PR list](https://github.com/CarperAI/OpenELM/pulls) to avoid duplicating work. If you want to work on a non-trivial feature, we highly recommended that you first open an issue in the [issue tracker](https://github.com/CarperAI/OpenELM/issues) to get feedback from core developers.
 
 Follow these steps to start contributing code:
 
@@ -55,7 +55,7 @@ Have a question? Rather than opening an issue, you can readily chat with the cor
 
 ## Code of conduct
 
-This project adheres to the [Contributor Covenant Code of Conduct](https://github.com/CarperAI/ELM/blob/master/CODE_OF_CONDUCT.md). By participating, you are expected to uphold this code.
+This project adheres to the [Contributor Covenant Code of Conduct](https://github.com/CarperAI/OpenELM/blob/master/CODE_OF_CONDUCT.md). By participating, you are expected to uphold this code.
 
 ## License
 

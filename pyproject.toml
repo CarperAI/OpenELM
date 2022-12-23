@@ -6,7 +6,7 @@ requires = ["setuptools>=45", "setuptools_scm[toml]>=6.2"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["elm"]
+packages = ["openelm"]
 
 [tool.setuptools.dynamic]
 dependencies = {file = ["requirements.txt"]}
@@ -19,12 +19,12 @@ add-ignore = "D10"
 
 [tool.pytest.ini_options]
 minversion = "6.0"
-addopts = "-rA --doctest-modules" # --cov=elm"  # Uncomment this for coverage by default
+addopts = "-rA --doctest-modules" # --cov=openelm"  # Uncomment this for coverage by default
 testpaths = ["tests"]
 doctest_optionflags = ["NORMALIZE_WHITESPACE", "IGNORE_EXCEPTION_DETAIL"]
 
 [project]
-name = "ELM"
+name = "OpenELM"
 description = "Evolution Through Large Models"
 readme = "README.md"
 requires-python = ">=3.9"

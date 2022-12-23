@@ -1,6 +1,6 @@
 import itertools
 
-from elm.util.diff_eval import apply_diff, parse_line_info, replace_text, split_diff, verify_diff, DiffState
+from openelm.util.diff_eval import apply_diff, parse_line_info, replace_text, split_diff, verify_diff, DiffState
 
 
 def test_diff():

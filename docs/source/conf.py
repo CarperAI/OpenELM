@@ -64,7 +64,6 @@ html_theme = "sphinx_rtd_theme"
 html_static_path = ["_static"]
 
 html_theme_options = {
-    "style_nav_header_background": "#a0a0a0",
     "logo_only": True,
     "display_version": True,
 }
