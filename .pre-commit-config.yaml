@@ -14,7 +14,7 @@ repos:
     rev: 22.10.0
     hooks:
     -   id: black
-        files: ^(elm|test|setup.py)/
+        files: ^(openelm|test|setup.py)/
 -   repo: https://github.com/pycqa/isort
     rev: 5.10.1
     hooks:
@@ -37,3 +37,5 @@ repos:
         args:
           - '--convention=google'
           - '--add-ignore=D10'
+          - '-v'
+          - '--count'

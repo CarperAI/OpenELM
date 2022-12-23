@@ -32,14 +32,20 @@ Currently, we can run the MAP-Elites algorithm on [a few environments](https://g
 
 ## Setting up the sandbox
 Ideally, please follow the [sandboxing readme](https://github.com/CarperAI/OpenELM/tree/main/elm/sandbox) to set it up in a docker container. But for quick testing purpose, one may try the following:
-```python
+```bash
 cd elm/sandbox/server
 export FLASK_APP=index.py
 flask run
 ```
 ## Running the MAP-Elites
-We have a few toy environments implemented as well as the Sodarace environment in the ELM paper. One may try to run the following (after setting up with the sandbox server in the same machine).
-```python
+We have a few toy environments implemented as well as the Sodarace environment in the ELM paper. One may try to do the following (after setting up with the sandbox server in the same machine).
+
+First, download the codegen-350M model.
+```bash
+wget -P checkpoints https://storage.googleapis.com/sfr-codegen-research/checkpoints/codegen-350M-mono.tar.gz && tar -xvf checkpoints/codegen-350M-mono.tar.gz -C checkpoints/
+```
+Once it is done, run the MAP-Elites with prompt mutations using codegen-350M.
+```bash
 python3 run_elm.py run_name=test
 python3 run_elm.py --config-name=elm_image_cfg  run_name=test
 ```

@@ -1,3 +1,6 @@
+sphinx==5.3.0
+sphinx_rtd_theme
+sphinx_autodoc_typehints
 hydra-core>=1.2.0
 wandb>=0.13
 numpy

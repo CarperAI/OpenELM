@@ -1,0 +1,27 @@
+model: CarperAI/diff-codegen-350m-v1
+cuda: True
+seed: 42
+deterministic: False
+top_p: 0.95
+temp: 0.85
+timeout: 5  # Seconds
+gpus: 1
+gen_max_len: 128
+batch_size: 32
+n_trials: 3200
+n_bugs: 1
+fp16: False
+pad_token: 50256
+tasks: ["parity"]
+run_name: ???  # Mandatory string argument that describes the run.
+
+# diff parameters
+num_process: 5
+
+###################################################################################################
+# Hydra config overrides:
+hydra:
+    run:
+        dir: logs/${run_name}
+    sweep:
+        dir: logs/${run_name}
