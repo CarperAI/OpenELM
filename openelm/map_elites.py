@@ -4,6 +4,8 @@ from typing import Optional
 import numpy as np
 from tqdm import trange
 
+from openelm.environments import BaseEnvironment
+
 Phenotype = Optional[np.ndarray]
 Mapindex = Optional[tuple]
 
@@ -67,7 +69,7 @@ class MAPElites:
         self.history: dict = defaultdict(list)
 
         # discretization of space
-        self.bins = np.linspace(*env.behavior_space, n_bins + 1)[1:-1].T
+        self.bins = np.linspace(*env.behavior_space, n_bins + 1)[1:-1].T  # type: ignore
         # perfomance of niches
         self.fitnesses: Map = Map(
             dims=(n_bins,) * env.behavior_ndim,

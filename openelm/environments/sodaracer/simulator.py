@@ -21,6 +21,7 @@ from openelm.environments.sodaracer.helpers import (
 
 
 class IESoRWorld:
+    """Class for the Sodarace simulation."""
     def __init__(self):
         self.world = None
         self.interpolation = 0.0

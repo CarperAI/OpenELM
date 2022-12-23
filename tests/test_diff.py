@@ -1,6 +1,13 @@
 import itertools
 
-from openelm.utils.diff_eval import apply_diff, parse_line_info, replace_text, split_diff, verify_diff, DiffState
+from openelm.utils.diff_eval import (
+    DiffState,
+    apply_diff,
+    parse_line_info,
+    replace_text,
+    split_diff,
+    verify_diff,
+)
 
 
 def test_diff():
