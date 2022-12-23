@@ -1,26 +1,24 @@
-"""
-This is the benchmark test of diff models.
-"""
+"""This is the benchmark test of diff models."""
 import functools
 import itertools
+import multiprocessing as mp
 import re
+from typing import Union
+
 import hydra
 import torch
-import multiprocessing as mp
-from tqdm import tqdm
-from typing import Union
+from benchmarks import eval_code_string, parity_reference
 from omegaconf import OmegaConf
+from tqdm import tqdm
+from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 
 from openelm.codegen.codegen_utilities import set_seed
 from openelm.constants import SRC_PATH
-from transformers import AutoTokenizer, AutoModelForCausalLM, AutoConfig
-from benchmarks import parity_reference, eval_code_string
-from openelm.util.diff_eval import split_diff, apply_diff
-
+from openelm.utils.diff_eval import apply_diff, split_diff
 
 parity_test_data = {
-            i: parity_reference(*i) for i in itertools.product(range(2), repeat=4)
-        }
+    i: parity_reference(*i) for i in itertools.product(range(2), repeat=4)
+}
 
 
 def eval_completions(
@@ -98,11 +96,13 @@ def main(cfg):
     if cfg.gpus > 1:
         model = torch.nn.DataParallel(
             AutoModelForCausalLM.from_pretrained(cfg.model, config=config),
-            device_ids=list(range(cfg.gpus))
+            device_ids=list(range(cfg.gpus)),
         ).to(device)
         model.generate = model.module.generate
     else:
-        model = AutoModelForCausalLM.from_pretrained(cfg.model, config=config).to(device)
+        model = AutoModelForCausalLM.from_pretrained(cfg.model, config=config).to(
+            device
+        )
 
     # Prepare the mutated codes with cfg.n_bugs bugs.
     mutated_str, function_str = mutate_code(n_bugs=cfg.n_bugs, task=cfg.tasks[0])
@@ -110,29 +110,31 @@ def main(cfg):
         [mutated_str],
         return_tensors="pt",
     ).to(device)
-    token_len = mutated_encoding['input_ids'].shape[1]
+    token_len = mutated_encoding["input_ids"].shape[1]
 
     # Generate codes
     num_batches = cfg.n_trials // cfg.batch_size
-    end_of_diff = re.compile('\n[^ +-@]+')
+    end_of_diff = re.compile("\n[^ +-@]+")
     codes = []
     for _ in tqdm(range(num_batches), desc=f"Running benchmark with {cfg.n_bugs} bugs"):
         set_seed(torch.random.seed())
         tokens = model.generate(
-                **mutated_encoding,
-                do_sample=True,
-                num_return_sequences=cfg.batch_size,
-                temperature=cfg.temp,
-                max_length=token_len + cfg.gen_max_len,
-                top_p=cfg.top_p,
-                pad_token_id=cfg.pad_token,
-            )
+            **mutated_encoding,
+            do_sample=True,
+            num_return_sequences=cfg.batch_size,
+            temperature=cfg.temp,
+            max_length=token_len + cfg.gen_max_len,
+            top_p=cfg.top_p,
+            pad_token_id=cfg.pad_token,
+        )
         texts = tokenizer.batch_decode(tokens)
         for text in texts:
             # split the diff text according to <NME>, <BEF>, <MSG>, <DFF>.
             parsed = split_diff(text)
             # truncate the diff hunk at the first line not starting with " ", "+", "-", or "@".
-            if parsed and all([s in parsed for s in ["name", "file", "message", "diff"]]):
+            if parsed and all(
+                [s in parsed for s in ["name", "file", "message", "diff"]]
+            ):
                 diff_hunk = end_of_diff.split(parsed["diff"])[0]
                 codes.append(apply_diff(function_str, diff_hunk))
             else:
@@ -145,9 +147,9 @@ def main(cfg):
     #   1. it ignores the line numbers;
     #   2. it ignores invalid lines (not starting with " ", "+" or "-" and not being "@@ ... @@").
     with mp.Pool(processes=cfg.num_process) as pool:
-        eval_fn = functools.partial(eval_completions,
-                                    task=cfg.tasks[0],
-                                    timeout=cfg.timeout)
+        eval_fn = functools.partial(
+            eval_completions, task=cfg.tasks[0], timeout=cfg.timeout
+        )
         results = list(pool.map(eval_fn, codes))
 
     corr_cnt = sum([r == 0 for r in results])

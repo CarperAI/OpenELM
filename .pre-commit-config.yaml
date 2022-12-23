@@ -37,3 +37,5 @@ repos:
         args:
           - '--convention=google'
           - '--add-ignore=D10'
+          - '-v'
+          - '--count'

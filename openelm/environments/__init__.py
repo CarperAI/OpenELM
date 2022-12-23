@@ -1,8 +1,9 @@
 import numpy as np
+
 from .environments import (
-    Genotype,
     BaseEnvironment,
     FunctionOptim,
+    Genotype,
     ImageOptim,
     MatchString,
     Sodarace,
@@ -15,7 +16,8 @@ from .environments import (
 #   sodarace = Sodarace(**sodarace_init_args, run_name="test")
 
 
-IMAGE_SEED = {"program_str": """import numpy as np
+IMAGE_SEED = {
+    "program_str": """import numpy as np
 def draw_blue_rectangle() -> np.ndarray:
 \tpic = np.zeros((32, 32, 3))
 \tfor x in range(2, 30):
@@ -23,8 +25,9 @@ def draw_blue_rectangle() -> np.ndarray:
 \t\t\tpic[x, y] = np.array([0, 0, 255])
 \treturn pic
 """,
-              "result_obj": None,
-              "error_code": 0}
+    "result_obj": None,
+    "error_code": 0,
+}
 exec(IMAGE_SEED["program_str"], globals())
 IMAGE_SEED["result_obj"] = globals()["draw_blue_rectangle"]()
 target = np.zeros((32, 32, 3))
@@ -83,25 +86,37 @@ def make_walker():
             [2, 4, {"type": "muscle", "amplitude": 2.0, "phase": 0.0}],
         ],
     },
-    "error_code": 0
+    "error_code": 0,
 }
 
 # A sample init args for ImageOptim
-image_init_args = {"seed": IMAGE_SEED,
-                   "config": "openelm/config/elm_image_cfg.yaml",
-                   "target_img": target,
-                   "diff_model": None,
-                   "behavior_mode": "3-channel"}
+image_init_args = {
+    "seed": IMAGE_SEED,
+    "config": "openelm/config/elm_image_cfg.yaml",
+    "target_img": target,
+    "diff_model": None,
+    "behavior_mode": "3-channel",
+}
 
 # A sample init args for Sodarace
-sodarace_init_args = {"seed": SQUARE_SEED,
-                      "config": "openelm/config/elm_sodarace_cfg.yaml",
-                      "diff_model": None,
-                      "eval_steps": 1000}
+sodarace_init_args = {
+    "seed": SQUARE_SEED,
+    "config": "openelm/config/elm_sodarace_cfg.yaml",
+    "diff_model": None,
+    "eval_steps": 1000,
+}
 
 # ----- (Sample init args end) -----
 
-__all__ = [Genotype, BaseEnvironment,
-           FunctionOptim, ImageOptim, MatchString, Sodarace,
-           IMAGE_SEED, image_init_args,
-           SQUARE_SEED, sodarace_init_args]
+__all__ = [
+    "Genotype",
+    "BaseEnvironment",
+    "FunctionOptim",
+    "ImageOptim",
+    "MatchString",
+    "Sodarace",
+    "IMAGE_SEED",
+    "image_init_args",
+    "SQUARE_SEED",
+    "sodarace_init_args",
+]
