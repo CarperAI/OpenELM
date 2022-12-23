@@ -1,0 +1,13 @@
+sphinx==5.3.0
+sphinx_rtd_theme
+sphinx_autodoc_typehints
+hydra-core>=1.2.0
+wandb>=0.13
+numpy
+torch>=1.10
+transformers>=4.22.0
+tokenizers
+swig>=4.1.0
+box2d-py==2.3.8
+requests
+Flask

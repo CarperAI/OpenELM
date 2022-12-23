@@ -19,8 +19,9 @@ add-ignore = "D10"
 
 [tool.pytest.ini_options]
 minversion = "6.0"
-addopts = "-rA" # --cov=elm"  # Uncomment this for coverage by default
+addopts = "-rA --doctest-modules" # --cov=elm"  # Uncomment this for coverage by default
 testpaths = ["tests"]
+doctest_optionflags = ["NORMALIZE_WHITESPACE", "IGNORE_EXCEPTION_DETAIL"]
 
 [project]
 name = "ELM"
