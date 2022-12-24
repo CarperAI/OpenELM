@@ -7,6 +7,7 @@
 # -- Path setup --------------------------------------------------------------
 
 import os
+import pathlib
 import sys
 
 # If extensions (or modules to document with autodoc) are in another directory,
@@ -18,6 +19,12 @@ from importlib.metadata import version as importlib_version
 import sphinx_rtd_theme  # noqa: F401
 
 sys.path.insert(0, os.path.abspath(".."))
+if "READTHEDOCS" in os.environ:
+    src_folder = pathlib.Path(__file__).resolve().parent.parent.parent / "src"
+    sys.path.append(str(src_folder))
+
+    print("Detected running on ReadTheDocs")
+    print(f"Added {src_folder} to sys.path")
 
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
