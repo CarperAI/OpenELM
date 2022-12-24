@@ -2,7 +2,7 @@
 profile = "black"
 
 [build-system]
-requires = ["setuptools>=45", "setuptools_scm[toml]>=6.2"]
+requires = ["setuptools>=61", "setuptools_scm[toml]>=6.2", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
@@ -27,6 +27,7 @@ doctest_optionflags = ["NORMALIZE_WHITESPACE", "IGNORE_EXCEPTION_DETAIL"]
 [project]
 name = "OpenELM"
 description = "Evolution Through Large Models"
+authors = [{name = "CarperAI"}]
 readme = "README.md"
 requires-python = ">=3.9"
 license = {text = "MIT"}

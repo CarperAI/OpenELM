@@ -13,6 +13,7 @@ import sys
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
+from importlib.metadata import version as importlib_version
 import sphinx_rtd_theme  # noqa: F401
 
 sys.path.insert(0, os.path.abspath(".."))
@@ -23,7 +24,7 @@ sys.path.insert(0, os.path.abspath(".."))
 project = "OpenELM"
 copyright = "2022, CarperAI"
 author = "CarperAI"
-release = "0.1.6"
+release = '.'.join(importlib_version('openelm').split('.')[:3])
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
