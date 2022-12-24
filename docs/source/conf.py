@@ -14,6 +14,7 @@ import sys
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
 from importlib.metadata import version as importlib_version
+
 import sphinx_rtd_theme  # noqa: F401
 
 sys.path.insert(0, os.path.abspath(".."))
