@@ -7,7 +7,8 @@ version: 2
 
 # Remove report submodule from docs build
 submodules:
-  exclude: all
+  include: all
+  recursive: true
 
 build:
   os: ubuntu-20.04
@@ -26,3 +27,6 @@ sphinx:
 python:
    install:
    - requirements: docs/requirements.txt
+   - method: pip
+     path: .
+   system_packages: True

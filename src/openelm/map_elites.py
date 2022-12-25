@@ -11,6 +11,11 @@ Mapindex = Optional[tuple]
 
 
 class Map:
+    """
+    Class to represent a map of any dimensionality, backed by a numpy array.
+
+    This class is necessary to handle the circular buffer for the history dimension.
+    """
     def __init__(
         self,
         dims: tuple,
@@ -18,6 +23,24 @@ class Map:
         dtype: type = np.float32,
         history_length: int = 1,
     ):
+        """
+        Class to represent a map of any dimensionality, backed by a numpy array.
+
+        This class is a wrapper around a numpy array that handles the circular
+        buffer for the history dimension. We use it for the array of fitnesses,
+        genomes, and to track whether a niche in the map has been explored or not.
+
+        Args:
+            dims (tuple): Tuple of ints representing the dimensions of the map.
+            fill_value (float): Fill value to initialize the array.
+            dtype (type, optional): Type to pass to the numpy array to initialize
+                it. For example, we initialize the map of genomes with type `object`.
+                Defaults to np.float32.
+            history_length (int, optional): Length of history to store for each
+                niche (cell) in the map. This acts as a circular buffer, so after
+                storing `history_length` items, the buffer starts overwriting the
+                oldest items. Defaults to 1.
+        """
         self.history_length: int = history_length
         self.dims: tuple = dims
         if self.history_length == 1:
@@ -47,10 +70,12 @@ class Map:
 
     @property
     def shape(self) -> tuple:
+        """Wrapper around the shape of the numpy array."""
         return self.array.shape
 
     @property
     def map_size(self) -> int:
+        """Returns the product of the dimension sizes, not including history."""
         if self.history_length == 1:
             return self.array.size
         else:
@@ -58,9 +83,35 @@ class Map:
 
 
 class MAPElites:
+    """
+    Class implementing MAP-Elites, a quality-diversity algorithm.
+
+    MAP-Elites creates a map of high perfoming solutions at each point in a
+    discretized behavior space. First, the algorithm generates some initial random
+    solutions, and evaluates them in the environment. Then, it  repeatedly mutates
+    the solutions in the map, and places the mutated solutions in the map if they
+    outperform the solutions already in their niche.
+    """
     def __init__(
         self, env, n_bins: int, history_length: int, save_history: bool = False
     ):
+        """
+        Class implementing MAP-Elites, a quality-diversity algorithm.
+
+        Args:
+            env (BaseEnvironment): The environment to evaluate solutions in. This
+            should be a subclass of `BaseEnvironment`, and should implement
+            methods to generate random solutions, mutate existing solutions,
+            and evaluate solutions for their fitness in the environment.
+            n_bins (int): Number of bins to partition the behavior space into.
+            history_length (int): Length of history to store for each niche (cell)
+            in the map. This acts as a circular buffer, so after storing
+            `history_length` items, the buffer starts overwriting the oldest
+            items.
+            save_history (bool, optional): Whether to save the history of all
+            generated solutions, even if they are not inserted into the map.
+            Defaults to False.
+        """
         self.env: BaseEnvironment = env
         self.n_bins = n_bins
         self.history_length = history_length
@@ -93,6 +144,7 @@ class MAPElites:
         print(f"MAP of size: {self.fitnesses.dims} = {self.fitnesses.map_size}")
 
     def to_mapindex(self, b: Phenotype) -> Mapindex:
+        """Converts a phenotype (position in behaviour space) to a map index."""
         return (
             None
             if b is None
@@ -100,10 +152,27 @@ class MAPElites:
         )
 
     def random_selection(self) -> Mapindex:
+        """Randomly select a niche (cell) in the map that has been explored."""
         ix = np.random.choice(np.flatnonzero(self.nonzero.array))
         return np.unravel_index(ix, self.nonzero.dims)
 
-    def search(self, initsteps: int, totalsteps: int, atol=1):
+    def search(self, initsteps: int, totalsteps: int, atol=1) -> str:
+        """
+        Run the MAP-Elites search algorithm.
+
+        Args:
+            initsteps (int): Number of initial random solutions to generate.
+            totalsteps (int): Total number of steps to run the algorithm for,
+                including initial steps.
+            atol (int, optional): Tolerance for how close the best performing
+                solution has to be to the maximum possible fitness before the
+                search stops early. Defaults to 1.
+
+        Returns:
+            str: A string representation of the best perfoming solution. The
+                best performing solution object can be accessed via the
+                `current_max_genome` class attribute.
+        """
         tbar = trange(int(totalsteps))
         max_fitness = -np.inf
         max_genome = None
@@ -150,6 +219,7 @@ class MAPElites:
                 if np.isclose(max_fitness, self.env.max_fitness, atol=atol):
                     break
 
+        self.current_max_genome = max_genome
         return str(max_genome)
 
     def plot(self):
@@ -169,10 +239,18 @@ class MAPElites:
         pyplot.show()
 
     def niches_filled(self):
+        """Get the number of niches that have been explored in the map."""
         return np.count_nonzero(self.nonzero.array)
 
     def maximum_fitness(self):
+        """Get the maximum fitness value in the map."""
         return self.fitnesses.array.max()
 
     def quality_diversity_score(self):
+        """
+        Get the quality-diversity score of the map.
+
+        The quality-diversity score is the sum of the performance of all solutions
+        in the map.
+        """
         return self.fitnesses.array[np.isfinite(self.fitnesses.array)].sum()

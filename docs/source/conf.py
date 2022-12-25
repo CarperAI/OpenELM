@@ -7,23 +7,30 @@
 # -- Path setup --------------------------------------------------------------
 
 import os
+import pathlib
 import sys
 
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
+from importlib.metadata import version as importlib_version
+
 import sphinx_rtd_theme  # noqa: F401
 
-sys.path.insert(0, os.path.abspath(".."))
+if "READTHEDOCS" in os.environ:
+    src_folder = pathlib.Path(__file__).resolve().parent.parent.parent / "src"
+    sys.path.append(str(src_folder))
 
+    print("Detected running on ReadTheDocs")
+    print(f"Added {src_folder} to sys.path")
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
 project = "OpenELM"
 copyright = "2022, CarperAI"
 author = "CarperAI"
-release = "0.1.0"
+release = version = '.'.join(importlib_version('openelm').split('.')[:3])
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
@@ -35,6 +42,7 @@ release = "0.1.0"
 
 extensions = [
     "sphinx_rtd_theme",
+    "sphinx.ext.napoleon",
     "sphinx.ext.todo",
     "sphinx.ext.viewcode",
     "sphinx.ext.autodoc",
@@ -61,8 +69,6 @@ html_theme = "sphinx_rtd_theme"
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
-html_static_path = ["_static"]
-
 html_theme_options = {
     "logo_only": True,
     "display_version": True,

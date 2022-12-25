@@ -1,0 +1,21 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using the metadata from this file."
+authors:
+  - family-names: "Bradley"
+    given-names: "Herbie"
+    orcid: "https://orcid.org/0000-0001-5390-1257"
+  - family-names: "Fan"
+    given-names: "Honglu"
+  - family-names: "Carvalho"
+    given-names: "Francisco"
+  - family-names: "Fisher"
+    given-names: "Matthew"
+  - family-names: "Castricato"
+    given-names: "Louis"
+  - family-names: "reciprocated"
+  - family-names: "dmayhem93"
+title: "OpenELM"
+version: 0.1.7
+doi: 10.5281/zenodo.7361753
+date-released: 2022-12-25
+url: "https://github.com/CarperAI/OpenELM"
