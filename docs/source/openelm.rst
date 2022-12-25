@@ -5,7 +5,7 @@ Subpackages
 -----------
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 3
 
    openelm.environments
 
@@ -34,15 +34,6 @@ Diff Models
 -----------------------------------------
 
 .. automodule:: openelm.diff_model
-   :members:
-   :undoc-members:
-   :show-inheritance:
-   :special-members: __init__
-
-Module contents
------------------------------------------
-
-.. automodule:: openelm
    :members:
    :undoc-members:
    :show-inheritance:
