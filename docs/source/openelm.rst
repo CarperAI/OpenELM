@@ -12,7 +12,7 @@ Subpackages
 Submodules
 ----------
 
-ELM
+openelm.elm module
 -----------------------------------------
 
 .. automodule:: openelm.elm
@@ -21,7 +21,7 @@ ELM
    :show-inheritance:
    :special-members: __init__
 
-MAP-Elites
+openelm.map_elites module
 -----------------------------------------
 
 .. automodule:: openelm.map_elites
@@ -30,10 +30,19 @@ MAP-Elites
    :show-inheritance:
    :special-members: __init__
 
-Diff Models
+openelm.diff_model module
 -----------------------------------------
 
 .. automodule:: openelm.diff_model
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :special-members: __init__
+
+Module contents
+-----------------------------------------
+
+.. automodule:: openelm
    :members:
    :undoc-members:
    :show-inheritance:
