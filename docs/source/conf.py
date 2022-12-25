@@ -10,14 +10,13 @@ import os
 import pathlib
 import sys
 
-import sphinx_rtd_theme  # noqa: F401
-
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
-# from importlib.metadata import version as importlib_version
+from importlib.metadata import version as importlib_version
 
+import sphinx_rtd_theme  # noqa: F401
 
 sys.path.insert(0, os.path.abspath("../src"))
 if "READTHEDOCS" in os.environ:
@@ -33,7 +32,7 @@ if "READTHEDOCS" in os.environ:
 project = "OpenELM"
 copyright = "2022, CarperAI"
 author = "CarperAI"
-release = '0.1.7'  # '.'.join(importlib_version('openelm').split('.')[:3])
+release = version = '.'.join(importlib_version('openelm').split('.')[:3])
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
