@@ -332,6 +332,7 @@ class Sodarace(BaseEnvironment[Sodaracer]):
     ) -> None:
         """
         Sodarace environment.
+
         Args:
             seed: the seed dict.
             config: the config file path or dict.

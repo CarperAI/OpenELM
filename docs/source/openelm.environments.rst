@@ -1,10 +1,10 @@
 openelm.environments package
 =============================
 
-Submodules
+Environment Submodules
 --------------------------------------
 
-openelm.environments.environments module
+OpenELM Environments
 -------------------------------------------
 
 .. automodule:: openelm.environments.environments
@@ -13,7 +13,7 @@ openelm.environments.environments module
    :show-inheritance:
    :special-members: __init__
 
-Module contents
+Environment Module contents
 --------------------------------------
 
 .. automodule:: openelm.environments
