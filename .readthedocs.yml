@@ -7,8 +7,7 @@ version: 2
 
 # Remove report submodule from docs build
 submodules:
-  include: all
-  recursive: true
+  exclude: all
 
 build:
   os: ubuntu-20.04
