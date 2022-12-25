@@ -11,6 +11,7 @@ Welcome to OpenELM's documentation!
    :caption: Contents:
 
    openelm
+   openelm.environments
 
 Indices and tables
 ==================
