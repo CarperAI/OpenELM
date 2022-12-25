@@ -10,15 +10,16 @@ import os
 import pathlib
 import sys
 
+import sphinx_rtd_theme  # noqa: F401
+
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
-from importlib.metadata import version as importlib_version
+# from importlib.metadata import version as importlib_version
 
-import sphinx_rtd_theme  # noqa: F401
 
-sys.path.insert(0, os.path.abspath(".."))
+sys.path.insert(0, os.path.abspath("../src"))
 if "READTHEDOCS" in os.environ:
     src_folder = pathlib.Path(__file__).resolve().parent.parent.parent / "src"
     sys.path.append(str(src_folder))

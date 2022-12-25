@@ -7,9 +7,6 @@ Subpackages
 .. toctree::
    :maxdepth: 2
 
-   openelm.environments
-   openelm.codegen
-
 Submodules
 ----------
 
@@ -35,15 +32,6 @@ openelm.diff_model module
 -----------------------------------------
 
 .. automodule:: openelm.diff_model
-   :members:
-   :undoc-members:
-   :show-inheritance:
-   :special-members: __init__
-
-openelm.benchmarks module
------------------------------------------
-
-.. automodule:: openelm.benchmarks
    :members:
    :undoc-members:
    :show-inheritance:
