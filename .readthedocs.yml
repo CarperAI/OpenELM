@@ -28,4 +28,4 @@ python:
    install:
    - requirements: docs/requirements.txt
    - method: pip
-     path: ./src/
+   system_packages: True
