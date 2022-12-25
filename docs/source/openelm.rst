@@ -5,7 +5,7 @@ Subpackages
 -----------
 
 .. toctree::
-   :maxdepth: 1
+   :maxdepth: 2
 
    openelm.environments
 
