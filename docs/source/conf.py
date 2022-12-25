@@ -18,14 +18,12 @@ from importlib.metadata import version as importlib_version
 
 import sphinx_rtd_theme  # noqa: F401
 
-sys.path.insert(0, os.path.abspath("../src"))
 if "READTHEDOCS" in os.environ:
     src_folder = pathlib.Path(__file__).resolve().parent.parent.parent / "src"
     sys.path.append(str(src_folder))
 
     print("Detected running on ReadTheDocs")
     print(f"Added {src_folder} to sys.path")
-
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
@@ -44,6 +42,7 @@ release = version = '.'.join(importlib_version('openelm').split('.')[:3])
 
 extensions = [
     "sphinx_rtd_theme",
+    "sphinx.ext.napoleon",
     "sphinx.ext.todo",
     "sphinx.ext.viewcode",
     "sphinx.ext.autodoc",

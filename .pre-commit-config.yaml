@@ -36,6 +36,6 @@ repos:
     -   id: pydocstyle
         args:
           - '--convention=google'
-          - '--add-ignore=D10'
+          - '--add-ignore=D10,D212'
           - '-v'
           - '--count'

@@ -16,7 +16,7 @@ dependencies = {file = ["requirements.txt"]}
 
 [tool.pydocstyle]
 convention = "google"
-add-ignore = "D10"
+add-ignore = "D10, D212"
 
 [tool.pytest.ini_options]
 minversion = "6.0"
