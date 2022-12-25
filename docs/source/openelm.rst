@@ -38,3 +38,12 @@ Diff Models
    :undoc-members:
    :show-inheritance:
    :special-members: __init__
+
+Module contents
+-----------------------------------------
+
+.. automodule:: openelm
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :special-members: __init__
