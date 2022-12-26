@@ -69,4 +69,10 @@ tinygp = [
     "pygraphviz",
     "graphviz"
 ]
+docs = [
+    "sphinx==5.3.0",
+    "sphinx_rtd_theme",
+    "sphinx_autodoc_typehints"
+]
+
 notebook = ["ipython"]
