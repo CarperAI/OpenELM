@@ -16,7 +16,6 @@ dependencies = {file = ["requirements.txt"]}
 
 [tool.setuptools_scm]
 
-
 [tool.pydocstyle]
 convention = "google"
 add-ignore = "D10, D212"
