@@ -39,9 +39,6 @@ jobs:
   package:
     name: Build & inspect our package.
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ["3.9", "3.10"]
 
     steps:
       - uses: actions/checkout@v3
