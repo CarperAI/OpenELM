@@ -12,7 +12,6 @@ from omegaconf import OmegaConf
 from tqdm import tqdm
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 
-from openelm.codegen.codegen_utilities import set_seed
 from openelm.constants import SRC_PATH
 from openelm.utils.diff_eval import apply_diff, split_diff
 
@@ -26,10 +25,12 @@ def eval_completions(
 ) -> Union[int, list[int]]:
     """
     Evaluate (a batch of) the modified codes on a task.
+
     Args:
         codes: either a string or a batch of strings. The code(s) to be evaluated.
         task: (Optional) the task to be performed.
         timeout: (Optional) the timeout (in seconds).
+
     Returns:
         either the status code of the string or a list of status codes of the batch
         of strings (depending on whether `codes` is batched).
@@ -52,9 +53,11 @@ def eval_completions(
 def mutate_code(n_bugs: int = 5, task: str = "parity") -> tuple:
     """
     Mutate code to create n bugs. Output the prompt in diff format.
+
     Args:
         n_bugs: number of bugs to introduce (from 1 to 5).
         task: (Optional) the task to be performed.
+
     Returns:
         mutated_code, function_string
     """
@@ -117,7 +120,6 @@ def main(cfg):
     end_of_diff = re.compile("\n[^ +-@]+")
     codes = []
     for _ in tqdm(range(num_batches), desc=f"Running benchmark with {cfg.n_bugs} bugs"):
-        set_seed(torch.random.seed())
         tokens = model.generate(
             **mutated_encoding,
             do_sample=True,
