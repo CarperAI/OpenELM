@@ -37,7 +37,7 @@ jobs:
           pytest
 
   package:
-    name: Build & inspect our package.
+    name: Build & inspect the package.
     runs-on: ubuntu-latest
 
     steps:
