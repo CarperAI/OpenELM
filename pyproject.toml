@@ -68,5 +68,8 @@ docs = [
     "sphinx_rtd_theme",
     "sphinx_autodoc_typehints"
 ]
+trlx = [
+    "trlx @ git+https://github.com/CarperAI/trlx.git",
+]
 
 notebook = ["ipython"]
