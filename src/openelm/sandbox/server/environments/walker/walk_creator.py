@@ -51,7 +51,11 @@ class Walker:
 
 
 class walker_creator:
-    """Walker Creator Referenced in ELM Paper - https://arxiv.org/abs/2206.08896 (pg.16)."""
+    """
+    Walker Creator Referenced in ELM Paper.
+
+    See https://arxiv.org/abs/2206.08896 (pg.16).
+    """
 
     def __init__(self):
         self.joints: list[tuple[float, float]] = []
