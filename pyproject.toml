@@ -16,7 +16,7 @@ add-ignore = "D10, D212"
 
 [tool.pytest.ini_options]
 minversion = "6.0"
-addopts = "-rA --doctest-modules --color=yes" # --cov=openelm"  # Uncomment this for coverage by default
+addopts = "-rA -x --doctest-modules --color=yes" # --cov=openelm"  # Uncomment this for coverage by default
 testpaths = ["tests"]
 doctest_optionflags = ["NORMALIZE_WHITESPACE", "IGNORE_EXCEPTION_DETAIL"]
 
