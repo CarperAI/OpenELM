@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from itertools import combinations
 
 
-@dataclass(frozen=True)
+@dataclass
 class Walker:
     joints: list[tuple[float, float]]
     muscles: list[list]
@@ -12,12 +12,17 @@ class Walker:
         return self.__dict__
 
     def validate(self) -> bool:
-        """logic for ensuring that the Sodaracer will not break the underlying Box2D physics engine
+        """
+        Validate the Walker.
+
+        logic for ensuring that the Sodaracer will not break the underlying
+        Box2D physics engine
             a) that the strength of muscles is limited
             b) that each joint is connected only to so many muscles
             c) that there is a minimum distance between joints
+
         Returns:
-            _type_: bool
+            bool: Whether the walker is valid or not
         """
         max_muscles_per_joint: int = 10
         max_muscle_strength: int = 10
@@ -81,5 +86,5 @@ class walker_creator:
         return muscle_data
 
     def get_walker(self) -> Walker:
-        """Python dictionary with keys such as 'joints' and 'muscles'"""
+        """Python dictionary with keys such as 'joints' and 'muscles'."""
         return Walker(self.joints, self.muscles)

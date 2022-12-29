@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from itertools import combinations
 
 
-@dataclass(frozen=True)
+@dataclass
 class Walker:
     joints: list[tuple[float, float]]
     muscles: list[list]
