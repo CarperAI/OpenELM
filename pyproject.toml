@@ -10,6 +10,17 @@ dependencies = {file = ["requirements.txt"]}
 [tool.isort]
 profile = "black"
 
+[tool.flake8]
+max-line-length = 88
+extend-ignore = [
+    "E203",
+    "E501",
+    "F811"
+]
+extend-exclude = ["docs"]
+count = true
+statistics = true
+
 [tool.pydocstyle]
 convention = "google"
 add-ignore = "D10, D212"
@@ -53,6 +64,7 @@ dev = [
     "black",
     "isort",
     "flake8",
+    "flake8-pyproject",
     "pydocstyle",
     "mypy",
     "pre-commit",
