@@ -13,6 +13,7 @@ n_bugs: 1
 fp16: False
 pad_token: 50256
 tasks: ["parity"]
+bugs_data_path: 'data/diff_benchmark.json'
 run_name: ???  # Mandatory string argument that describes the run.
 
 # diff parameters

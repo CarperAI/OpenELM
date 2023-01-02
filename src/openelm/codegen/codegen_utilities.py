@@ -122,7 +122,7 @@ def sample(cfg, model, tokenizer, batch, add_def=False):
 
     input_ids_len = batch["input_ids"].shape[1]
     assert input_ids_len < cfg.gen_max_len
-    with torch.no_grad():
+    with torch.inference_mode():
         batch = batch.to(device)
         if cfg.gpus > 1:
             tokens = model.module.generate(

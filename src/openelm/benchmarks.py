@@ -152,6 +152,7 @@ def run_benchmark(cfg):
             eval_results = np.fromiter(
                 eval_completions(truncations, task=cfg.tasks[0], timeout=cfg.timeout),
                 dtype=np.byte,
+                count=cfg.batch_size,
             )
         else:
             eval_results = np.vstack(
@@ -162,6 +163,7 @@ def run_benchmark(cfg):
                             truncations, task=cfg.tasks[0], timeout=cfg.timeout
                         ),
                         dtype=np.byte,
+                        count=cfg.batch_size,
                     ),
                 )
             )
