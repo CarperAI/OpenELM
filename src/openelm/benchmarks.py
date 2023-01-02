@@ -170,7 +170,8 @@ def run_benchmark(cfg):
     corr_cnt = np.count_nonzero(eval_results == 0)
     print(f"Number of bugs: {cfg.n_bugs}")
     print(
-        f"Result: {corr_cnt} successful completions in {cfg.n_trials} trials, {(corr_cnt / cfg.n_trials) * 100}%"
+        f"Result: {corr_cnt} successful completions in {cfg.n_trials} trials,",
+        f"{(corr_cnt / cfg.n_trials) * 100}%"
     )
 
 

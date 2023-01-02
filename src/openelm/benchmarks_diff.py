@@ -96,7 +96,8 @@ def benchmark_parity(cfg, model, tokenizer, device):
     num_batches = cfg.n_trials // cfg.batch_size
     end_of_diff = re.compile("\n[^ +-@]+")
     eval_results = []
-    for _ in tqdm(range(num_batches), desc=f"Running benchmark with {cfg.n_bugs} bugs"):
+    for _ in tqdm(range(num_batches),
+                  desc=f"Running benchmark with {cfg.n_bugs} bugs"):
         with torch.inference_mode():
             tokens = model.generate(
                 **mutated_encoding,
@@ -111,7 +112,8 @@ def benchmark_parity(cfg, model, tokenizer, device):
         for text in texts:
             # split the diff text according to <NME>, <BEF>, <MSG>, <DFF>.
             parsed = split_diff(text)
-            # truncate the diff hunk at the first line not starting with " ", "+", "-", or "@".
+            # truncate the diff hunk at the first line not starting with " ",
+            # "+", "-", or "@".
             if parsed and all(
                 [s in parsed for s in ["name", "file", "message", "diff"]]
             ):
@@ -121,7 +123,8 @@ def benchmark_parity(cfg, model, tokenizer, device):
                 # Invalid format. No patching.
                 eval_results.append(function_str)
 
-    # Evaluate the eval_results in threads (most importantly, separate reliability_guard in separate
+    # Evaluate the eval_results in threads (most importantly, separate
+    # reliability_guard in separate
     # threads as it would otherwise disable things in this current thread).
     # We apply diff patch loosely:
     #   1. it ignores the line numbers;
@@ -136,7 +139,8 @@ def benchmark_parity(cfg, model, tokenizer, device):
     print(f"Number of bugs: {cfg.n_bugs}\n")
     print(f"Mutated code to be fixed:\n{function_str}\n")
     print(
-        f"Result: {corr_cnt} successful completions in {cfg.n_trials} trials, {(corr_cnt / cfg.n_trials) * 100}%"
+        f"Result: {corr_cnt} successful completions in {cfg.n_trials} trials,",
+        f"{(corr_cnt / cfg.n_trials) * 100}%"
     )
 
 
@@ -166,7 +170,8 @@ def benchmark_bugs(cfg, model, tokenizer, device):
         for j in range(len(texts)):
             # split the diff text according to <NME>, <BEF>, <MSG>, <DFF>.
             parsed = split_diff(texts[j])
-            # truncate the diff hunk at the first line not starting with " ", "+", "-", or "@".
+            # truncate the diff hunk at the first line not starting with " ",
+            # "+", "-", or "@".
             if parsed and all((s in parsed for s in section_names)):
                 diff_hunk = end_of_diff.split(parsed["diff"])[0]
                 nme_idx = diff_hunk.find("<NME>")
