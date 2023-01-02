@@ -38,7 +38,9 @@ def eval_completions(
         of strings (depending on whether `eval_results` is batched).
     """
     if task == "parity":
-        _eval_results = eval_results if isinstance(eval_results, list) else [eval_results]
+        _eval_results = (
+            eval_results if isinstance(eval_results, list) else [eval_results]
+        )
         results = []
         for code in _eval_results:
             results.append(eval_code_string(code, parity_test_data, timeout))
@@ -96,8 +98,7 @@ def benchmark_parity(cfg, model, tokenizer, device):
     num_batches = cfg.n_trials // cfg.batch_size
     end_of_diff = re.compile("\n[^ +-@]+")
     eval_results = []
-    for _ in tqdm(range(num_batches),
-                  desc=f"Running benchmark with {cfg.n_bugs} bugs"):
+    for _ in tqdm(range(num_batches), desc=f"Running benchmark with {cfg.n_bugs} bugs"):
         with torch.inference_mode():
             tokens = model.generate(
                 **mutated_encoding,
@@ -140,18 +141,23 @@ def benchmark_parity(cfg, model, tokenizer, device):
     print(f"Mutated code to be fixed:\n{function_str}\n")
     print(
         f"Result: {corr_cnt} successful completions in {cfg.n_trials} trials,",
-        f"{(corr_cnt / cfg.n_trials) * 100}%"
+        f"{(corr_cnt / cfg.n_trials) * 100}%",
     )
 
 
 def benchmark_bugs(cfg, model, tokenizer, device):
+    # Load bugs data
     with open(cfg.bugs_data_path, "r") as f:
         bugs = json.load(f)
     eval_results = [-1] * len(bugs) * cfg.batch_size
-    for i in tqdm(range(len(bugs)),
-                  desc=f"Running {cfg.batch_size} trials for each bug"):
-        encoding = tokenizer([bugs[i]['prompt'][:-6]], return_tensors="pt",
-                             padding=True, truncation=True).to(device)
+
+    for i in tqdm(
+        range(len(bugs)), desc=f"Running {cfg.batch_size} trials for each bug"
+    ):
+
+        encoding = tokenizer(
+            [bugs[i]["prompt"][:-6]], return_tensors="pt", padding=True, truncation=True
+        ).to(device)
         token_len = encoding["input_ids"].shape[1]
         with torch.inference_mode():
             tokens = model.generate(
@@ -165,6 +171,7 @@ def benchmark_bugs(cfg, model, tokenizer, device):
             )
 
             texts = tokenizer.batch_decode(tokens)
+
         end_of_diff = re.compile("\n[^ +-@]+")
         section_names = set(["name", "file", "message", "diff"])
         for j in range(len(texts)):
@@ -186,7 +193,7 @@ def benchmark_bugs(cfg, model, tokenizer, device):
     corr_cnt = np.count_nonzero(np.asarray(eval_results) == 0)
     print(
         f"Result: {corr_cnt} successful completions in {len(eval_results)} trials,",
-        f"{(corr_cnt / (len(bugs) * cfg.batch_size)) * 100}%"
+        f"{(corr_cnt / (len(bugs) * cfg.batch_size)) * 100}%",
     )
 
 
@@ -213,8 +220,9 @@ def main(cfg):
             cfg.model, torch_dtype=torch.float16, low_cpu_mem_usage=True
         ).to(device)
     else:
-        model = AutoModelForCausalLM.from_pretrained(cfg.model,
-                                                     config=config).to(device)
+        model = AutoModelForCausalLM.from_pretrained(cfg.model, config=config).to(
+            device
+        )
     if "parity" in cfg.tasks:
         benchmark_parity(cfg, model, tokenizer, device)
     if "bugs" in cfg.tasks:
