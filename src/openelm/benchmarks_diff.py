@@ -14,6 +14,7 @@ from tqdm import tqdm
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 
 from openelm.benchmarks import eval_code_string, parity_reference
+from openelm.codegen.modelling_codegen import CodeGenForCausalLM
 from openelm.constants import SRC_PATH
 from openelm.utils.diff_eval import apply_diff, split_diff
 
@@ -224,6 +225,10 @@ def main(cfg):
             cfg.model, torch_dtype=torch.float16, low_cpu_mem_usage=True
         ).to(device)
     else:
+        if not cfg.model.startswith("CarperAI"):
+            model = CodeGenForCausalLM.from_pretrained(cfg.model, config=config).to(
+                device
+            )
         model = AutoModelForCausalLM.from_pretrained(cfg.model, config=config).to(
             device
         )
