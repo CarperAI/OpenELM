@@ -2,7 +2,7 @@ import os
 import re
 import shutil
 
-from openelm.sandbox.server.codex_execute import (
+from openelm.sandbox.server.sandbox_codex_execute import (
     TimeoutException,
     create_tempdir,
     reliability_guard,

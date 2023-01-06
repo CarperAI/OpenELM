@@ -25,69 +25,6 @@ import signal
 import tempfile
 
 
-def check_correctness(check_program, timeout, task_id, completion_id):
-    """
-    Evaluates the functional correctness of a completion by running the test
-    suite provided in the problem.
-
-    :param completion_id: an optional completion ID so we can match
-        the results later even if execution finishes asynchronously.
-    """
-    manager = multiprocessing.Manager()
-    result = manager.list()
-
-    p = multiprocessing.Process(
-        target=unsafe_execute, args=(check_program, result, timeout)
-    )
-    p.start()
-    p.join(timeout=timeout + 1)
-    if p.is_alive():
-        p.kill()
-
-    if not result:
-        result.append("timed out")
-
-    return dict(
-        task_id=task_id,
-        passed=result[0] == "passed",
-        result=result[0],
-        completion_id=completion_id,
-    )
-
-
-def unsafe_execute(check_program, result, timeout):
-
-    with create_tempdir():
-
-        # These system calls are needed when cleaning up tempdir.
-        import os
-        import shutil
-
-        rmtree = shutil.rmtree
-        rmdir = os.rmdir
-        chdir = os.chdir
-
-        # Disable functionalities that can make destructive changes to the test.
-        reliability_guard()
-
-        # Run program.
-        try:
-            exec_globals = {}
-            with swallow_io():
-                with time_limit(timeout):
-                    exec(check_program, exec_globals)
-            result.append("passed")
-        except TimeoutException:
-            result.append("timed out")
-        except BaseException as e:
-            result.append(f"failed: {e}")
-
-        # Needed for cleaning up.
-        shutil.rmtree = rmtree
-        os.rmdir = rmdir
-        os.chdir = chdir
-
-
 @contextlib.contextmanager
 def time_limit(seconds):
     def signal_handler(signum, frame):

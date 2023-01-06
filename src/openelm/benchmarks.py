@@ -6,12 +6,10 @@ from typing import Iterator
 
 import hydra
 import numpy as np
-import torch
-from openelm.constants import SRC_PATH
 from omegaconf import OmegaConf
 from tqdm import tqdm
 
-from openelm.codegen.codegen_utilities import model_setup, sample, set_seed, truncate
+from openelm.codegen.codegen_utilities import model_setup, sample, truncate
 from openelm.codegen.codex_execute import (
     TimeoutException,
     create_tempdir,
@@ -19,6 +17,7 @@ from openelm.codegen.codex_execute import (
     swallow_io,
     time_limit,
 )
+from openelm.constants import SRC_PATH
 
 
 def parity_reference(b1, b2, b3, b4):
@@ -147,13 +146,13 @@ def run_benchmark(cfg):
         text.append(tokenizer.batch_decode(mutated_encoding.input_ids[:, i]))
     num_batches = cfg.n_trials // cfg.batch_size
     for i in tqdm(range(num_batches), desc=f"Running benchmark with {cfg.n_bugs} bugs"):
-        set_seed(torch.random.seed())
         completions = sample(cfg, model, tokenizer, mutated_encoding, add_def=True)
         truncations = map(truncate, completions)
         if i == 0:
             eval_results = np.fromiter(
                 eval_completions(truncations, task=cfg.tasks[0], timeout=cfg.timeout),
                 dtype=np.byte,
+                count=cfg.batch_size,
             )
         else:
             eval_results = np.vstack(
@@ -164,13 +163,15 @@ def run_benchmark(cfg):
                             truncations, task=cfg.tasks[0], timeout=cfg.timeout
                         ),
                         dtype=np.byte,
+                        count=cfg.batch_size,
                     ),
                 )
             )
     corr_cnt = np.count_nonzero(eval_results == 0)
     print(f"Number of bugs: {cfg.n_bugs}")
     print(
-        f"Result: {corr_cnt} successful completions in {cfg.n_trials} trials, {(corr_cnt / cfg.n_trials) * 100}%"
+        f"Result: {corr_cnt} successful completions in {cfg.n_trials} trials,",
+        f"{(corr_cnt / cfg.n_trials) * 100}%"
     )
 
 

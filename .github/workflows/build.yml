@@ -35,3 +35,11 @@ jobs:
       - name: Test with pytest
         run: |
           pytest
+
+  package:
+    name: Build & inspect the package.
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+      - uses: hynek/build-and-inspect-python-package@v1

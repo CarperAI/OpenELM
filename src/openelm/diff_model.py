@@ -18,7 +18,7 @@ class MutationModel(ABC):
         pass
 
 
-@dataclass(frozen=True)
+@dataclass
 class FunctionTemplate:
     """
     A function template for a mutation model.
@@ -126,12 +126,16 @@ class PromptMutationModel(MutationModel):
 
     def generate_program(self, code: str) -> list[dict]:
         """
-        Given a piece of code, do prompt mutation, call the sandbox server to execute the code and return the result.
+        Generate a new program from a seed using the sandbox.
+
+        Given a piece of code, do prompt mutation, call the sandbox server to
+        execute the code and return the result.
 
         Args:
-            code: the full code string.
+            code (str): The full code string.
+
         Returns:
-            a numpy array (if successful) or the exception object.
+            A numpy array (if successful) or the exception object.
         """
         results = []
         for code in self.generate_prompt_str(code):

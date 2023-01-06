@@ -13,14 +13,11 @@ from Box2D import Box2D as b2
 from Box2D.examples.framework import Framework, main
 
 from openelm.environments.sodaracer.helpers import (
-    BodyInformation,
     Bone,
     DistanceAccessor,
     Entity,
-    EntityType,
     Muscle,
     PhysicsId,
-    staticBodyCount,
 )
 
 
@@ -402,10 +399,9 @@ class IESoRWorld(Framework):
         """
         The main physics step.
 
-        Takes care of physics drawing (callbacks are executed after the world.Step() )
-        and drawing additional information.
+        Takes care of physics drawing (callbacks are executed after the
+        world.Step()) and drawing additional information.
         """
-
         # self.stepCount += 1
         # # Don't do anything if the setting's Hz are <= 0
         if settings.hz > 0.0:
