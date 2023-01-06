@@ -145,14 +145,15 @@ def benchmark_parity(cfg, model, tokenizer, device):
     )
 
 
-def benchmark_bugs(cfg, model, tokenizer, device):
+def benchmark_bugs(cfg, model, tokenizer, device, n_trials_per_task):
     # Load bugs data
     with open(cfg.bugs_data_path, "r") as f:
         bugs = json.load(f)
     eval_results = [-1] * len(bugs) * cfg.batch_size
-
-    for i in tqdm(
-        range(len(bugs)), desc=f"Running {cfg.batch_size} trials for each bug"
+    i = 0
+    for _ in tqdm(
+        range(n_trials_per_task * 2),
+        desc=f"Running {cfg.batch_size} trials for each bug",
     ):
 
         encoding = tokenizer(
@@ -189,6 +190,9 @@ def benchmark_bugs(cfg, model, tokenizer, device):
                     eval_results[i * cfg.batch_size + j] = 0
                 else:
                     eval_results[i * cfg.batch_size + j] = 1
+        i += 1
+        if i == n_trials_per_task:
+            i = 500
 
     corr_cnt = np.count_nonzero(np.asarray(eval_results) == 0)
     print(
@@ -226,7 +230,7 @@ def main(cfg):
     if "parity" in cfg.tasks:
         benchmark_parity(cfg, model, tokenizer, device)
     if "bugs" in cfg.tasks:
-        benchmark_bugs(cfg, model, tokenizer, device)
+        benchmark_bugs(cfg, model, tokenizer, device, cfg.n_bugs_trials)
 
 
 if __name__ == "__main__":
