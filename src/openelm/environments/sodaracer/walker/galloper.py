@@ -7,8 +7,8 @@ def make_sensor(wc, x0, y0, x1, y1, d):
 
 
 def make_walker(dx=0.0, dy=0.0, ddr=0, ddc=1.6, sid= 8.0,
- 				s_influence=0.2, s_side_width=0.0,
- 				first_center=5.0, last_center=15.0):
+				s_influence=0.2, s_side_width=0.0,
+				first_center=5.0, last_center=15.0):
 	wc = walker_creator()
 	ends = [make_sensor(wc, 5 + dx, -1 + dy, ddr, ddc, 4.5),
 		make_sensor(wc, 0, -0.1, sid, 9.5, 0.03),
