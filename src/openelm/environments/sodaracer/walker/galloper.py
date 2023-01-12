@@ -22,15 +22,15 @@ def make_walker(dx=0.0, dy=0.0, ddr=0, ddc=1.6, sid= 8.0,
 
 	# connect the square with distance muscles
 	for k in range(len(sides)-6):
-		wc.add_muscle(sides[k], sides[k+1], True, 30, 0.5)
-	wc.add_muscle(sides[2], sides[4], False, 4.0, 0.8)
+		wc.add_muscle(sides[k], sides[k+1], 30, 0.5)
+	wc.add_muscle(sides[2], sides[4], 4.0, 0.8)
 	for k in range(len(sides)-2):
-		wc.add_muscle(sides[k], sides[k + 2], True, 18.0,
+		wc.add_muscle(sides[k], sides[k + 2], 18.0,
 			60.0 / 5.5)
 
 	for k in reversed(range(len(sides)-6)):
-		wc.add_muscle(sides[k], sides[k + 5], False, 4.0,
+		wc.add_muscle(sides[k], sides[k + 5], 4.0,
 			20.0 / 9.0)
 
-	wc.add_muscle(center, sides[7], False, 2,0, 90.0 / 9.0)
+	wc.add_muscle(center, sides[7], 2,0, 90.0 / 9.0)
 	return wc.get_walker()

@@ -24,5 +24,5 @@ def make_walker():
 		for i in range(num_points-5):
 			wc.add_muscle(points[j], points[(i+j)%num_points],
 				0.0, 1.0, (j+1)/num_points)
-		wc.add_muscle(points[j],center,False,3,(j+1)/num_points)
+		wc.add_muscle(points[j],center,3,(j+1)/num_points)
 	return wc.get_walker()
