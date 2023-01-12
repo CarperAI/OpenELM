@@ -1,4 +1,5 @@
 from openelm.environments.sodaracer.walker.walk_creator import walker_creator
+from openelm.environments.sodaracer.walker.CPPN_mutable import query_cppn
 
 import math
 import numpy
