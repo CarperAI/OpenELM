@@ -116,11 +116,12 @@ def model_setup(cfg):
     return model, tokenizer
 
 
-def sample(cfg, model, tokenizer, batch, add_def=False):
+def sample(cfg, model, tokenizer, batch, starting_idx=None):
     """Run a model on a batch of contexts for a particular task."""
     device = torch.device("cuda" if cfg.cuda else "cpu")
-
     input_ids_len = batch["input_ids"].shape[1]
+    if starting_idx is None:
+        starting_idx = input_ids_len
     assert input_ids_len < cfg.gen_max_len
     with torch.inference_mode():
         batch = batch.to(device)
@@ -130,7 +131,7 @@ def sample(cfg, model, tokenizer, batch, add_def=False):
                 do_sample=True,
                 num_return_sequences=cfg.batch_size,
                 temperature=cfg.temp,
-                max_length=input_ids_len + cfg.gen_max_len,
+                max_length=cfg.gen_max_len,
                 top_p=cfg.top_p,
                 pad_token_id=cfg.pad_token,
                 use_cache=True,
@@ -141,14 +142,10 @@ def sample(cfg, model, tokenizer, batch, add_def=False):
                 do_sample=True,
                 num_return_sequences=cfg.batch_size,
                 temperature=cfg.temp,
-                max_length=input_ids_len + cfg.gen_max_len,
+                max_length=cfg.gen_max_len,
                 top_p=cfg.top_p,
                 pad_token_id=cfg.pad_token,
                 use_cache=True,
             )
-        # "input_ids_len:" removes the prompt
-        # - 1 adds in "def"
-        if add_def:
-            input_ids_len -= 1
-        text = tokenizer.batch_decode(tokens[:, input_ids_len:, ...])
+        text = tokenizer.batch_decode(tokens[:, starting_idx:, ...])
     return text

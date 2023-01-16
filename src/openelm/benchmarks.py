@@ -140,13 +140,12 @@ def run_benchmark(cfg):
         max_length=2048,
         return_tensors="pt",
     )
-    input_ids_len = mutated_encoding.input_ids.shape
-    text = []
-    for i in range(input_ids_len[1]):
-        text.append(tokenizer.batch_decode(mutated_encoding.input_ids[:, i]))
+    input_ids_len = mutated_encoding.input_ids.shape[1]
     num_batches = cfg.n_trials // cfg.batch_size
     for i in tqdm(range(num_batches), desc=f"Running benchmark with {cfg.n_bugs} bugs"):
-        completions = sample(cfg, model, tokenizer, mutated_encoding, add_def=True)
+        completions = sample(
+            cfg, model, tokenizer, mutated_encoding, starting_idx=input_ids_len - 1
+        )
         truncations = map(truncate, completions)
         if i == 0:
             eval_results = np.fromiter(
@@ -171,7 +170,7 @@ def run_benchmark(cfg):
     print(f"Number of bugs: {cfg.n_bugs}")
     print(
         f"Result: {corr_cnt} successful completions in {cfg.n_trials} trials,",
-        f"{(corr_cnt / cfg.n_trials) * 100}%"
+        f"{(corr_cnt / cfg.n_trials) * 100}%",
     )
 
 

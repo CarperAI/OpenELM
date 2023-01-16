@@ -6,7 +6,7 @@ top_p: 0.95
 temp: 0.85
 timeout: 5  # Seconds
 gpus: 1
-gen_max_len: 128
+gen_max_len: 256
 batch_size: 32
 n_trials: 3200
 n_bugs: 1

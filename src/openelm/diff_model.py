@@ -4,7 +4,6 @@ from dataclasses import dataclass
 
 import numpy as np
 import requests
-import torch
 from omegaconf import DictConfig, OmegaConf
 
 from openelm.codegen.codegen_utilities import model_setup, sample, set_seed, truncate
@@ -95,8 +94,7 @@ class PromptMutationModel(MutationModel):
             self.cfg,
             {"batch_size": self.cfg.batch_size if batch_size is None else batch_size},
         )
-        with torch.no_grad():
-            completion = sample(cfg, self.model, self.tokenizer, encoding)
+        completion = sample(cfg, self.model, self.tokenizer, encoding)
         # Reset random seed
         set_seed(int(self.rng.integers(0, 1e8)))
 
