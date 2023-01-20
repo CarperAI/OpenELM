@@ -8,7 +8,10 @@ from transformers import (
 
 
 def cg2gptj(model_name):
-    cg_model = CodeGenForCausalLM.from_pretrained(model_name, torch_dtype="auto")
+    print(f"Model we're converting: {model_name}")
+    cg_model = CodeGenForCausalLM.from_pretrained(
+        model_name, use_cache=True, torch_dtype="auto"
+    )
     cg_config = cg_model.config
 
     # Create empty GPTJ model
