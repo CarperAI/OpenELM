@@ -70,9 +70,7 @@ def test_sodaracer_eval():
     radial_start, radial_end = run_world(radial_world, radial_dict)
     assert (radial_start, radial_end) == (0.0002620397645793254, 95.02245400562137)
 
-    cppn_fixed_dict = cppn_fixed_world.load_body_into_world(
-        cppn_fixed_walker.to_dict()
-    )
+    cppn_fixed_dict = cppn_fixed_world.load_body_into_world(cppn_fixed_walker.to_dict())
 
     assert cppn_fixed_dict == {
         "width": 433.8842975206611,
@@ -119,9 +117,7 @@ def test_draw_list():
     square_world = IESoRWorld()
 
     square_dict = square_world.load_body_into_world(square_walker.to_dict())
-    _ = cppn_fixed_world.load_body_into_world(
-        cppn_fixed_walker.to_dict()
-    )
+    _ = cppn_fixed_world.load_body_into_world(cppn_fixed_walker.to_dict())
 
     cppn_draw_list_dict = ast.literal_eval(cppn_fixed_world.get_world_json())
 

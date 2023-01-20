@@ -1,7 +1,7 @@
-from openelm.environments.sodaracer.walker.walk_creator import walker_creator
-from openelm.environments.sodaracer.walker.CPPN_mutable import query_cppn
-
 import math
+
+from openelm.environments.sodaracer.walker.CPPN_mutable import query_cppn
+from openelm.environments.sodaracer.walker.walk_creator import walker_creator
 
 
 def make_walker(p_scale=1):  # acrylic of current (m)

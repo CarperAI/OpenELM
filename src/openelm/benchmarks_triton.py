@@ -8,11 +8,10 @@ from typing import Iterator
 import hydra
 import numpy as np
 import torch
-from openelm.constants import SRC_PATH
 from omegaconf import OmegaConf
 from tqdm import tqdm
 
-from openelm.codegen.codegen_triton import setup_triton, sample_triton, truncate
+from openelm.codegen.codegen_triton import sample_triton, setup_triton, truncate
 from openelm.codegen.codex_execute import (
     TimeoutException,
     create_tempdir,
@@ -20,6 +19,7 @@ from openelm.codegen.codex_execute import (
     swallow_io,
     time_limit,
 )
+from openelm.constants import SRC_PATH
 
 
 def parity_reference(b1, b2, b3, b4):
@@ -130,7 +130,7 @@ def mutate_code(n_bugs: int = 5, task: str = "parity"):
 
 
 def run_benchmark(cfg):
-    cgmodel, tokenizer = setup_triton(cfg)
+    cg_triton, tokenizer = setup_triton(cfg)
     mutated_str = mutate_code(n_bugs=cfg.n_bugs, task=cfg.tasks[0])
     mutated_encoding = tokenizer(
         [mutated_str],
@@ -139,7 +139,7 @@ def run_benchmark(cfg):
         max_length=2048,
         return_tensors="np",
     )
-    #Triton eats numpy arrays
+    # Triton eats numpy arrays
     input_ids_len = mutated_encoding.input_ids.shape
     text = []
     for i in range(input_ids_len[1]):
@@ -148,7 +148,9 @@ def run_benchmark(cfg):
 
     for i in tqdm(range(num_batches), desc=f"Running benchmark with {cfg.n_bugs} bugs"):
 
-        completions = sample_triton(cfg, cg_triton, tokenizer, mutated_encoding, add_def=True)
+        completions = sample_triton(
+            cfg, cg_triton, tokenizer, mutated_encoding, add_def=True
+        )
         truncations = map(truncate, completions)
         if i == 0:
             eval_results = np.fromiter(

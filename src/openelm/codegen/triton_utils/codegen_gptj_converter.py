@@ -1,13 +1,18 @@
 import torch
-from transformers import GPTJForCausalLM, GPTJConfig
-from transformers import CodeGenTokenizer, CodeGenForCausalLM
+from transformers import (
+    CodeGenForCausalLM,
+    CodeGenTokenizer,
+    GPTJConfig,
+    GPTJForCausalLM,
+)
+
 
 def cg2gptj(model_name):
     cg_model = CodeGenForCausalLM.from_pretrained(model_name, torch_dtype="auto")
     cg_config = cg_model.config
 
     # Create empty GPTJ model
-    print('Creating empty GPTJ model')
+    print("Creating empty GPTJ model")
     config = GPTJConfig(
         vocab_size=cg_config.vocab_size,
         n_positions=cg_config.n_positions,
@@ -29,7 +34,7 @@ def cg2gptj(model_name):
         torch_dtype=cg_config.torch_dtype,
     )
     # Fix tokenizer type
-    config.tokenizer_class = 'CodeGenTokenizer'
+    config.tokenizer_class = "CodeGenTokenizer"
 
     gptj_model = GPTJForCausalLM(config)
     embed_dim = config.n_embd
@@ -42,32 +47,37 @@ def cg2gptj(model_name):
         assert new_name in dest_model.state_dict()
         replace(dest_model, src_model.state_dict()[old_name], new_name)
 
-    print('Converting...')
+    print("Converting...")
     # Copy weights from CodeGen model
     with torch.no_grad():
         cg_model.eval()
         gptj_model.eval()
-        
+
         for name, param in cg_model.named_parameters():
             # print(f'Converting {name}')
             # Handle the qkv weights separately because we need to split them
-            if 'qkv_proj' in name:
+            if "qkv_proj" in name:
                 qkv_proj = param.detach().clone()
-                mp_num = 4 # number of cores on their TPU I guess?
+                mp_num = 4  # number of cores on their TPU I guess?
                 local_dim = embed_dim // mp_num
                 # GPT-J and CodeGen slice up the qkv projection slightly differently.
                 # After a great deal of pain, I figured out that this permutation on
                 # the weights of the qkv_proj fixes it.
                 base_permutation = [0, 3, 6, 9, 1, 4, 7, 10, 2, 5, 8, 11]
-                permutation = torch.cat([torch.arange(i*local_dim, (i+1)*local_dim) for i in base_permutation])
+                permutation = torch.cat(
+                    [
+                        torch.arange(i * local_dim, (i + 1) * local_dim)
+                        for i in base_permutation
+                    ]
+                )
                 # NB: we permute the *rows* here because the computation is xA.T
-                new_qkv_proj = qkv_proj[permutation,:]
+                new_qkv_proj = qkv_proj[permutation, :]
                 # NB: the name QKV is misleading here; they are actually stored in
                 #     the order QVK
                 query, value, key = torch.split(new_qkv_proj, embed_dim, dim=0)
-                replace(gptj_model, query, name.replace('qkv_proj', 'q_proj'))
-                replace(gptj_model, key, name.replace('qkv_proj', 'k_proj'))
-                replace(gptj_model, value, name.replace('qkv_proj', 'v_proj'))
+                replace(gptj_model, query, name.replace("qkv_proj", "q_proj"))
+                replace(gptj_model, key, name.replace("qkv_proj", "k_proj"))
+                replace(gptj_model, value, name.replace("qkv_proj", "v_proj"))
             else:
                 replace_by_name(gptj_model, cg_model, name, name)
 

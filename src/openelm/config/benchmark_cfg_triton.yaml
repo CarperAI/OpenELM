@@ -1,4 +1,4 @@
-triton_host: 
+triton_host:
 triton_port: 8001
 top_p: 0.95
 temp: 0.85
