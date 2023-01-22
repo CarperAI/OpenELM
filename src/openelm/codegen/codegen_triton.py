@@ -152,8 +152,9 @@ def setup_triton(cfg):
     return cg_triton, tokenizer
 
 
-def sample_triton(cfg, cg_triton, tokeniser, batch, add_def=False):
+def sample_triton(cfg, cg_triton, tokenizer, batch, add_def=False):
     input_ids = batch["input_ids"]
+    input_ids_len = input_ids.shape[1]
     tokens = cg_triton.generate(
         input_ids,
         batch_size=cfg.batch_size,

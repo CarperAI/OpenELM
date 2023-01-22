@@ -10,8 +10,8 @@ import numpy as np
 import torch
 from omegaconf import OmegaConf
 from tqdm import tqdm
-
-from openelm.codegen.codegen_triton import sample_triton, setup_triton, truncate
+from openelm.codegen.codegen_utilities import truncate
+from openelm.codegen.codegen_triton import sample_triton, setup_triton
 from openelm.codegen.codex_execute import (
     TimeoutException,
     create_tempdir,
