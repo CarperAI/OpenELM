@@ -66,9 +66,7 @@ class Entity:
             "x": x_scale,
             "y": y_scale,
             "angle": angle,
-            "polyPoints": [
-                {"x": point.x, "y": point.y} for point in points
-            ]
+            "polyPoints": [{"x": point.x, "y": point.y} for point in points],
         }
         return entity
 
@@ -106,6 +104,7 @@ class Entity:
 
 class DistanceAccessor(b2.b2DistanceJoint):
     """Helper class to get/set the length of a distance joint."""
+
     # It was either this or access the name mangled
     # __getLength from the b2DistanceJoint so...
     getLength = b2._swig_new_instance_method(b2._Box2D.b2DistanceJoint___GetLength)

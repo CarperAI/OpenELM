@@ -1,3 +1,4 @@
+from openelm.environments import image_init_args
 from openelm.environments.environments import (
     BaseEnvironment,
     FunctionOptim,
@@ -5,7 +6,6 @@ from openelm.environments.environments import (
     MatchString,
 )
 from openelm.map_elites import MAPElites
-from openelm.environments import image_init_args
 
 
 def test_string_matching():

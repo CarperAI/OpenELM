@@ -16,6 +16,7 @@ class Map:
 
     This class is necessary to handle the circular buffer for the history dimension.
     """
+
     def __init__(
         self,
         dims: tuple,
@@ -92,6 +93,7 @@ class MAPElites:
     the solutions in the map, and places the mutated solutions in the map if they
     outperform the solutions already in their niche.
     """
+
     def __init__(
         self, env, n_bins: int, history_length: int, save_history: bool = False
     ):
