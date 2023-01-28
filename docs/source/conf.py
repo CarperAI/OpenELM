@@ -30,7 +30,7 @@ if "READTHEDOCS" in os.environ:
 project = "OpenELM"
 copyright = "2022, CarperAI"
 author = "CarperAI"
-release = version = '.'.join(importlib_version('openelm').split('.')[:3])
+release = version = ".".join(importlib_version("openelm").split(".")[:3])
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration

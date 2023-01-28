@@ -12,10 +12,16 @@ authors:
     given-names: "Matthew"
   - family-names: "Castricato"
     given-names: "Louis"
+    orcid: "https://orcid.org/0000-0003-2996-886X"
   - family-names: "reciprocated"
   - family-names: "dmayhem93"
+  - family-names: "Purohit"
+    given-names: "Shivanshu"
+  - family-names: "Lehman"
+    given-names: "Joel"
+    orcid: "https://orcid.org/0000-0002-9535-1123"
 title: "OpenELM"
-version: 0.1.7
+version: 0.1.8
 doi: 10.5281/zenodo.7361753
-date-released: 2022-12-25
+date-released: 2023-01-30
 url: "https://github.com/CarperAI/OpenELM"

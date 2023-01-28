@@ -5,8 +5,12 @@ from openelm.environments.sodaracer.walker.CPPN_fixed import (
 from openelm.environments.sodaracer.walker.CPPN_mutable import (
     make_walker as make_walker_cppn_mutable,
 )
-from openelm.environments.sodaracer.walker.radial import make_walker as make_walker_radial
-from openelm.environments.sodaracer.walker.square import make_walker as make_walker_square
+from openelm.environments.sodaracer.walker.radial import (
+    make_walker as make_walker_radial,
+)
+from openelm.environments.sodaracer.walker.square import (
+    make_walker as make_walker_square,
+)
 
 
 def test_seed_walkers():

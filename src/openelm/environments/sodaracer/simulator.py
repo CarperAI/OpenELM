@@ -3,6 +3,9 @@ Sodarace simualator.
 
 Mostly just https://github.com/OptimusLime/iesor-physics translated to Python.
 
+See here for a Box2D overview:
+https://github.com/pybox2d/cython-box2d/blob/master/docs/source/getting_started.md
+
 """
 
 import json
@@ -58,7 +61,9 @@ class IESoRWorld:
         self.groundBodyDef.position = b2.b2Vec2(0.0, -18.0)
 
         # Add ground body to the world
-        self.groundBody: b2.b2Body = self._add_body_to_world("ground", self.groundBodyDef)
+        self.groundBody: b2.b2Body = self._add_body_to_world(
+            "ground", self.groundBodyDef
+        )
         # Define the ground box shape.
         self.groundBox: b2.b2PolygonShape = b2.b2PolygonShape()
         # The extents are the half-widths of the box.
@@ -84,8 +89,10 @@ class IESoRWorld:
                 if fixture.type == b2.b2Shape.e_circle:
                     circle: b2.b2CircleShape = fixture.shape
                     single_shape["type"] = "circle"
-                    single_shape["bodyOffset"] = {"x": body.position.x,
-                                                  "y": body.position.y}
+                    single_shape["bodyOffset"] = {
+                        "x": body.position.x,
+                        "y": body.position.y,
+                    }
                     single_shape["rotation"] = body.angle
                     single_shape["center"] = {"x": circle.pos.x, "y": circle.pos.y}
                     single_shape["radius"] = circle.radius
@@ -94,10 +101,13 @@ class IESoRWorld:
                 elif fixture.type == b2.b2Shape.e_polygon:
                     poly: b2.b2PolygonShape = fixture.shape
                     single_shape["type"] = "polygon"
-                    single_shape["points"] = [{"x": point[0],
-                                               "y": point[1]} for point in poly.vertices]
-                    single_shape["bodyOffset"] = {"x": body.position.x,
-                                                  "y": body.position.y}
+                    single_shape["points"] = [
+                        {"x": point[0], "y": point[1]} for point in poly.vertices
+                    ]
+                    single_shape["bodyOffset"] = {
+                        "x": body.position.x,
+                        "y": body.position.y,
+                    }
                     single_shape["rotation"] = body.angle
                     single_shape["color"] = "#38F"
 
@@ -113,14 +123,20 @@ class IESoRWorld:
 
             single_joint = {}
             # Both body ids need to exist
-            if (joint.bodyA.userData is not None) and (joint.bodyB.userData is not None):
+            if (joint.bodyA.userData is not None) and (
+                joint.bodyB.userData is not None
+            ):
                 single_joint["sourceID"] = joint.bodyA.userData
                 single_joint["targetID"] = joint.bodyB.userData
                 # Drawing information for offsets on the body
-                single_joint["sourceOffset"] = {"x": joint.anchorA.x,
-                                                "y": joint.anchorA.y}
-                single_joint["targetOffset"] = {"x": joint.anchorB.x,
-                                                "y": joint.anchorB.y}
+                single_joint["sourceOffset"] = {
+                    "x": joint.anchorA.x,
+                    "y": joint.anchorA.y,
+                }
+                single_joint["targetOffset"] = {
+                    "x": joint.anchorB.x,
+                    "y": joint.anchorB.y,
+                }
             joints[joint.userData.id] = single_joint
 
         root["joints"] = joints
@@ -344,7 +360,8 @@ class IESoRWorld:
         return morphology
 
     def _get_body_entities(
-            self, body: dict, initial_morphology: dict) -> list[dict[str, Any]]:
+        self, body: dict, initial_morphology: dict
+    ) -> list[dict[str, Any]]:
         """
         Helper function to create all bodies in the world.
 
@@ -422,7 +439,9 @@ class IESoRWorld:
         initial_morphology["totalNodes"] = len(o_nodes)
         return entity_vector
 
-    def add_distance_joint(self, source_id: str, target_id: str, properties: dict) -> Bone:
+    def add_distance_joint(
+        self, source_id: str, target_id: str, properties: dict
+    ) -> Bone:
         """
         Helper function to add a distance joint between two bodies.
 
@@ -459,7 +478,9 @@ class IESoRWorld:
         w_joint.userData = bone
         return bone
 
-    def add_muscle_joint(self, source_id: str, target_id: str, properties: dict) -> Muscle:
+    def add_muscle_joint(
+        self, source_id: str, target_id: str, properties: dict
+    ) -> Muscle:
         """
         Helper function to add a muscle joint between two bodies.
 
@@ -479,7 +500,9 @@ class IESoRWorld:
         # But our muscles have phase and amplitude, which adjust length during updates
         phase = 0 if properties.get("phase", None) is None else properties["phase"]
         # Amplitude is how much change each muscles exhibit
-        amplitude = 1 if properties.get("amplitude", None) is None else properties["amplitude"]
+        amplitude = (
+            1 if properties.get("amplitude", None) is None else properties["amplitude"]
+        )
         muscle = Muscle(str(len(self.muscle_list)), added_joint.joint, amplitude, phase)
 
         self.muscle_list.append(muscle)
@@ -564,6 +587,7 @@ def load_data_file(file_path: Path) -> str:
 
 class SodaraceSimulator:
     """Sodarace simulator class."""
+
     def __init__(self, body: dict) -> None:
         """
         Initialize the simulator with a body dictionary.
