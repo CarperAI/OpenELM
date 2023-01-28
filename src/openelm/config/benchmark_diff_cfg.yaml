@@ -1,24 +1,24 @@
-model: CarperAI/diff-codegen-350m-v1
+model: CarperAI/diff-codegen-2b-v2
 cuda: True
 seed: 42
 deterministic: False
-top_p: 0.95
-temp: 0.85
+top_p: 0.9
+temp: 0.8
 timeout: 5  # Seconds
 gpus: 1
-gen_max_len: 128
-batch_size: 32
+gen_max_len: 512
+batch_size: 64
 n_trials: 3200
 n_bugs: 1
 fp16: False
 pad_token: 50256
 tasks: ["parity"]
-bugs_data_path: 'data/diff_benchmark.json'
-n_bugs_trials: 500
+bugs_data_path: '/fsx/shared/diff_benchmark.json'
+n_bugs_trials: 100
 run_name: ???  # Mandatory string argument that describes the run.
 
 # diff parameters
-num_process: 5
+num_process: 8
 
 ###################################################################################################
 # Hydra config overrides:
