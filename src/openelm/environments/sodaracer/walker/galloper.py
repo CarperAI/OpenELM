@@ -17,11 +17,6 @@ def make_walker(
     dy=0.0,
     ddr=0,
     ddc=1.6,
-    sid=8.0,
-    s_influence=0.2,
-    s_side_width=0.0,
-    first_center=5.0,
-    last_center=15.0,
 ):
     wc = walker_creator()
     ends = [

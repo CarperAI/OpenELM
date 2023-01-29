@@ -6,10 +6,14 @@ from typing import Iterator
 
 import hydra
 import numpy as np
+from itertools import permutations
 from omegaconf import OmegaConf
 from tqdm import tqdm
+import time
+from pathlib import Path
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 import torch
+import json
 
 from openelm.codegen.codegen_utilities import model_setup, sample, truncate
 from openelm.codegen.codex_execute import (
@@ -24,6 +28,7 @@ from openelm.constants import SRC_PATH
 from openelm.codegen.codegen_utilities import truncate
 from openelm.environments.sodaracer.walker import Walker
 from openelm.sandbox.server.utils import sandbox_unsafe_execute
+from openelm.environments.sodaracer import SodaraceSimulator
 
 CIRCLE = """
 def make_circle(wc, cx, cy, radius, num_points):
@@ -89,7 +94,6 @@ def make_square(wc, x0, y0, x1, y1):
     j3 = wc.add_joint(x1, y0)
     return j0, j1, j2, j3
 
-
 def make_square_walker():
     \"\"\"Create a square walker.\"\"\"
     wc = walker_creator()
@@ -115,89 +119,288 @@ def make_square_walker():
 
 """
 
+GALLOPER = """
+def make_sensor(wc, x0, y0, x1, y1, d):
+    return (
+        wc.add_joint(x0, y0),
+        wc.add_joint(x1, y1),
+        wc.add_joint(x1, y0),
+        wc.add_joint(x0, y1),
+        wc.add_joint(d, 0.5),
+        wc.add_joint(x1, 0.5),
+    )
+
+
+def make_walker(
+    dx=0.0,
+    dy=0.0,
+    ddr=0,
+    ddc=1.6,
+):
+    wc = walker_creator()
+    ends = [
+        make_sensor(wc, 5 + dx, -1 + dy, ddr, ddc, 4.5),
+        make_sensor(wc, 0, -0.1, sid, 9.5, 0.03),
+        make_sensor(wc, 5.5, -0.001, 5.0, 4.86 + 0.8, 0.07),
+        make_sensor(wc, 5.5, -3.0, 6.0, 4.86 + 0.8, 0.07),
+        make_sensor(wc, 0, dx, ddr, ddc, 1.0),
+    ]
+
+    sides = ends[0] + ends[1] + ends[2] + ends[-1] + ends[-2] + ends[-3]
+
+    center = wc.add_joint(dx, dy)
+
+    # connect the square with distance muscles
+    for k in range(len(sides) - 6):
+        wc.add_muscle(sides[k], sides[k + 1], 30, 0.5)
+    wc.add_muscle(sides[2], sides[4], 4.0, 0.8)
+    for k in range(len(sides) - 2):
+        wc.add_muscle(sides[k], sides[k + 2], 18.0, 60.0 / 5.5)
+
+    for k in reversed(range(len(sides) - 6)):
+        wc.add_muscle(sides[k], sides[k + 5], 4.0, 20.0 / 9.0)
+
+    wc.add_muscle(center, sides[7], 2, 0, 90.0 / 9.0)
+    return wc.get_walker()
+
+"""
+
+QUERY_CPPN = """
+def query_cppn(wc, xgrid, ygrid, scale, connect_func, amp_func, phase_func):
+    \"\"\"Create a grid of points and functionally connect them.\"\"\"
+    joints = {}
+    for x in range(xgrid):
+        for y in range(ygrid):
+            joints[(x, y)] = wc.add_joint(x * scale, y * scale)
+    for x1 in range(xgrid):
+        for y1 in range(ygrid):
+            for x2 in range(x1, xgrid):
+                for y2 in range(y1, ygrid):
+                    if x1 == y1 and x2 == y2:
+                        continue
+                    if connect_func(x1, y1, x2, y2):
+                        amp = amp_func(x1, y1, x2, y2)
+                        phase = phase_func(x1, y1, x2, y2)
+                        wc.add_muscle(joints[(x1, y1)], joints[(x2, y2)], amp, phase)
+    return joints
+
+"""
+
+CPPN_FIXED = """
+def make_walker():
+    wc = walker_creator()
+
+    def connect(x1, y1, x2, y2):
+        if ((x1 - x2) ** 2 + (y1 - y2) ** 2) > 4.5:
+            return False
+        return True
+
+    def amp(x1, y1, x2, y2):
+        return max(abs(x1 - x2), abs(y1 - y2))
+
+    def phase(x1, y1, x2, y2):
+        return np.sign(x1)
+
+    _ = query_cppn(wc, 8, 3, 1.5, connect, amp, phase)
+
+    return wc.get_walker()
+
+"""
+
+CPPN_MUTABLE = """
+def make_walker():
+    wc = walker_creator()
+
+    def connect(x1, y1, x2, y2):
+        if ((x1 - x2) ** 2 + (y1 - y2) ** 2) > 4.5:
+            return False
+        return True
+
+    def amp(x1, y1, x2, y2):
+        return max(abs(x1 - x2), abs(y1 - y2))
+
+    def phase(x1, y1, x2, y2):
+        return x1 if x1 % 2 == 1 else -x1
+
+    _ = query_cppn(wc, 8, 3, 1.5, connect, amp, phase)
+
+    return wc.get_walker()
+
+"""
+
+RUNNER = """
+def make_walker(p_scale=1):  # acrylic of current (m)
+    wc = walker_creator()
+
+    def connect(x1, y1, x2, y2):
+        if -2 * x1 + x2 * 2 > 2:
+            return True
+        return x1 <= abs(y1 - y2)
+
+    def amp(x, y, x2, y2):
+        return abs(x - x2) + abs(y - y2)
+
+    def phase(x1, y1, x2, y2):
+        return -x1 / 2 - math.cos(math.pi / 9)
+
+    joints = query_cppn(wc, 5, 7 + p_scale, 2, connect, amp, phase)
+    return wc.get_walker()
+
+"""
+
 IMPORTS = """
 from openelm.environments.sodaracer.walker.walk_creator import walker_creator
 import math
 
 """
 
-INSTRUCTION = """
-#Combine the radial, wheel, and square seed programs above to make a new walker.
+INSTRUCTION_ONE = ["#Combine the ",
+                   "seed programs above to make a new walker.\ndef make_walker():\n"]
 
-def make_walker():
+SEEDS_DICT = {
+    "wheel": WHEEL,
+    "radial": RADIAL,
+    "square": SQUARE,
+    "cppn_fixed": CPPN_FIXED,
+    "cppn_mutable": CPPN_MUTABLE,
+    "galloper": GALLOPER,
+    "runner": RUNNER,
+}
 
-"""
+class CrossoverBenchmark():
+    def __init__(self, cfg):
+        self.cfg = cfg
+        self.reverse_seeds = {v: k for k, v in SEEDS_DICT.items()}
 
-def benchmark_crossover(cfg, model, tokenizer, device):
-    func_start = "\ndef make_walker():\n"
-    temperature = 0.88
+        self.device = torch.device("cuda" if cfg.cuda else "cpu")
+        self.config = AutoConfig.from_pretrained(cfg.model)
+        self.config.use_cache = True
+        self.tokenizer = AutoTokenizer.from_pretrained(cfg.model)
+        self.tokenizer.padding_side = "left"
+        self.tokenizer.pad_token = 50256
 
-    encoding = tokenizer(
-        [PROMPT + func_start],
-        truncation=True,
-        padding=True,
-        return_tensors="pt",
-        max_length=2048
-    ).to(device)
-    token_len = encoding.input_ids.shape[1]
-    results = []
-    for i in range(cfg.batch_size):
-        with torch.inference_mode():
-                tokens = model.generate(
-                    **encoding,
-                    do_sample=True,
-                    num_return_sequences=1,
-                    temperature=temperature,
-                    max_length=2048,
-                    top_p=cfg.top_p,
-                    pad_token_id=cfg.pad_token,
-                    use_cache=True,
-                )
-                text = tokenizer.batch_decode(tokens[:, token_len - 1:, ...])
-        truncations = map(truncate, text)
-        for truncation in truncations:
-            try:
-                execution_result = sandbox_unsafe_execute(PROMPT + func_start + truncation, "make_walker")
-                if isinstance(execution_result, Walker):
-                    if execution_result.validate():
-                        results.append(1)
-                else:
-                    print("Failed execution, type:", execution_result)
-                    results.append(execution_result)
-            except Exception as e:
-                print(e, "Exception:")
-                results.append(6)
+        if cfg.fp16:
+            self.model = AutoModelForCausalLM.from_pretrained(
+                cfg.model, torch_dtype=torch.float16, low_cpu_mem_usage=True
+            ).to(self.device)
+        else:
+            self.model = AutoModelForCausalLM.from_pretrained(cfg.model,
+                                                              config=self.config).to(
+                self.device
+            )
 
-    print((results.count(1) / len(results)) * 100, "%")
+    def construct_prompt(self, seeds, instruction, permutation = (0, 1, 2)):
+        prompt_str = IMPORTS
+        seeds = [SEEDS_DICT[seeds[i]] for i in permutation]
+        if RADIAL in seeds or WHEEL in seeds:
+            prompt_str += CIRCLE
+        if CPPN_FIXED in seeds or CPPN_MUTABLE in seeds or RUNNER in seeds:
+            prompt_str += QUERY_CPPN
+        instruction_str = instruction[0]
+        for seed in seeds:
+            prompt_str += seed
+            instruction_str += self.reverse_seeds[seed] + ", "
+        instruction_str += instruction[-1]
+
+        return prompt_str + instruction_str
+
+    def benchmark_seeds(self, seed, instruction):
+        prompt = self.construct_prompt(seed, instruction)
+        encoding = self.tokenizer(
+            [prompt],
+            truncation=True,
+            padding=True,
+            return_tensors="pt",
+            max_length=2048
+        ).to(self.device)
+        token_len = encoding.input_ids.shape[1]
+        results, valid_fitnesses = [], []
+        print("Benchmarking seeds: ", ", ".join(seed))
+        print("Prompt length: ", token_len, " tokens.")
+        for _ in tqdm(range(self.cfg.n_trials // self.cfg.batch_size)):
+            with torch.inference_mode():
+                    tokens = self.model.generate(
+                        **encoding,
+                        do_sample=True,
+                        num_return_sequences=self.cfg.batch_size,
+                        temperature=self.cfg.temp,
+                        max_new_tokens=self.cfg.gen_max_len,
+                        top_p=self.cfg.top_p,
+                        pad_token_id=self.cfg.pad_token,
+                        use_cache=True,
+                    )
+                    text = self.tokenizer.batch_decode(tokens[:, token_len - 1:, ...])
+            truncations = map(truncate, text)
+            for truncation in truncations:
+                try:
+                    execution_result = sandbox_unsafe_execute(prompt + truncation,
+                                                            "make_walker",
+                                                            debug=self.cfg.debug)
+                    if (isinstance(execution_result, Walker) and
+                        execution_result.validate()):
+                        try:
+                            simulator = SodaraceSimulator(
+                                body=execution_result.to_dict()
+                            )
+                            simulator.evaluate(0)
+                            valid_fitnesses.append(simulator.evaluate(1000))
+                            results.append(1)
+                        except Exception as e:
+                            print(e)
+                    else:
+                        if self.cfg.debug:
+                            print("Failed execution, type:", execution_result)
+                        results.append(execution_result)
+                except Exception as e:
+                    if self.cfg.debug:
+                        print(e, "Exception:")
+                    results.append(6)
+        valid_rate = (results.count(1) / len(results)) * 100
+        print("Valid fitnesses: ", valid_fitnesses)
+        avg_fitnesses = np.mean(valid_fitnesses)
+        print(f"Valid rate for {seed}: {valid_rate}%")
+        print(f"Average fitness: {avg_fitnesses}")
+        return valid_rate, avg_fitnesses
+
+
+    def run_benchmark(self):
+        instruction = INSTRUCTION_ONE
+        perm = list(permutations(self.cfg.seeds))
+        print("Permutations: ", perm)
+        valid_rates, all_fitnesses = [], []
+        for i, seeds in enumerate(perm):
+            valid_rate, fitness = self.benchmark_seeds(seeds, instruction)
+            valid_rates.append(valid_rate)
+            all_fitnesses.append(fitness)
+
+        valid_stats = (np.nanmean(valid_rates), np.nanstd(valid_rates))
+        fitness_stats = (np.nanmean(all_fitnesses), np.nanstd(all_fitnesses))
+        print(f"Validity stats: {valid_stats},\nFitness stats: {fitness_stats}")
+        results_dct = {
+            "rates": valid_rates,
+            "fitnesses": all_fitnesses,
+            "valid_stats": valid_stats,
+            "fitness_stats": fitness_stats,
+            "config": OmegaConf.to_container(self.cfg),
+            "permutations": perm
+        }
+        timestr = time.strftime("%Y%m%d-%H%M%S")
+        Path(f"{timestr}.json").write_text(json.dumps(results_dct))
+
 
 # Load hydra config from yaml files and command line arguments.
 @hydra.main(
     config_path=str(SRC_PATH / "config"),
-    config_name="benchmark_cfg",
+    config_name="benchmark_crossover_cfg",
     version_base="1.2",
 )
 def main(cfg):
     print("----------------- Config ---------------")
     print(OmegaConf.to_yaml(cfg))
     print("-----------------  End -----------------")
-    device = torch.device("cuda" if cfg.cuda else "cpu")
-    config = AutoConfig.from_pretrained(cfg.model)
-    # Sometimes our model just fresh came out of training. Force use_cache to be true.
-    config.use_cache = True
-    tokenizer = AutoTokenizer.from_pretrained(cfg.model)
-    tokenizer.padding_side = "left"
-    tokenizer.pad_token = 50256
 
-    if cfg.fp16:
-        model = AutoModelForCausalLM.from_pretrained(
-            cfg.model, torch_dtype=torch.float16, low_cpu_mem_usage=True
-        ).to(device)
-    else:
-        model = AutoModelForCausalLM.from_pretrained(cfg.model, config=config).to(
-            device
-        )
-    #model, tokenizer = model_setup(cfg)
-    benchmark_crossover(cfg, model, tokenizer, device)
+    crossover = CrossoverBenchmark(cfg)
+    crossover.run_benchmark()
 
 if __name__ == "__main__":
     main()
