@@ -8,4 +8,3 @@ swig>=4.1.0
 box2d-py==2.3.8
 requests
 Flask
-tritonclient[all]

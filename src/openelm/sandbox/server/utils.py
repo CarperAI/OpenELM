@@ -64,28 +64,33 @@ def sandbox_unsafe_execute(
             if debug:
                 print("Code takes too long to run.")
                 print(e)
+                print(code_str)
             return 2  # Code takes too long to run.
         except RuntimeError as e:
             reset_os_funcs(rmtree, rmdir, chdir)
             if debug:
                 print("Code runs but crashes.")
                 print(e)
+                print(code_str)
             return 3  # Code runs but crashes.
         except SyntaxError as e:
             reset_os_funcs(rmtree, rmdir, chdir)
             if debug:
                 print("Code does not run - syntax error.")
                 print(e)
+                print(code_str)
             return 4  # Code does not run - syntax error.
         except TypeError as e:
             reset_os_funcs(rmtree, rmdir, chdir)
             if debug:
                 print("Code does not run - type error.")
                 print(e)
+                print(code_str)
             return 5  # Code does not run - type error.
         except Exception as e:
             reset_os_funcs(rmtree, rmdir, chdir)
             if debug:
                 print("Code fails to run - other error.")
                 print(e)
+                print(code_str)
             return 6  # Code fails to run - other error.
