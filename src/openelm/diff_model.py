@@ -208,9 +208,10 @@ class PromptMutationForImgTask(PromptMutationModel):
         self.func_preamble = f'def {func_name}():\n\t"""Draw a yellow circle.\n\t"""\n\tpic = np.zeros({shape})\n'
 
     def _get_response(self, code: str, timeout: int) -> requests.models.Response:
+        func_name = self.func_template.func_name
         return requests.post(
             f"{self.sandbox_server}/eval_imageoptim_func",
-            json={"code": code, "func_name": self.func_name, "timeout": timeout},
+            json={"code": code, "func_name": func_name, "timeout": timeout},
             timeout=timeout,
         )
 
