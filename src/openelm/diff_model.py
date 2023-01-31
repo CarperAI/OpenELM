@@ -204,7 +204,8 @@ class PromptMutationForImgTask(PromptMutationModel):
         super().__init__(cfg, function_template, sandbox_server)
 
     def reset_shape(self, shape: tuple):
-        self.func_preamble = f'def {self.func_name}():\n\t"""Draw a yellow circle.\n\t"""\n\tpic = np.zeros({shape})\n'
+        func_name = self.func_template.func_name
+        self.func_preamble = f'def {func_name}():\n\t"""Draw a yellow circle.\n\t"""\n\tpic = np.zeros({shape})\n'
 
     def _get_response(self, code: str, timeout: int) -> requests.models.Response:
         return requests.post(

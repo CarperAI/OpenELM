@@ -4,7 +4,6 @@ import re
 import shutil
 from typing import Union
 
-from openelm.benchmarks import parity_reference
 from openelm.codegen.codex_execute import create_tempdir, reliability_guard, swallow_io, time_limit, TimeoutException
 
 
