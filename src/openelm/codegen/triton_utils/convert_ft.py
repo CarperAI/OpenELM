@@ -104,8 +104,8 @@ params["is_half"] = is_half
 params["head_num"] = config.n_head
 params["size_per_head"] = config.n_embd // config.n_head
 params["inter_size"] = 4 * config.n_embd
-# Vocab size gets rounded up to a multiple of 1024
-params["vocab_size"] = round_up(tokenizer.vocab_size, 1024)
+# The original script rounded up vocab size to a multiple of 1024. But for diff models we do not.
+params["vocab_size"] = gptj_model.config.vocab_size
 params["start_id"] = tokenizer.eos_token_id
 params["end_id"] = tokenizer.eos_token_id
 params["decoder_layers"] = config.n_layer

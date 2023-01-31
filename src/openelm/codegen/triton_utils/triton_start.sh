@@ -1,3 +1,4 @@
+#!/bin/bash
 '
 A shell script to start the Triton server.
 Fixed the path for triton server on /fsx
