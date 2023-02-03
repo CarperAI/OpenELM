@@ -106,7 +106,7 @@ def model_setup(cfg):
     tokenizer.padding_side = "left"
     tokenizer.pad_token = cfg.pad_token
 
-    ckpt_path = PROJECT_PATH / cfg.checkpoints_dir / cfg.model
+    ckpt_path = cfg.model
     if cfg.gpus > 1:
         model = torch.nn.DataParallel(
             create_model(ckpt_path, fp16=use_fp16), device_ids=list(range(cfg.gpus))

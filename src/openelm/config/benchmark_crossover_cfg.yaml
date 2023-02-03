@@ -1,5 +1,4 @@
 model: Salesforce/codegen-2B-mono
-checkpoints_dir: checkpoints
 cuda: True
 seed: 42
 deterministic: False
