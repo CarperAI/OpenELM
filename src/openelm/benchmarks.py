@@ -1,3 +1,4 @@
+import functools
 import itertools
 import json
 import re
@@ -5,6 +6,7 @@ from typing import Iterator
 
 import hydra
 import numpy as np
+import multiprocessing as mp
 from omegaconf import OmegaConf
 from openelm.utils.diff_eval import split_diff, apply_diff
 from tqdm import tqdm
@@ -27,6 +29,8 @@ def run_benchmark(cfg, model, tokenizer, device, n_bugs, temperature):
     ).to(device)
     token_len = mutated_encoding.input_ids.shape[1]
     num_batches = cfg.n_trials // cfg.batch_size
+    eval_results = []
+    ev_func = functools.partial(eval_completions, task=cfg.tasks[0], timeout=cfg.timeout)
     for i in tqdm(range(num_batches), desc=f"Running benchmark with {n_bugs} bugs",
                   disable=False):
         # completions = sample(cfg, model, tokenizer, mutated_encoding, add_def=True)
@@ -42,26 +46,11 @@ def run_benchmark(cfg, model, tokenizer, device, n_bugs, temperature):
                 use_cache=True,
             )
             text = tokenizer.batch_decode(tokens[:, token_len - 1:, ...])
-        truncations = map(truncate, text)
-        if i == 0:
-            eval_results = np.fromiter(
-                eval_completions(truncations, task=cfg.tasks[0], timeout=cfg.timeout),
-                dtype=np.byte,
-                count=cfg.batch_size,
-            )
-        else:
-            eval_results = np.vstack(
-                (
-                    eval_results,
-                    np.fromiter(
-                        eval_completions(
-                            truncations, task=cfg.tasks[0], timeout=cfg.timeout
-                        ),
-                        dtype=np.byte,
-                        count=cfg.batch_size,
-                    ),
-                )
-            )
+        truncations = list(map(truncate, text))
+        # Run evaluation in separate processes
+        with mp.Pool(processes=cfg.batch_size) as pool:
+            eval_results.extend(list(pool.map(ev_func, truncations)))
+
     corr_cnt = np.count_nonzero(eval_results == 0)
     # print(f"Number of bugs: {n_bugs}")
     # print(
