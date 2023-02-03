@@ -2,6 +2,7 @@
 import functools
 import json
 import multiprocessing as mp
+import os
 import re
 
 import hydra
@@ -148,7 +149,7 @@ def main(cfg):
     print("----------------- Config ---------------")
     print(OmegaConf.to_yaml(cfg))
     print("-----------------  End -----------------")
-
+    os.environ['TOKENIZERS_PARALLELISM'] = 'false'  # Prevent annoying warning from tokenizers on multiple threads.
     device = torch.device("cuda" if cfg.cuda else "cpu")
     config = AutoConfig.from_pretrained(cfg.model)
     # Sometimes our model just fresh came out of training. Force use_cache to be true.

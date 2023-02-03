@@ -1,6 +1,7 @@
 import functools
 import itertools
 import json
+import os
 import re
 from typing import Iterator
 
@@ -128,6 +129,7 @@ def main(cfg):
     print("----------------- Config ---------------")
     print(OmegaConf.to_yaml(cfg))
     print("-----------------  End -----------------")
+    os.environ['TOKENIZERS_PARALLELISM'] = 'false'  # Prevent annoying warning from tokenizers on multiple threads.
     device = torch.device("cuda" if cfg.cuda else "cpu")
     config = AutoConfig.from_pretrained(cfg.model)
     # Sometimes our model just fresh came out of training. Force use_cache to be true.
