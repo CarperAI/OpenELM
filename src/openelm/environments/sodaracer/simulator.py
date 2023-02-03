@@ -622,8 +622,14 @@ class SodaraceSimulator:
             self.world.update_world(350)
 
         _ = self.morphology["startX"]
-        end = min(
-            [bone.joint.bodyA.position[0] for bone in self.world.bone_list]
-            + [muscle.joint.bodyA.position[0] for muscle in self.world.muscle_list]
-        )
-        return abs(end + self.morphology["offsetX"])
+        try:
+            end = min(
+                [bone.joint.bodyA.position[0] for bone in self.world.bone_list]
+                + [muscle.joint.bodyA.position[0] for muscle in self.world.muscle_list]
+            )
+            return abs(end + self.morphology["offsetX"])
+        except Exception as e:
+            print(e)
+            print(self.world.bone_list)
+            print(self.world.muscle_list)
+            return None

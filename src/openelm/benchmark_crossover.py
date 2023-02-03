@@ -24,6 +24,8 @@ from openelm.codegen.codex_execute import (
     time_limit,
 )
 from openelm.constants import SRC_PATH
+from openelm.map_elites import Map
+from openelm.environments.environments import Sodaracer
 
 from openelm.codegen.codegen_utilities import truncate
 from openelm.environments.sodaracer.walker import Walker
@@ -131,7 +133,7 @@ def make_sensor(wc, x0, y0, x1, y1, d):
     )
 
 
-def make_walker(
+def make_galloper_walker(
     dx=0.0,
     dy=0.0,
     ddr=0,
@@ -187,7 +189,7 @@ def query_cppn(wc, xgrid, ygrid, scale, connect_func, amp_func, phase_func):
 """
 
 CPPN_FIXED = """
-def make_walker():
+def make_cppn_fixed_walker():
     wc = walker_creator()
 
     def connect(x1, y1, x2, y2):
@@ -208,7 +210,7 @@ def make_walker():
 """
 
 CPPN_MUTABLE = """
-def make_walker():
+def make_cppn_mutable_walker():
     wc = walker_creator()
 
     def connect(x1, y1, x2, y2):
@@ -229,7 +231,7 @@ def make_walker():
 """
 
 RUNNER = """
-def make_walker(p_scale=1):  # acrylic of current (m)
+def make_runner_walker(p_scale=1):  # acrylic of current (m)
     wc = walker_creator()
 
     def connect(x1, y1, x2, y2):
@@ -289,9 +291,9 @@ class CrossoverBenchmark():
                 self.device
             )
 
-    def construct_prompt(self, seeds, instruction, permutation = (0, 1, 2)):
+    def construct_prompt(self, seeds, instruction):
         prompt_str = IMPORTS
-        seeds = [SEEDS_DICT[seeds[i]] for i in permutation]
+        seeds = [SEEDS_DICT[seed] for seed in seeds]
         if RADIAL in seeds or WHEEL in seeds:
             prompt_str += CIRCLE
         if CPPN_FIXED in seeds or CPPN_MUTABLE in seeds or RUNNER in seeds:
@@ -304,6 +306,23 @@ class CrossoverBenchmark():
 
         return prompt_str + instruction_str
 
+    def to_mapindex(self, b, bins):
+        """Converts a phenotype (position in behaviour space) to a map index."""
+        return (
+            None
+            if b is None
+            else tuple(np.digitize(x, bins) for x, bins in zip(b, bins))
+        )
+
+    def to_behavior_space(self, x):
+        # Map from floats of h,w,m to behavior space grid cells.
+        if x.valid:
+            return np.array(
+                [x.morphology["height"], x.morphology["width"], x.morphology["mass"]]
+            ).astype(int)
+        else:
+            return None
+
     def benchmark_seeds(self, seed, instruction):
         prompt = self.construct_prompt(seed, instruction)
         encoding = self.tokenizer(
@@ -315,6 +334,15 @@ class CrossoverBenchmark():
         ).to(self.device)
         token_len = encoding.input_ids.shape[1]
         results, valid_fitnesses = [], []
+        # Map setup
+        n_bins = 12
+        genotype_space = np.array([[0, 1000], [0, 1000], [0, 2000]]).T
+        bins = np.linspace(*genotype_space, n_bins + 1)[1:-1].T
+        fitness_map = Map(
+            dims=(n_bins,) * genotype_space.shape[1],
+            fill_value=-np.inf,
+            dtype=float,
+        )
         print("Benchmarking seeds: ", ", ".join(seed))
         print("Prompt length: ", token_len, " tokens.")
         for _ in tqdm(range(self.cfg.n_trials // self.cfg.batch_size)):
@@ -338,15 +366,22 @@ class CrossoverBenchmark():
                                                             debug=self.cfg.debug)
                     if (isinstance(execution_result, Walker) and
                         execution_result.validate()):
-                        try:
-                            simulator = SodaraceSimulator(
-                                body=execution_result.to_dict()
-                            )
-                            simulator.evaluate(0)
-                            valid_fitnesses.append(simulator.evaluate(1000))
-                            results.append(1)
-                        except Exception as e:
-                            print(e)
+                        sodaracer = Sodaracer(
+                            program_str = truncation,
+                            result_obj = execution_result.to_dict(),
+                            error_code = 0
+                        )
+                        if sodaracer.valid:
+                            fitness = sodaracer.evaluate(1000)
+                            if fitness is not None:
+                                valid_fitnesses.append(fitness)
+                                map_idx = self.to_mapindex(
+                                    self.to_behavior_space(sodaracer),
+                                    bins=bins
+                                )
+                                if fitness > fitness_map[map_idx]:
+                                    fitness_map[map_idx] = fitness
+                                results.append(1)
                     else:
                         if self.cfg.debug:
                             print("Failed execution, type:", execution_result)
@@ -356,36 +391,45 @@ class CrossoverBenchmark():
                         print(e, "Exception:")
                     results.append(6)
         valid_rate = (results.count(1) / len(results)) * 100
-        print("Valid fitnesses: ", valid_fitnesses)
-        avg_fitnesses = np.mean(valid_fitnesses)
+        avg_fitnesses = np.nanmean(valid_fitnesses)
+        qd_score = fitness_map.array[np.isfinite(fitness_map.array)].sum()
+        if len(valid_fitnesses) != results.count(1):
+            print("Length mismatch ", len(valid_fitnesses, results.count(1)))
         print(f"Valid rate for {seed}: {valid_rate}%")
         print(f"Average fitness: {avg_fitnesses}")
-        return valid_rate, avg_fitnesses
+        print(f"QD score: {qd_score}")
+        return valid_rate, avg_fitnesses, qd_score
 
 
     def run_benchmark(self):
         instruction = INSTRUCTION_ONE
         perm = list(permutations(self.cfg.seeds))
         print("Permutations: ", perm)
-        valid_rates, all_fitnesses = [], []
+        valid_rates, all_fitnesses, qd_scores = [], [], []
         for i, seeds in enumerate(perm):
-            valid_rate, fitness = self.benchmark_seeds(seeds, instruction)
+            valid_rate, fitness, qd_score = self.benchmark_seeds(seeds, instruction)
             valid_rates.append(valid_rate)
             all_fitnesses.append(fitness)
-
+            qd_scores.append(qd_score)
         valid_stats = (np.nanmean(valid_rates), np.nanstd(valid_rates))
         fitness_stats = (np.nanmean(all_fitnesses), np.nanstd(all_fitnesses))
-        print(f"Validity stats: {valid_stats},\nFitness stats: {fitness_stats}")
+        qd_stats = (np.nanmean(qd_scores), np.nanstd(qd_scores))
+        print(f"Validity stats: {valid_stats[0]:.2f}, {valid_stats[1]:.2f}")
+        print(f"Fitness stats: {fitness_stats[0]:.2f}, {fitness_stats[1]:.2f}")
+        print(f"QD stats: {qd_stats[0]:.2f}, {qd_stats[1]:.2f}")
         results_dct = {
             "rates": valid_rates,
             "fitnesses": all_fitnesses,
+            "qd_scores": qd_scores,
             "valid_stats": valid_stats,
             "fitness_stats": fitness_stats,
+            "qd_stats": qd_stats,
             "config": OmegaConf.to_container(self.cfg),
             "permutations": perm
         }
-        timestr = time.strftime("%Y%m%d-%H%M%S")
-        Path(f"{timestr}.json").write_text(json.dumps(results_dct))
+        json_path = Path("/fsx/home-hyperion/OpenELM/data",
+                         f"{time.strftime('%Y%m%d-%H%M%S')}.json")
+        json_path.write_text(json.dumps(results_dct))
 
 
 # Load hydra config from yaml files and command line arguments.

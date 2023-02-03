@@ -1,4 +1,4 @@
-model: Salesforce/codegen-2B-mono
+model: Salesforce/codegen-350M-mono
 checkpoints_dir: checkpoints
 cuda: True
 seed: 42

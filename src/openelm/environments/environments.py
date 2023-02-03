@@ -385,7 +385,7 @@ class Sodarace(BaseEnvironment[Sodaracer]):
     def mutate(self, x: Sodaracer) -> list[Sodaracer]:
         new_sodaracers = self.generate_program(x.program_str)
         return new_sodaracers
-
+    # TODO: Move below to member class
     def to_behavior_space(self, x: Sodaracer) -> Optional[Phenotype]:
         # Map from floats of h,w,m to behavior space grid cells.
         if x.valid:

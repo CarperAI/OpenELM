@@ -27,6 +27,9 @@ class Walker:
         max_muscles_per_joint: int = 10
         max_muscle_strength: int = 10
         min_joint_distance: float = 0.1
+        # Check that walker is not empty.
+        if len(self.joints) == 0 and len(self.muscles) == 0:
+            return False
         for m in self.muscles:
             # Check a) that the strength of muscles is limited
             if m[-1]["type"] == "muscle":
