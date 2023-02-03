@@ -1,7 +1,7 @@
 import numpy as np
 
-from openelm.environments.sodaracer.walker.CPPN_mutable import query_cppn
-from openelm.environments.sodaracer.walker.walk_creator import walker_creator
+from openelm.environments.sodaracer.walker import query_cppn
+from openelm.environments.sodaracer.walker import walker_creator
 
 
 def make_walker():

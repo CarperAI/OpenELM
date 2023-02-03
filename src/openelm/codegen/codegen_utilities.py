@@ -1,19 +1,21 @@
 import random
 import re
 
+import numpy as np
 import torch
 from transformers import GPT2TokenizerFast
 
 from openelm.codegen.modelling_codegen import CodeGenForCausalLM
-from openelm.constants import PROJECT_PATH
 
 
-def set_seed(seed, deterministic=True):
+def set_seed(seed=None, deterministic=True):
+    if seed is None:
+        seed = torch.Generator().seed()
     random.seed(seed)
     # os.environ['PYTHONHASHSEED'] = str(seed)
+    np.random.seed(seed)
     torch.manual_seed(seed)
     if torch.cuda.is_available():
-        torch.cuda.manual_seed(seed)
         torch.backends.cudnn.deterministic = deterministic
         torch.backends.cudnn.benchmark = not deterministic
         # torch.use_deterministic_algorithms(deterministic)
@@ -116,8 +118,10 @@ def model_setup(cfg):
     return model, tokenizer
 
 
-def sample(cfg, model, tokenizer, batch, starting_idx=None):
+def sample(cfg, model, tokenizer, batch, batch_size=None, starting_idx=None):
     """Run a model on a batch of contexts for a particular task."""
+    if batch_size is None:
+        batch_size = cfg.batch_size
     device = torch.device("cuda" if cfg.cuda else "cpu")
     input_ids_len = batch["input_ids"].shape[1]
     if starting_idx is None:
@@ -129,7 +133,7 @@ def sample(cfg, model, tokenizer, batch, starting_idx=None):
             tokens = model.module.generate(
                 **batch,
                 do_sample=True,
-                num_return_sequences=cfg.batch_size,
+                num_return_sequences=batch_size,
                 temperature=cfg.temp,
                 max_new_tokens=cfg.gen_max_len,
                 top_p=cfg.top_p,
@@ -140,7 +144,7 @@ def sample(cfg, model, tokenizer, batch, starting_idx=None):
             tokens = model.generate(
                 **batch,
                 do_sample=True,
-                num_return_sequences=cfg.batch_size,
+                num_return_sequences=batch_size,
                 temperature=cfg.temp,
                 max_new_tokens=cfg.gen_max_len,
                 top_p=cfg.top_p,

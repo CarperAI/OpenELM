@@ -243,7 +243,7 @@ def make_runner_walker(p_scale=1):  # acrylic of current (m)
 """
 
 IMPORTS = """
-from openelm.environments.sodaracer.walker.walk_creator import walker_creator
+from openelm.environments.sodaracer.walker import walker_creator
 import math
 
 """

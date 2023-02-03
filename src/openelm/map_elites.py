@@ -82,6 +82,16 @@ class Map:
         else:
             return self.array[0].size
 
+    @property
+    def qd_score(self) -> float:
+        """Returns the quality-diversity score of the map."""
+        return self.array[np.isfinite(self.array)].sum()
+
+    @property
+    def maximum(self) -> float:
+        """Returns the maximum value in the map."""
+        return self.array.max()
+
 
 class MAPElites:
     """
@@ -195,7 +205,7 @@ class MAPElites:
 
             # `new_individuals` is a list of generation/mutation. We put them into the behavior space one-by-one.
             for individual in new_individuals:
-                map_ix = self.to_mapindex(self.env.to_behavior_space(individual))
+                map_ix = self.to_mapindex(individual.to_phenotype())
                 # if the return is None, the individual is invalid and is thrown into the recycle bin.
                 if map_ix is None:
                     self.recycled[self.recycled_count % len(self.recycled)] = individual
@@ -224,35 +234,19 @@ class MAPElites:
         self.current_max_genome = max_genome
         return str(max_genome)
 
-    def plot(self):
-        import matplotlib
-        from matplotlib import pyplot
-
-        matplotlib.rcParams["font.family"] = "Futura"
-        matplotlib.rcParams["figure.dpi"] = 100
-        matplotlib.style.use("ggplot")
-
-        ix = tuple(np.zeros(self.fitnesses.array.ndim - 2, int))
-        print(ix)
-        map2d = self.fitnesses[ix]
-        print(f"{map2d.shape=}")
-
-        pyplot.pcolor(map2d, cmap="inferno")
-        pyplot.show()
-
     def niches_filled(self):
         """Get the number of niches that have been explored in the map."""
         return np.count_nonzero(self.nonzero.array)
 
     def maximum_fitness(self):
         """Get the maximum fitness value in the map."""
-        return self.fitnesses.array.max()
+        return self.fitnesses.maximum
 
-    def quality_diversity_score(self):
+    def qd_score(self):
         """
         Get the quality-diversity score of the map.
 
         The quality-diversity score is the sum of the performance of all solutions
         in the map.
         """
-        return self.fitnesses.array[np.isfinite(self.fitnesses.array)].sum()
+        return self.fitnesses.qd_score

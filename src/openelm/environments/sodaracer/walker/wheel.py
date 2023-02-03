@@ -1,6 +1,6 @@
 import math
 
-from openelm.environments.sodaracer.walker.walk_creator import walker_creator
+from openelm.environments.sodaracer.walker import walker_creator
 
 
 def make_circle(wc, cx, cy, radius, num_points):

@@ -1,6 +1,6 @@
 import numpy as np
 
-from .environments import (
+from openelm.environments.environments import (
     BaseEnvironment,
     FunctionOptim,
     Genotype,
@@ -38,7 +38,7 @@ for y in range(32):
 
 
 SQUARE_SEED = {
-    "program_str": """from openelm.environments.sodaracer.walker.walk_creator import walker_creator
+    "program_str": """from openelm.environments.sodaracer.walker import walker_creator
 
 
 def make_square(wc, x0, y0, x1, y1):

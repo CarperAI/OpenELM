@@ -27,6 +27,10 @@ class Genotype(ABC):
     def __str__(self) -> str:
         raise NotImplementedError
 
+    @abstractmethod
+    def to_phenotype(self) -> Optional[Phenotype]:
+        raise NotImplementedError
+
 
 GenoType = TypeVar("GenoType", bound=Genotype)
 
@@ -36,19 +40,15 @@ class BaseEnvironment(ABC, Generic[GenoType]):
         self.genotype_space: np.ndarray
 
     @abstractmethod
-    def random(self, **kwarg) -> list[GenoType]:
+    def random(self) -> list[GenoType]:
         raise NotImplementedError
 
     @abstractmethod
-    def mutate(self, x: GenoType, **kwarg) -> list[GenoType]:
+    def mutate(self, x: GenoType) -> list[GenoType]:
         raise NotImplementedError
 
     @abstractmethod
     def fitness(self, x: GenoType) -> float:
-        raise NotImplementedError
-
-    @abstractmethod
-    def to_behavior_space(self, x: GenoType) -> Optional[Phenotype]:
         raise NotImplementedError
 
     @property
@@ -65,7 +65,7 @@ class BaseEnvironment(ABC, Generic[GenoType]):
         return self.behavior_space.shape[1]
 
     @staticmethod
-    def _load_config(config) -> DictConfig:
+    def _load_config(config):
         if isinstance(config, str):
             return OmegaConf.load(config)
         elif isinstance(config, (dict, DictConfig)):
@@ -82,6 +82,9 @@ class ArrayGenotype(Genotype, np.ndarray):
     def __str__(self) -> str:
         return f'({", ".join(map(str, np.asarray(self)))})'
 
+    def to_phenotype(self) -> Phenotype:
+        return np.asarray(self)
+
 
 # find all local maxima of a multimodal function
 class FunctionOptim(BaseEnvironment[ArrayGenotype]):
@@ -89,10 +92,10 @@ class FunctionOptim(BaseEnvironment[ArrayGenotype]):
         self.genotype_ndim = ndim
         self.genotype_space = np.repeat([[-4, 4]], self.genotype_ndim, axis=0).T
 
-    def random(self, **kwarg) -> list[ArrayGenotype]:
+    def random(self) -> list[ArrayGenotype]:
         return [ArrayGenotype(np.random.uniform(*self.genotype_space))]
 
-    def mutate(self, x: ArrayGenotype, **kwarg) -> list[ArrayGenotype]:
+    def mutate(self, x: ArrayGenotype) -> list[ArrayGenotype]:
         x = x.copy()
         ix = np.random.randint(self.genotype_ndim)
         x[ix] = x[ix] + np.random.uniform(-1, 1)
@@ -101,14 +104,11 @@ class FunctionOptim(BaseEnvironment[ArrayGenotype]):
     def fitness(self, x: ArrayGenotype) -> float:
         return ackley(x[None])[0]
 
-    def to_behavior_space(self, x: ArrayGenotype) -> Phenotype:
-        return np.asarray(x)
-
 
 class ImageGeneration(Genotype):
     """Genotype for generated images."""
 
-    def __init__(self, program_str: str, result_obj: dict, error_code: bool):
+    def __init__(self, program_str: str, result_obj: np.ndarray, error_code: bool):
         self.program_str = program_str
         self.result_obj = result_obj
         self.error_code = error_code
@@ -116,27 +116,23 @@ class ImageGeneration(Genotype):
 
     def __str__(self) -> str:
         if self.valid:
-            assert isinstance(self.result_obj, np.ndarray)
             return str(self.result_obj.reshape((-1, 3)).mean(axis=0).astype(int))
         else:
             return ""
 
     def validate(self) -> bool:
         return (
-            isinstance(self.result_obj, np.ndarray)
-            and len(self.result_obj.shape) == 3
+            len(self.result_obj.shape) == 3
             and self.result_obj.shape[2] == 3
         )
 
-    def three_channel_average(self) -> Phenotype:
-        """
-        Average RGB channels.
-
-        Assume the input is of shape (height, width, channel), and we average each channel to get (channel,)
-        """
-        # Code with invalid return -> return a `None` Phenotype.
-        if self.valid:
-            assert isinstance(self.result_obj, np.ndarray)
+    def to_phenotype(self, mode: str = "3-channel-avg") -> Optional[Phenotype]:
+        if not self.valid:
+            return None
+        if mode == "3-channel-avg":
+            # Average RGB channels.
+            # Assume the input is of shape (height, width, channel), and we
+            # average each channel to get (channel,)
             return np.average(self.result_obj.reshape((-1, 3)), axis=0)
         else:
             return None
@@ -154,7 +150,7 @@ class ImageOptim(BaseEnvironment[ImageGeneration]):
 
     default_diff_model_cls = PromptMutationForImgTask
     # Record different definitions of behavior spaces in a dict. Feel free to add.
-    behavior_mode_spec = {"3-channel": {"genotype_ndim": 3}}
+    behavior_mode_spec = {"3-channel-avg": {"genotype_ndim": 3}}
 
     def __init__(
         self,
@@ -238,11 +234,6 @@ class ImageOptim(BaseEnvironment[ImageGeneration]):
             return -np.inf
         return -np.abs(x.result_obj - self.target_img).sum()
 
-    def to_behavior_space(self, x: ImageGeneration) -> Optional[Phenotype]:
-        if self.behavior_mode == "3-channel":
-            return x.three_channel_average()
-        return None
-
 
 class StringArrayGenotype(ArrayGenotype):
     def __str__(self) -> str:
@@ -265,10 +256,10 @@ class MatchString(BaseEnvironment[StringArrayGenotype]):
             [[0, len(self.alphabet)]], self.genotype_ndim, axis=0
         ).T
 
-    def random(self, **kwarg) -> list[StringArrayGenotype]:
+    def random(self) -> list[StringArrayGenotype]:
         return [StringArrayGenotype(np.random.uniform(*self.genotype_space))]
 
-    def mutate(self, x: StringArrayGenotype, **kwarg) -> list[StringArrayGenotype]:
+    def mutate(self, x: StringArrayGenotype) -> list[StringArrayGenotype]:
         x = x.copy()
         ix = np.random.randint(self.genotype_ndim)
         x[ix] = x[ix] + np.random.uniform(-5, 5)
@@ -303,7 +294,7 @@ class Sodaracer(Genotype):
                 self.morphology = self.simulator.morphology
                 self.evaluate(0)
                 self.valid = True
-            except Exception as e:
+            except Exception:
                 self.valid = False
         else:
             self.valid = False
@@ -313,6 +304,16 @@ class Sodaracer(Genotype):
 
     def __str__(self) -> str:
         return self.program_str
+
+    def to_phenotype(self) -> Optional[Phenotype]:
+        if self.valid:
+            return np.array(
+                [self.morphology["height"],
+                 self.morphology["width"],
+                 self.morphology["mass"]]
+            ).astype(int)
+        else:
+            return None
 
 
 class Sodarace(BaseEnvironment[Sodaracer]):
@@ -385,12 +386,3 @@ class Sodarace(BaseEnvironment[Sodaracer]):
     def mutate(self, x: Sodaracer) -> list[Sodaracer]:
         new_sodaracers = self.generate_program(x.program_str)
         return new_sodaracers
-    # TODO: Move below to member class
-    def to_behavior_space(self, x: Sodaracer) -> Optional[Phenotype]:
-        # Map from floats of h,w,m to behavior space grid cells.
-        if x.valid:
-            return np.array(
-                [x.morphology["height"], x.morphology["width"], x.morphology["mass"]]
-            ).astype(int)
-        else:
-            return None
