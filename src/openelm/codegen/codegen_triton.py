@@ -103,6 +103,7 @@ class CodeGenProxy:
         temperature = temperature * np.ones([input_start_ids.shape[0], 1]).astype(
             np.float32
         )
+        random_seed = np.random.randint(0, 1e9, [input_start_ids.shape[0], 1], dtype=np.int32)
         # beam_width = np.ones([input_start_ids.shape[0], 1]).astype(np_type)
         # beam_search_diversity_rate = 0.5*np.ones([input_start_ids.shape[0], 1]).astype(np.float32)
         # frequency_penalty = 1.0*np.ones([input_start_ids.shape[0], 1]).astype(np.float32)
@@ -113,6 +114,7 @@ class CodeGenProxy:
             self.prepare_tensor("request_output_len", output_len),
             self.prepare_tensor("runtime_top_p", runtime_top_p),
             self.prepare_tensor("temperature", temperature),
+            self.prepare_tensor("random_seed", random_seed),
         ]
         result = self.client.infer(model_name, inputs)
         output_data = result.as_numpy("output_ids")

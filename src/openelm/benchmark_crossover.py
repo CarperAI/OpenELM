@@ -15,14 +15,6 @@ from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 import torch
 import json
 
-from openelm.codegen.codegen_utilities import model_setup, sample, truncate
-from openelm.codegen.codex_execute import (
-    TimeoutException,
-    create_tempdir,
-    reliability_guard,
-    swallow_io,
-    time_limit,
-)
 from openelm.constants import SRC_PATH
 from openelm.map_elites import Map
 from openelm.environments.environments import Sodaracer

@@ -7,7 +7,6 @@ from omegaconf import MISSING
 @dataclass
 class ConfigClass:
     model: str = MISSING
-    checkpoints_dir: str = MISSING
     epochs: int = MISSING
     batch_size: int = MISSING
     fp16: bool = MISSING

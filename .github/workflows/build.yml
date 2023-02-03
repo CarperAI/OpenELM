@@ -34,7 +34,7 @@ jobs:
           flake8 . --count --exit-zero --ignore=E203,E501,W503,F811 --show-source --statistics --max-line-length=88
       - name: Test with pytest
         run: |
-          pytest
+          pytest tests/test_*.py
 
   package:
     name: Build & inspect the package.
