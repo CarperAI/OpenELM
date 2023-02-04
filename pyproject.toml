@@ -15,7 +15,8 @@ max-line-length = 88
 extend-ignore = [
     "E203",
     "E501",
-    "F811"
+    "W503",
+    "F811",
 ]
 extend-exclude = ["docs"]
 count = true
@@ -71,14 +72,15 @@ dev = [
     "pytest",
     "pytest-cov",
 ]
-tinygp = [
+benchmarks = [
     "pygraphviz",
-    "graphviz"
+    "graphviz",
+    "openai",
 ]
 docs = [
     "sphinx==5.3.0",
     "sphinx_rtd_theme",
-    "sphinx_autodoc_typehints"
+    "sphinx_autodoc_typehints",
 ]
 trlx = [
     "trlx @ git+https://github.com/CarperAI/trlx.git",

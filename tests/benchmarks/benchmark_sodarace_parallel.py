@@ -18,7 +18,6 @@ from openelm.environments.sodaracer.walker.square import (
 
 
 def run_simulator(timesteps):
-    # start = time()
     square_walker = make_walker_square()
     simulator = SodaraceSimulator(body=square_walker.to_dict())
     res = simulator.evaluate(timesteps)
@@ -35,16 +34,13 @@ def benchmark_sodarace():
     for timesteps in times:
         simulator = SodaraceSimulator(body=square_walker.to_dict())
         ress.append(simulator.evaluate(timesteps))
-        # print(f"Square took {time() - start} seconds for {timesteps} timesteps")
     print("Total time was", time() - start)
     print("Sequential simulations over.")
-    exit()
     processes = [1, 2, 4, 8, 16, 32]
     for p in processes:
         start = time()
         with mp.Pool(processes=p) as pool:
-            results = pool.map(run_simulator, times)
-            #results = results.get()
+            _ = pool.map(run_simulator, times)
         print(f"Total time was {time() - start} with {p} processes.")
 
 
