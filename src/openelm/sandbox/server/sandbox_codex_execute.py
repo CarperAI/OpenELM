@@ -22,6 +22,7 @@ import os
 import platform
 import signal
 import tempfile
+import typing
 
 
 @contextlib.contextmanager
@@ -96,7 +97,8 @@ def chdir(root):
         os.chdir(cwd)
 
 
-def reliability_guard(maximum_memory_bytes=None):
+@typing.no_type_check
+def reliability_guard(maximum_memory_bytes: int = None):
     """
     Safety guard for model-generated code.
 

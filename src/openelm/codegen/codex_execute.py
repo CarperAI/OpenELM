@@ -22,6 +22,7 @@ import os
 import platform
 import signal
 import tempfile
+import typing
 
 
 @contextlib.contextmanager
@@ -29,12 +30,15 @@ def time_limit(seconds):
     def signal_handler(signum, frame):
         raise TimeoutException("Timed out!")
 
-    signal.setitimer(signal.ITIMER_REAL, seconds)
-    signal.signal(signal.SIGALRM, signal_handler)
-    try:
+    if seconds <= 0.0:
         yield
-    finally:
-        signal.setitimer(signal.ITIMER_REAL, 0)
+    else:
+        signal.setitimer(signal.ITIMER_REAL, seconds)
+        signal.signal(signal.SIGALRM, signal_handler)
+        try:
+            yield
+        finally:
+            signal.setitimer(signal.ITIMER_REAL, 0)
 
 
 @contextlib.contextmanager
@@ -83,17 +87,18 @@ def chdir(root):
     if root == ".":
         yield
         return
-    # cwd = os.getcwd()
+    cwd = os.getcwd()
     os.chdir(root)
     try:
         yield
     except BaseException as exc:
         raise exc
-    # finally:
-    #     os.chdir(cwd)
+    finally:
+        os.chdir(cwd)
 
 
-def reliability_guard(maximum_memory_bytes=None):
+@typing.no_type_check
+def reliability_guard(maximum_memory_bytes: int = None):
     """
     Safety guard for model-generated code.
 
@@ -133,14 +138,14 @@ def reliability_guard(maximum_memory_bytes=None):
 
     import os
 
-    # os.environ["OMP_NUM_THREADS"] = "1"
+    os.environ["OMP_NUM_THREADS"] = "1"
 
     os.kill = None
     os.system = None
     os.putenv = None
     os.remove = None
     os.removedirs = None
-    # os.rmdir = None
+    os.rmdir = None
     os.fchdir = None
     os.setuid = None
     os.fork = None
@@ -161,13 +166,21 @@ def reliability_guard(maximum_memory_bytes=None):
     os.lchmod = None
     os.lchown = None
     os.getcwd = None
-    # os.chdir = None
+    os.chdir = None
 
     import shutil
 
-    # shutil.rmtree = None
+    shutil.rmtree = None
     shutil.move = None
     shutil.chown = None
+
+    import urllib3
+
+    urllib3.request = None
+    urllib3.PoolManager = None
+    urllib3.HTTPConnectionPool = None
+    urllib3.HTTPSConnectionPool = None
+    urllib3.HTTPResponse = None
 
     import subprocess
 

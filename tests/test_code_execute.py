@@ -1,38 +1,5 @@
-import functools
-import multiprocessing as mp
-from typing import Any, Optional
-
-from openelm.sandbox.server.utils import ErrorCode, sandbox_unsafe_execute
-
-
-def exec_code_test(prompt: str, func_name: Optional[str] = None,
-                   args: Optional[dict] = None, timeout: float = 5.0,
-                   debug: bool = True) -> Any:
-    """
-    Execute code in separate process.
-
-    This ensures that we avoid disabling system functions in the main process.
-
-    Note that we cannot do this in another *thread*, since execute uses `signal`
-    which only works in the main thread.
-
-    Args:
-        prompt (str): Prompt string.
-        func_name (str): Name of function in prompt string to execute.
-        args (dict): Arguments to pass to function.
-        timeout (float): Timeout limit in seconds.
-        debug (bool): Whether to print debug messages.
-    """
-    with mp.Pool(processes=1) as pool:
-        eval_fn = functools.partial(sandbox_unsafe_execute,
-                                    func_name=func_name,
-                                    args=args,
-                                    timeout=timeout,
-                                    debug=debug)
-        result = list(pool.map(eval_fn, [prompt]))[0]
-    if debug:
-        print(result)
-    return result
+from openelm.sandbox.server.utils import ErrorCode
+from openelm.utils.code_eval import eval_completions, pool_exec_processes
 
 
 def test_code_execute():
@@ -45,11 +12,15 @@ def parity(b1,b2,b3,b4):
     return bit_sum % 2
 """
     test_input = {"b1": 1, "b2": 0, "b3": 1, "b4": 1}
-    result = exec_code_test(PARITY_PROMPT, "parity", args=test_input)
+    result = pool_exec_processes(PARITY_PROMPT, "parity", args=test_input)
     assert result == 1
     test_input = {"b1": 1, "b2": 1, "b3": 1, "b4": 1}
-    result = exec_code_test(PARITY_PROMPT, "parity", args=test_input)
+    result = pool_exec_processes(PARITY_PROMPT, "parity", args=test_input)
     assert result == 0
+
+    # Completion test
+    result = eval_completions(eval_results=[PARITY_PROMPT])
+    assert result == [0]
 
     # Timeout test
     PROMPT = """
@@ -59,7 +30,7 @@ def test_func():
     time.sleep(1.1)
     return 0
 """
-    result = exec_code_test(PROMPT, "test_func", timeout=1.0)
+    result = pool_exec_processes(PROMPT, "test_func", timeout=1.0)
     assert result == ErrorCode.TIMEOUT_EXCEPTION
 
     # Syntax error test
@@ -68,7 +39,7 @@ def test_func():
 test_dct = {}
     return 0
 """
-    result = exec_code_test(PROMPT, "test_func")
+    result = pool_exec_processes(PROMPT, "test_func")
     assert result == ErrorCode.SYNTAX_ERROR
 
     # Type error test
@@ -77,7 +48,7 @@ def test_func():
     result = 1 + "Hello World"
     return 0
 """
-    result = exec_code_test(PROMPT, "test_func")
+    result = pool_exec_processes(PROMPT, "test_func")
     assert result == ErrorCode.TYPE_ERROR
 
     # Other exception test
@@ -86,5 +57,5 @@ def test_func():
     result = 5 / 0
     return 0
 """
-    result = exec_code_test(PROMPT, "test_func")
+    result = pool_exec_processes(PROMPT, "test_func")
     assert result == ErrorCode.EXCEPTION

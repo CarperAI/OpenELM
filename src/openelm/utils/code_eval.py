@@ -1,14 +1,51 @@
+import functools
 import itertools
-import os
-import re
-import shutil
-from typing import Union
+import multiprocessing as mp
+from typing import Any, Optional, Union
 
-from openelm.codegen.codex_execute import create_tempdir, reliability_guard, swallow_io, time_limit, TimeoutException
+from openelm.sandbox.server.utils import sandbox_unsafe_execute
+
+
+def pool_exec_processes(
+    prompt: str,
+    func_name: Optional[str] = None,
+    args: Optional[dict] = None,
+    timeout: float = 5.0,
+    processes: int = 1,
+    debug: bool = False,
+) -> Any:
+    """
+    Execute code in separate process(s).
+
+    This ensures that we avoid disabling system functions in the main process.
+
+    Note that we cannot do this in another *thread*, since execute uses `signal`
+    which only works in the main thread.
+
+    Args:
+        prompt (str): Prompt string.
+        func_name (str): Name of function in prompt string to execute.
+        args (dict): Arguments to pass to function.
+        timeout (float): Timeout limit in seconds.
+        processes (int): Number of processes to use.
+        debug (bool): Whether to print debug messages.
+    """
+    with mp.Pool(processes=processes) as pool:
+        eval_fn = functools.partial(
+            sandbox_unsafe_execute,
+            func_name=func_name,
+            args=args,
+            timeout=timeout,
+            debug=debug,
+        )
+        result = list(pool.map(eval_fn, [prompt]))[0]
+    if debug:
+        print(result)
+    return result
 
 
 def eval_completions(
-        eval_results: Union[str, list[str]], task: str = "parity", timeout: int = 5
+    eval_results: Union[str, list[str]], task: str = "parity", timeout: int = 5
 ) -> Union[int, list[int]]:
     """
     Evaluate (a batch of) the modified eval_results on a task.
@@ -28,7 +65,15 @@ def eval_completions(
         )
         results = []
         for code in _eval_results:
-            results.append(eval_code_string(code, parity_test_data, timeout))
+            res_arr = []
+            for args, res in parity_test_data:
+                res_arr.append(
+                    pool_exec_processes(code, func_name="parity", args=args) == res
+                )
+            if not all(res_arr):
+                results.append(1)
+            else:
+                results.append(0)
         if isinstance(eval_results, list):
             # Batch evaluation returns the batch
             return results
@@ -39,14 +84,15 @@ def eval_completions(
         raise ValueError(f"Unknown task: {task}")
 
 
-def mutate_code(n_bugs: int = 5, task: str = "parity", mutate_method='prompt') -> tuple:
+def mutate_code(n_bugs: int = 5, task: str = "parity", mutate_method="prompt") -> tuple:
     """
     Mutate code to create n bugs. Output the prompt in diff format.
 
     Args:
         n_bugs: number of bugs to introduce (from 1 to 5).
         task: (Optional) the task to be performed.
-        mutate_method: (Optional) 'diff' or 'prompt', corresponding to diff mutation or prompt mutation.
+        mutate_method: (Optional) 'diff' or 'prompt',
+        corresponding to diff mutation or prompt mutation.
 
     Returns:
         mutated_code, function_string
@@ -61,7 +107,8 @@ def mutate_code(n_bugs: int = 5, task: str = "parity", mutate_method='prompt') -
             "# A buggy implementation\n#!/usr/bin/python3\n",
             "",  # placeholder for the context, e.g., the buggy code
             "\n# Fixed bugs\ndef",
-        ]}
+        ],
+    }
     mutation_template = mutation_templates[mutate_method]
     if task == "parity":
         variables = ["b", "b", "b", "b", 2]
@@ -84,71 +131,12 @@ def parity_reference(b1, b2, b3, b4):
     return bit_sum % 2
 
 
+parity_test_data = list(
+    ({k: v for k, v in zip([f"b{i}" for i in range(1, 5)], i)}, parity_reference(*i))
+    for i in itertools.product(range(2), repeat=4)
+)
+
+
 def quadratic(a, b, c, x):
     """Return quadratic: a,b,c are coefficients and x is the independent variable."""
-    return a * x ** 2 + b * x + c
-
-
-def reset_os_funcs(rmtree, rmdir, chdir):
-    shutil.rmtree = rmtree
-    os.rmdir = rmdir
-    os.chdir = chdir
-
-
-def eval_code_string(code_str: str, ground_truth: dict, timeout: int = 5):
-    if len(code_str) == 0 or "def " not in code_str:
-        return 6  # No code found or no function found.
-    code_dct: dict = {}
-    func_match = re.search(r"def (\w+)\s*\((.*?)\):", code_str)
-    if func_match:
-        func_name = func_match.group(1)
-    else:
-        return 6  # No proper function found in code.
-    with create_tempdir():
-
-        # These system calls are needed when cleaning up tempdir.
-        import os
-        import shutil
-
-        rmtree = shutil.rmtree
-        rmdir = os.rmdir
-        chdir = os.chdir
-
-        # Disable functionalities that can make destructive changes to the test.
-        reliability_guard()
-        try:
-            # TODO: Check https://arxiv.org/pdf/2209.07753.pdf
-            with swallow_io():
-                with time_limit(timeout):
-                    exec(code_str, {}, code_dct)
-                    if not all(
-                            [
-                                code_dct[func_name](*i) == res
-                                for i, res in ground_truth.items()
-                            ]
-                    ):
-                        reset_os_funcs(rmtree, rmdir, chdir)
-                        return 1  # Code runs but fails a test.
-                    else:
-                        reset_os_funcs(rmtree, rmdir, chdir)
-                        return 0  # Passes all tests.
-        except TimeoutException:
-            reset_os_funcs(rmtree, rmdir, chdir)
-            return 2  # Code takes too long to run.
-        except RuntimeError:
-            reset_os_funcs(rmtree, rmdir, chdir)
-            return 3  # Code runs but crashes.
-        except SyntaxError:
-            reset_os_funcs(rmtree, rmdir, chdir)
-            return 4  # Code does not run - syntax error.
-        except TypeError:
-            reset_os_funcs(rmtree, rmdir, chdir)
-            return 5  # Code does not run - type error.
-        except Exception:
-            reset_os_funcs(rmtree, rmdir, chdir)
-            return 6  # Code fails to run - other error.
-
-
-parity_test_data = {
-    i: parity_reference(*i) for i in itertools.product(range(2), repeat=4)
-}
+    return a * x**2 + b * x + c

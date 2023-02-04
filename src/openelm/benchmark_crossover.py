@@ -1,28 +1,21 @@
-import itertools
-import os
-import re
-import shutil
-from typing import Iterator
+import json
+import time
+from itertools import permutations
+from pathlib import Path
 
 import hydra
 import numpy as np
-from itertools import permutations
+import torch
 from omegaconf import OmegaConf
 from tqdm import tqdm
-import time
-from pathlib import Path
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
-import torch
-import json
-
-from openelm.constants import SRC_PATH
-from openelm.map_elites import Map
-from openelm.environments.environments import Sodaracer
 
 from openelm.codegen.codegen_utilities import truncate
+from openelm.constants import SRC_PATH
+from openelm.environments.environments import Sodaracer
 from openelm.environments.sodaracer.walker import Walker
+from openelm.map_elites import Map
 from openelm.sandbox.server.utils import sandbox_unsafe_execute
-from openelm.environments.sodaracer import SodaraceSimulator
 
 CIRCLE = """
 def make_circle(wc, cx, cy, radius, num_points):
@@ -248,8 +241,10 @@ import math
 
 """
 
-INSTRUCTION_ONE = ["#Combine the ",
-                   "seed programs above to make a new walker.\ndef make_walker():\n"]
+INSTRUCTION_ONE = [
+    "#Combine the ",
+    "seed programs above to make a new walker.\ndef make_walker():\n",
+]
 
 SEEDS_DICT = {
     "wheel": WHEEL,
@@ -261,7 +256,8 @@ SEEDS_DICT = {
     "runner": RUNNER,
 }
 
-class CrossoverBenchmark():
+
+class CrossoverBenchmark:
     def __init__(self, cfg):
         self.cfg = cfg
         self.reverse_seeds = {v: k for k, v in SEEDS_DICT.items()}
@@ -278,10 +274,9 @@ class CrossoverBenchmark():
                 cfg.model, torch_dtype=torch.float16, low_cpu_mem_usage=True
             ).to(self.device)
         else:
-            self.model = AutoModelForCausalLM.from_pretrained(cfg.model,
-                                                              config=self.config).to(
-                self.device
-            )
+            self.model = AutoModelForCausalLM.from_pretrained(
+                cfg.model, config=self.config
+            ).to(self.device)
 
     def construct_prompt(self, seeds, instruction):
         prompt_str = IMPORTS
@@ -322,7 +317,7 @@ class CrossoverBenchmark():
             truncation=True,
             padding=True,
             return_tensors="pt",
-            max_length=2048
+            max_length=2048,
         ).to(self.device)
         token_len = encoding.input_ids.shape[1]
         results, valid_fitnesses = [], []
@@ -339,37 +334,40 @@ class CrossoverBenchmark():
         print("Prompt length: ", token_len, " tokens.")
         for _ in tqdm(range(self.cfg.n_trials // self.cfg.batch_size)):
             with torch.inference_mode():
-                    tokens = self.model.generate(
-                        **encoding,
-                        do_sample=True,
-                        num_return_sequences=self.cfg.batch_size,
-                        temperature=self.cfg.temp,
-                        max_new_tokens=self.cfg.gen_max_len,
-                        top_p=self.cfg.top_p,
-                        pad_token_id=self.cfg.pad_token,
-                        use_cache=True,
-                    )
-                    text = self.tokenizer.batch_decode(tokens[:, token_len - 1:, ...])
+                tokens = self.model.generate(
+                    **encoding,
+                    do_sample=True,
+                    num_return_sequences=self.cfg.batch_size,
+                    temperature=self.cfg.temp,
+                    max_new_tokens=self.cfg.gen_max_len,
+                    top_p=self.cfg.top_p,
+                    pad_token_id=self.cfg.pad_token,
+                    use_cache=True,
+                )
+                text = self.tokenizer.batch_decode(tokens[:, token_len - 1 :, ...])
             truncations = map(truncate, text)
             for truncation in truncations:
                 try:
-                    execution_result = sandbox_unsafe_execute(prompt + truncation,
-                                                            "make_walker",
-                                                            debug=self.cfg.debug)
-                    if (isinstance(execution_result, Walker) and
-                        execution_result.validate()):
+                    execution_result = sandbox_unsafe_execute(
+                        code_str=prompt + truncation,
+                        func_name="make_walker",
+                        debug=self.cfg.debug,
+                    )
+                    if (
+                        isinstance(execution_result, Walker)
+                        and execution_result.validate()
+                    ):
                         sodaracer = Sodaracer(
-                            program_str = truncation,
-                            result_obj = execution_result.to_dict(),
-                            error_code = 0
+                            program_str=truncation,
+                            result_obj=execution_result.to_dict(),
+                            error_code=0,
                         )
                         if sodaracer.valid:
                             fitness = sodaracer.evaluate(1000)
                             if fitness is not None:
                                 valid_fitnesses.append(fitness)
                                 map_idx = self.to_mapindex(
-                                    self.to_behavior_space(sodaracer),
-                                    bins=bins
+                                    sodaracer.to_phenotype(), bins=bins
                                 )
                                 if fitness > fitness_map[map_idx]:
                                     fitness_map[map_idx] = fitness
@@ -391,7 +389,6 @@ class CrossoverBenchmark():
         print(f"Average fitness: {avg_fitnesses}")
         print(f"QD score: {qd_score}")
         return valid_rate, avg_fitnesses, qd_score
-
 
     def run_benchmark(self):
         instruction = INSTRUCTION_ONE
@@ -417,10 +414,11 @@ class CrossoverBenchmark():
             "fitness_stats": fitness_stats,
             "qd_stats": qd_stats,
             "config": OmegaConf.to_container(self.cfg),
-            "permutations": perm
+            "permutations": perm,
         }
-        json_path = Path("/fsx/home-hyperion/OpenELM/data",
-                         f"{time.strftime('%Y%m%d-%H%M%S')}.json")
+        json_path = Path(
+            "/fsx/home-hyperion/OpenELM/data", f"{time.strftime('%Y%m%d-%H%M%S')}.json"
+        )
         json_path.write_text(json.dumps(results_dct))
 
 
@@ -437,6 +435,7 @@ def main(cfg):
 
     crossover = CrossoverBenchmark(cfg)
     crossover.run_benchmark()
+
 
 if __name__ == "__main__":
     main()
