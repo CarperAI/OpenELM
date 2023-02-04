@@ -1,10 +1,11 @@
 from time import sleep
 
-import openai
-
 from openelm.codegen.codegen_utilities import truncate
 from openelm.environments.sodaracer.walker import Walker
 from openelm.sandbox.server.utils import sandbox_unsafe_execute
+
+# import openai
+
 
 API_KEY = ""
 
