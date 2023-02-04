@@ -1,6 +1,6 @@
-import os
 import re
-import shutil
+from enum import Enum
+from typing import Any, Optional
 
 from openelm.sandbox.server.sandbox_codex_execute import (
     TimeoutException,
@@ -11,23 +11,33 @@ from openelm.sandbox.server.sandbox_codex_execute import (
 )
 
 
-def reset_os_funcs(rmtree, rmdir, chdir):
-    shutil.rmtree = rmtree
-    os.rmdir = rmdir
-    os.chdir = chdir
+class ErrorCode(Enum):
+    """An Enum to represent the errors for the execution of generated code."""
+
+    VALID = 0
+    TEST_FAILED = 1
+    TIMEOUT_EXCEPTION = 2
+    SYNTAX_ERROR = 3
+    TYPE_ERROR = 4
+    EXCEPTION = 5
 
 
 def sandbox_unsafe_execute(
-    code_str: str, func_name: str, timeout: float = 5.0, debug=False
+    code_str: str,
+    func_name: Optional[str] = None,
+    args: Optional[dict[str, Any]] = None,
+    timeout: float = 5.0,
+    debug: bool = False,
 ):
     if len(code_str) == 0 or "def " not in code_str:
         print("No code found or no function found.")
-        return 6  # No code found or no function found.
-    code_dct: dict = {}
+        return ErrorCode(5)  # No code found or no function found.
     func_match = re.search(r"def (\w+)\s*\((.*?)\):", code_str)
     if not func_match:
         print("No proper function found in code.")
-        return 6  # No proper function found in code.
+        return ErrorCode(5)  # No proper function found in code.
+    elif func_match and func_name is None:
+        func_name = func_match.groups()[0]
     with create_tempdir():
 
         # These system calls are needed when cleaning up tempdir.
@@ -38,59 +48,42 @@ def sandbox_unsafe_execute(
         rmdir = os.rmdir
         chdir = os.chdir
 
-        # Disable functionalities that can make destructive changes to the test.
+        # Disable functionalities that can make destructive changes.
         reliability_guard()
 
         try:
-            # TODO: Check https://arxiv.org/pdf/2209.07753.pdf
+            # TODO: Check https://arxiv.org/abs/2209.07753 code.
+            code_dct: dict = {}
             with swallow_io():
-                if timeout <= 0.0:
-                    exec(code_str, globals(), code_dct)
-                    for k, v in code_dct.items():
-                        globals()[k] = v
-                    res = code_dct[func_name]()
-                    reset_os_funcs(rmtree, rmdir, chdir)
-                    return res
-                else:
-                    with time_limit(timeout):
-                        exec(code_str, globals(), code_dct)
-                        for k, v in code_dct.items():
-                            globals()[k] = v
-                        res = code_dct[func_name]()
-                        reset_os_funcs(rmtree, rmdir, chdir)
-                        return res
+                with time_limit(timeout):
+                    exec(code_str, code_dct)
+                    if args is None:
+                        result = code_dct[func_name]()
+                    else:
+                        result = code_dct[func_name](**args)
         except TimeoutException as e:
-            reset_os_funcs(rmtree, rmdir, chdir)
             if debug:
-                print("Code takes too long to run.")
-                print(e)
+                print(type(e), e.args)
                 print(code_str)
-            return 2  # Code takes too long to run.
-        except RuntimeError as e:
-            reset_os_funcs(rmtree, rmdir, chdir)
-            if debug:
-                print("Code runs but crashes.")
-                print(e)
-                print(code_str)
-            return 3  # Code runs but crashes.
+            result = ErrorCode(2)
         except SyntaxError as e:
-            reset_os_funcs(rmtree, rmdir, chdir)
             if debug:
-                print("Code does not run - syntax error.")
-                print(e)
+                print(type(e), e.args)
                 print(code_str)
-            return 4  # Code does not run - syntax error.
+            result = ErrorCode(3)
         except TypeError as e:
-            reset_os_funcs(rmtree, rmdir, chdir)
             if debug:
-                print("Code does not run - type error.")
-                print(e)
+                print(type(e), e.args)
                 print(code_str)
-            return 5  # Code does not run - type error.
+            result = ErrorCode(4)
         except Exception as e:
-            reset_os_funcs(rmtree, rmdir, chdir)
             if debug:
-                print("Code fails to run - other error.")
-                print(e)
+                print(type(e), e.args)
                 print(code_str)
-            return 6  # Code fails to run - other error.
+            result = ErrorCode(5)
+
+        shutil.rmtree = rmtree
+        os.rmdir = rmdir
+        os.chdir = chdir
+
+        return result

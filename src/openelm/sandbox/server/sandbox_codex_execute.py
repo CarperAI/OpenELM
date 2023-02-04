@@ -18,7 +18,6 @@
 import contextlib
 import faulthandler
 import io
-import multiprocessing
 import os
 import platform
 import signal
@@ -30,12 +29,15 @@ def time_limit(seconds):
     def signal_handler(signum, frame):
         raise TimeoutException("Timed out!")
 
-    signal.setitimer(signal.ITIMER_REAL, seconds)
-    signal.signal(signal.SIGALRM, signal_handler)
-    try:
+    if seconds <= 0.0:
         yield
-    finally:
-        signal.setitimer(signal.ITIMER_REAL, 0)
+    else:
+        signal.setitimer(signal.ITIMER_REAL, seconds)
+        signal.signal(signal.SIGALRM, signal_handler)
+        try:
+            yield
+        finally:
+            signal.setitimer(signal.ITIMER_REAL, 0)
 
 
 @contextlib.contextmanager
@@ -59,7 +61,7 @@ class TimeoutException(Exception):
 
 
 class WriteOnlyStringIO(io.StringIO):
-    """StringIO that throws an exception when it's read from"""
+    """StringIO that throws an exception when it's read from."""
 
     def read(self, *args, **kwargs):
         raise OSError
@@ -84,29 +86,30 @@ def chdir(root):
     if root == ".":
         yield
         return
-    # cwd = os.getcwd()
+    cwd = os.getcwd()
     os.chdir(root)
     try:
         yield
     except BaseException as exc:
         raise exc
-    # finally:
-    #     os.chdir(cwd)
+    finally:
+        os.chdir(cwd)
 
 
 def reliability_guard(maximum_memory_bytes=None):
     """
+    Safety guard for model-generated code.
+
     This disables various destructive functions and prevents the generated code
     from interfering with the test (e.g. fork bomb, killing other processes,
     removing filesystem files, etc.)
 
-    WARNING
+    Warning:
     This function is NOT a security sandbox. Untrusted code, including, model-
     generated code, should not be blindly executed outside of one. See the
     Codex paper for more information about OpenAI's code sandbox, and proceed
     with caution.
     """
-
     if maximum_memory_bytes is not None:
         import resource
 
@@ -116,7 +119,7 @@ def reliability_guard(maximum_memory_bytes=None):
         resource.setrlimit(
             resource.RLIMIT_DATA, (maximum_memory_bytes, maximum_memory_bytes)
         )
-        if not platform.uname().system == "Darwin":
+        if not platform.uname().system == "Darwin":  # MacOS doesn't have RLIMIT_STACK
             resource.setrlimit(
                 resource.RLIMIT_STACK, (maximum_memory_bytes, maximum_memory_bytes)
             )
@@ -133,14 +136,14 @@ def reliability_guard(maximum_memory_bytes=None):
 
     import os
 
-    # os.environ["OMP_NUM_THREADS"] = "1"
+    os.environ["OMP_NUM_THREADS"] = "1"
 
     os.kill = None
     os.system = None
     os.putenv = None
     os.remove = None
     os.removedirs = None
-    # os.rmdir = None
+    os.rmdir = None
     os.fchdir = None
     os.setuid = None
     os.fork = None
@@ -161,13 +164,21 @@ def reliability_guard(maximum_memory_bytes=None):
     os.lchmod = None
     os.lchown = None
     os.getcwd = None
-    # os.chdir = None
+    os.chdir = None
 
     import shutil
 
-    # shutil.rmtree = None
+    shutil.rmtree = None
     shutil.move = None
     shutil.chown = None
+
+    import urllib3
+
+    urllib3.request = None
+    urllib3.PoolManager = None
+    urllib3.HTTPConnectionPool = None
+    urllib3.HTTPSConnectionPool = None
+    urllib3.HTTPResponse = None
 
     import subprocess
 
