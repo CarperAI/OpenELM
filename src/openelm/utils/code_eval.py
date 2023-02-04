@@ -1,13 +1,13 @@
 import functools
 import itertools
 import multiprocessing as mp
-from typing import Any, Optional, Union
+from typing import Any, Iterable, Optional, Union
 
 from openelm.sandbox.server.sandbox_codex_execute import ExecResult, unsafe_execute
 
 
 def pool_exec_processes(
-    prompt_list: Union[str, list[str]],
+    prompts: Union[str, Iterable[str]],
     func_name: Optional[str] = None,
     args: Optional[dict[str, Any]] = None,
     ground_truth: Optional[dict[tuple, Any]] = None,
@@ -19,7 +19,7 @@ def pool_exec_processes(
     Execute code in separate process(s).
 
     Args:
-        prompt_list (str or list): Prompt string(s) to execute.
+        prompts (str or Iterable): Prompt string(s) to execute.
         func_name (str): Name of function in prompt string to execute.
         args (dict): Arguments to pass to function.
         ground_truth (dict): Dict with args as keys and correct return values as
@@ -28,8 +28,8 @@ def pool_exec_processes(
         processes (int): Number of processes to use.
         debug (bool): Whether to print debug messages.
     """
-    if isinstance(prompt_list, str):
-        prompt_list = [prompt_list]
+    if isinstance(prompts, str):
+        prompts = [prompts]
 
     eval_fn = functools.partial(
         unsafe_execute,
@@ -40,16 +40,16 @@ def pool_exec_processes(
         debug=debug,
     )
     if processes <= 1:
-        return list(map(eval_fn, prompt_list))
+        return list(map(eval_fn, prompts))
     with mp.Pool(processes=processes) as pool:
-        results = list(pool.map(eval_fn, prompt_list))
+        results = list(pool.map(eval_fn, prompts))
     if debug:
         print(results)
     return results
 
 
 def eval_completions(
-    eval_results: Union[str, list[str]],
+    eval_results: Union[str, Iterable[str]],
     task: str = "parity",
     timeout: float = 5.0,
     processes: int = 1,
@@ -105,7 +105,7 @@ def mutate_code(n_bugs: int = 5, task: str = "parity", mutate_method="prompt") -
         "prompt": [
             "# A buggy implementation\n#!/usr/bin/python3\n",
             "",  # placeholder for the context, e.g., the buggy code
-            "\n# Fixed bugs\ndef",
+            "\n# Fixed bugs\ndef parity(b1,b2,b3,b4):\n",
         ],
     }
     mutation_template = mutation_templates[mutate_method]

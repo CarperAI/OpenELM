@@ -1,26 +1,24 @@
-import functools
-import itertools
 import json
 import os
 import re
-from typing import Iterator
 
 import hydra
 import numpy as np
-import multiprocessing as mp
+import torch
 from omegaconf import OmegaConf
-from openelm.utils.diff_eval import split_diff, apply_diff
 from tqdm import tqdm
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
-import torch
 
-from openelm.codegen.codegen_utilities import truncate
+from openelm.codegen.codegen_utilities import sample, truncate
 from openelm.constants import SRC_PATH
-from openelm.utils.code_eval import mutate_code, eval_completions
+from openelm.utils.code_eval import eval_completions, mutate_code
+from openelm.utils.diff_eval import apply_diff, split_diff
 
 
 def run_benchmark(cfg, model, tokenizer, device, n_bugs, temperature):
-    mutated_str = mutate_code(n_bugs=n_bugs, task=cfg.tasks[0], mutate_method='prompt')
+    mutated_str, _ = mutate_code(
+        n_bugs=n_bugs, task=cfg.tasks[0], mutate_method="prompt"
+    )
     # mutated_encoding = tokenizer([mutated_str] * cfg.gpus, truncation=True, padding=True,
     mutated_encoding = tokenizer(
         [mutated_str],
@@ -31,33 +29,24 @@ def run_benchmark(cfg, model, tokenizer, device, n_bugs, temperature):
     token_len = mutated_encoding.input_ids.shape[1]
     num_batches = cfg.n_trials // cfg.batch_size
     eval_results = []
-    ev_func = functools.partial(eval_completions, task=cfg.tasks[0], timeout=cfg.timeout)
-    for i in tqdm(range(num_batches), desc=f"Running benchmark with {n_bugs} bugs",
-                  disable=False):
-        # completions = sample(cfg, model, tokenizer, mutated_encoding, add_def=True)
-        with torch.inference_mode():
-            tokens = model.generate(
-                **mutated_encoding,
-                do_sample=True,
-                num_return_sequences=cfg.batch_size,
-                temperature=temperature,
-                max_length=token_len + cfg.gen_max_len,
-                top_p=cfg.top_p,
-                pad_token_id=cfg.pad_token,
-                use_cache=True,
+    cfg.temp = temperature
+    for _ in tqdm(
+        range(num_batches), desc=f"Running benchmark with {n_bugs} bugs", disable=False
+    ):
+        completions = sample(
+            cfg, model, tokenizer, mutated_encoding, starting_idx=token_len - 16
+        )
+        truncations = map(truncate, completions)
+        eval_results.extend(
+            eval_completions(
+                truncations,
+                task=cfg.tasks[0],
+                timeout=cfg.timeout,
+                processes=cfg.processes,
+                debug=cfg.debug,
             )
-            text = tokenizer.batch_decode(tokens[:, token_len - 1:, ...])
-        truncations = list(map(truncate, text))
-        # Run evaluation in separate processes
-        with mp.Pool(processes=cfg.batch_size) as pool:
-            eval_results.extend(list(pool.map(ev_func, truncations)))
-
-    corr_cnt = np.count_nonzero(eval_results == 0)
-    # print(f"Number of bugs: {n_bugs}")
-    # print(
-    #     f"Result: {corr_cnt} successful completions in {cfg.n_trials} trials,",
-    #     f"{(corr_cnt / cfg.n_trials) * 100}%"
-    # )
+        )
+    corr_cnt = eval_results.count(0)
     return (corr_cnt / cfg.n_trials) * 100
 
 
@@ -129,7 +118,8 @@ def main(cfg):
     print("----------------- Config ---------------")
     print(OmegaConf.to_yaml(cfg))
     print("-----------------  End -----------------")
-    os.environ['TOKENIZERS_PARALLELISM'] = 'false'  # Prevent annoying warning from tokenizers on multiple threads.
+    # Prevent annoying warning from tokenizers on multiple threads.
+    os.environ["TOKENIZERS_PARALLELISM"] = "false"
     device = torch.device("cuda" if cfg.cuda else "cpu")
     config = AutoConfig.from_pretrained(cfg.model)
     # Sometimes our model just fresh came out of training. Force use_cache to be true.
@@ -146,11 +136,16 @@ def main(cfg):
         model = AutoModelForCausalLM.from_pretrained(cfg.model, config=config).to(
             device
         )
-    #model, tokenizer = model_setup(cfg)
     if "parity" in cfg.tasks:
         results = {}
-        for i in tqdm(range(1, 6), desc="Evaluating bugs on parity:"):
-                results[i] = max([run_benchmark(cfg, model, tokenizer, device, i, temp) for temp in (0.7,0.8,0.9)])
+        for i in tqdm(range(1, 2), desc="Evaluating bugs on parity:"):
+            results[i] = run_benchmark(cfg, model, tokenizer, device, i, 0.8)
+            # results[i] = max(
+            #     [
+            #         run_benchmark(cfg, model, tokenizer, device, i, temp)
+            #         for temp in (0.7, 0.8, 0.9)
+            #     ]
+            # )
         print(results)
 
 

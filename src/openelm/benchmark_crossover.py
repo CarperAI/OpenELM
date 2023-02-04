@@ -346,6 +346,7 @@ class CrossoverBenchmark:
                 )
                 text = self.tokenizer.batch_decode(tokens[:, token_len - 1 :, ...])
             truncations = map(truncate, text)
+            # TODO: rewrite to map over truncations and execute them in parallel
             for truncation in truncations:
                 try:
                     execution_result = unsafe_execute(

@@ -119,6 +119,7 @@ def model_setup(cfg):
 
 
 def sample(cfg, model, tokenizer, batch, batch_size=None, starting_idx=None):
+    # TODO: add dict param for extra hparams
     """Run a model on a batch of contexts for a particular task."""
     if batch_size is None:
         batch_size = cfg.batch_size
