@@ -23,13 +23,12 @@ import platform
 import re
 import signal
 import tempfile
-import typing
 from enum import Enum
 from typing import Any, Optional
 
 
-class ErrorCode(Enum):
-    """An Enum to represent the errors for the execution of generated code."""
+class ExecResult(Enum):
+    """An Enum to represent the result for the execution of generated code."""
 
     VALID = 0
     TEST_FAILED = 1
@@ -39,78 +38,11 @@ class ErrorCode(Enum):
     EXCEPTION = 5
 
 
-def parity_unsafe_execute(
-    code_str: str,
-    func_name: Optional[str] = None,
-    ground_truth: dict[str, Any] = None,
-    timeout: float = 5.0,
-    debug: bool = False,
-):
-    if len(code_str) == 0 or "def " not in code_str:
-        # No code found or no function found.
-        if debug:
-            print("No code found or no function found.")
-            print(code_str)
-        return ErrorCode(5)
-    func_match = re.search(r"def (\w+)\s*\((.*?)\):", code_str)
-    if not func_match:
-        # No proper function found in code.
-        if debug:
-            print("No proper function found in code.")
-            print(code_str)
-        return ErrorCode(5)
-    elif func_match and func_name is None:
-        func_name = func_match.groups()[0]
-    with create_tempdir():
-
-        # Disable functionalities that can make destructive changes.
-        func_dct = reliability_guard()
-
-        try:
-            # TODO: Check https://arxiv.org/abs/2209.07753 code.
-            code_dct: dict = {}
-            with swallow_io():
-                with time_limit(timeout):
-                    exec(code_str, code_dct)
-                    if not all(
-                        [
-                            code_dct[func_name](**args) == res
-                            for args, res in ground_truth
-                        ]
-                    ):
-                        result = ErrorCode(1)  # Code runs but fails a test.
-                    else:
-                        result = 0  # Passes all tests.
-        except TimeoutException as e:
-            if debug:
-                print(type(e), e.args)
-                print(code_str)
-            result = ErrorCode(2)
-        except SyntaxError as e:
-            if debug:
-                print(type(e), e.args)
-                print(code_str)
-            result = ErrorCode(3)
-        except TypeError as e:
-            if debug:
-                print(type(e), e.args)
-                print(code_str)
-            result = ErrorCode(4)
-        except Exception as e:
-            if debug:
-                print(type(e), e.args)
-                print(code_str)
-            result = ErrorCode(5)
-
-        reverse_reliability_guard(func_dct)
-
-        return result
-
-
 def unsafe_execute(
     code_str: str,
     func_name: Optional[str] = None,
     args: Optional[dict[str, Any]] = None,
+    ground_truth: Optional[dict[tuple, Any]] = None,
     timeout: float = 5.0,
     debug: bool = False,
 ):
@@ -119,20 +51,20 @@ def unsafe_execute(
         if debug:
             print("No code found or no function found.")
             print(code_str)
-        return ErrorCode(5)
+        return ExecResult(5)
     func_match = re.search(r"def (\w+)\s*\((.*?)\):", code_str)
     if not func_match:
         # No proper function found in code.
         if debug:
             print("No proper function found in code.")
             print(code_str)
-        return ErrorCode(5)
+        return ExecResult(5)
     elif func_match and func_name is None:
         func_name = func_match.groups()[0]
     with create_tempdir():
 
         # Disable functionalities that can make destructive changes.
-        func_dct = reliability_guard()
+        func_dct: dict[str, Any] = reliability_guard()
 
         try:
             # TODO: Check https://arxiv.org/abs/2209.07753 code.
@@ -140,31 +72,43 @@ def unsafe_execute(
             with swallow_io():
                 with time_limit(timeout):
                     exec(code_str, code_dct)
-                    if args is None:
-                        result = code_dct[func_name]()
-                    else:
-                        result = code_dct[func_name](**args)
+                    if ground_truth is None:
+                        if args is None:
+                            result = code_dct[func_name]()
+                        elif args is not None:
+                            result = code_dct[func_name](**args)
+                    elif ground_truth is not None:
+                        if all(
+                            [
+                                code_dct[func_name](*arguments) == res
+                                for arguments, res in ground_truth.items()
+                            ]
+                        ):
+                            result = 0
+                        else:
+                            result = ExecResult(1)
         except TimeoutException as e:
             if debug:
                 print(type(e), e.args)
                 print(code_str)
-            result = ErrorCode(2)
+            result = ExecResult(2)
         except SyntaxError as e:
             if debug:
                 print(type(e), e.args)
                 print(code_str)
-            result = ErrorCode(3)
+            result = ExecResult(3)
         except TypeError as e:
             if debug:
                 print(type(e), e.args)
                 print(code_str)
-            result = ErrorCode(4)
+            result = ExecResult(4)
         except Exception as e:
             if debug:
                 print(type(e), e.args)
                 print(code_str)
-            result = ErrorCode(5)
+            result = ExecResult(5)
 
+        # Restore system functionalities.
         reverse_reliability_guard(func_dct)
 
         return result
@@ -242,7 +186,7 @@ def chdir(root):
         os.chdir(cwd)
 
 
-def reliability_guard(maximum_memory_bytes: Optional[int] = None) -> dict:
+def reliability_guard(maximum_memory_bytes: Optional[int] = None) -> dict[str, Any]:
     """
     Safety guard for model-generated code.
 

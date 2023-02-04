@@ -1,4 +1,4 @@
-from openelm.sandbox.server.sandbox_codex_execute import ErrorCode
+from openelm.sandbox.server.sandbox_codex_execute import ExecResult
 from openelm.utils.code_eval import eval_completions, pool_exec_processes
 
 
@@ -12,10 +12,10 @@ def parity(b1,b2,b3,b4):
     return bit_sum % 2
 """
     test_input = {"b1": 1, "b2": 0, "b3": 1, "b4": 1}
-    result = pool_exec_processes(PARITY_PROMPT, "parity", args=test_input)
+    result = pool_exec_processes(PARITY_PROMPT, "parity", args=test_input)[0]
     assert result == 1
     test_input = {"b1": 1, "b2": 1, "b3": 1, "b4": 1}
-    result = pool_exec_processes(PARITY_PROMPT, "parity", args=test_input)
+    result = pool_exec_processes(PARITY_PROMPT, "parity", args=test_input)[0]
     assert result == 0
 
     # Completion test
@@ -30,8 +30,8 @@ def test_func():
     time.sleep(1.1)
     return 0
 """
-    result = pool_exec_processes(PROMPT, "test_func", timeout=1.0)
-    assert result == ErrorCode.TIMEOUT_EXCEPTION
+    result = pool_exec_processes(PROMPT, "test_func", timeout=1.0)[0]
+    assert result == ExecResult.TIMEOUT_EXCEPTION
 
     # Syntax error test
     PROMPT = """
@@ -39,8 +39,8 @@ def test_func():
 test_dct = {}
     return 0
 """
-    result = pool_exec_processes(PROMPT, "test_func")
-    assert result == ErrorCode.SYNTAX_ERROR
+    result = pool_exec_processes(PROMPT, "test_func")[0]
+    assert result == ExecResult.SYNTAX_ERROR
 
     # Type error test
     PROMPT = """
@@ -48,8 +48,8 @@ def test_func():
     result = 1 + "Hello World"
     return 0
 """
-    result = pool_exec_processes(PROMPT, "test_func")
-    assert result == ErrorCode.TYPE_ERROR
+    result = pool_exec_processes(PROMPT, "test_func")[0]
+    assert result == ExecResult.TYPE_ERROR
 
     # Other exception test
     PROMPT = """
@@ -57,5 +57,5 @@ def test_func():
     result = 5 / 0
     return 0
 """
-    result = pool_exec_processes(PROMPT, "test_func")
-    assert result == ErrorCode.EXCEPTION
+    result = pool_exec_processes(PROMPT, "test_func")[0]
+    assert result == ExecResult.EXCEPTION

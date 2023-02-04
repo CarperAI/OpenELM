@@ -129,6 +129,7 @@ dmypy.json
 .pyre/
 
 # Project dirs
+.vscode
 checkpoints/
 logs/
 archive/

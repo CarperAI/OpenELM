@@ -3,50 +3,58 @@ import itertools
 import multiprocessing as mp
 from typing import Any, Optional, Union
 
-from openelm.sandbox.server.sandbox_codex_execute import unsafe_execute
+from openelm.sandbox.server.sandbox_codex_execute import ExecResult, unsafe_execute
 
 
 def pool_exec_processes(
-    prompt: str,
+    prompt_list: Union[str, list[str]],
     func_name: Optional[str] = None,
-    args: Optional[dict] = None,
+    args: Optional[dict[str, Any]] = None,
+    ground_truth: Optional[dict[tuple, Any]] = None,
     timeout: float = 5.0,
-    processes: int = 1,
+    processes: int = 0,
     debug: bool = False,
-) -> Any:
+) -> list[Any]:
     """
     Execute code in separate process(s).
 
-    This ensures that we avoid disabling system functions in the main process.
-
-    Note that we cannot do this in another *thread*, since execute uses `signal`
-    which only works in the main thread.
-
     Args:
-        prompt (str): Prompt string.
+        prompt_list (str or list): Prompt string(s) to execute.
         func_name (str): Name of function in prompt string to execute.
         args (dict): Arguments to pass to function.
+        ground_truth (dict): Dict with args as keys and correct return values as
+        values.
         timeout (float): Timeout limit in seconds.
         processes (int): Number of processes to use.
         debug (bool): Whether to print debug messages.
     """
+    if isinstance(prompt_list, str):
+        prompt_list = [prompt_list]
+
+    eval_fn = functools.partial(
+        unsafe_execute,
+        func_name=func_name,
+        args=args,
+        ground_truth=ground_truth,
+        timeout=timeout,
+        debug=debug,
+    )
+    if processes <= 1:
+        return list(map(eval_fn, prompt_list))
     with mp.Pool(processes=processes) as pool:
-        eval_fn = functools.partial(
-            unsafe_execute,
-            func_name=func_name,
-            args=args,
-            timeout=timeout,
-            debug=debug,
-        )
-        result = list(pool.map(eval_fn, [prompt]))[0]
+        results = list(pool.map(eval_fn, prompt_list))
     if debug:
-        print(result)
-    return result
+        print(results)
+    return results
 
 
 def eval_completions(
-    eval_results: Union[str, list[str]], task: str = "parity", timeout: int = 5
-) -> Union[int, list[int]]:
+    eval_results: Union[str, list[str]],
+    task: str = "parity",
+    timeout: float = 5.0,
+    processes: int = 1,
+    debug: bool = False,
+) -> list[Union[int, ExecResult]]:
     """
     Evaluate (a batch of) the modified eval_results on a task.
 
@@ -54,32 +62,23 @@ def eval_completions(
         eval_results: either a string or a batch of strings. The code(s) to be evaluated.
         task: (Optional) the task to be performed.
         timeout: (Optional) the timeout (in seconds).
+        processes: (Optional) the number of processes to use.
 
     Returns:
-        either the status code of the string or a list of status eval_results of the batch
-        of strings (depending on whether `eval_results` is batched).
+        A list of status eval_results of the batch of strings.
     """
     if task == "parity":
-        _eval_results = (
-            eval_results if isinstance(eval_results, list) else [eval_results]
+        if isinstance(eval_results, str):
+            eval_results = [eval_results]
+        results = pool_exec_processes(
+            eval_results,
+            func_name="parity",
+            ground_truth=parity_test_data,
+            timeout=timeout,
+            processes=processes,
+            debug=debug,
         )
-        results = []
-        for code in _eval_results:
-            res_arr = []
-            for args, res in parity_test_data:
-                res_arr.append(
-                    pool_exec_processes(code, func_name="parity", args=args) == res
-                )
-            if not all(res_arr):
-                results.append(1)
-            else:
-                results.append(0)
-        if isinstance(eval_results, list):
-            # Batch evaluation returns the batch
-            return results
-        else:
-            # Single evaluation returns a single result
-            return results[0]
+        return results
     else:
         raise ValueError(f"Unknown task: {task}")
 
@@ -131,10 +130,9 @@ def parity_reference(b1, b2, b3, b4):
     return bit_sum % 2
 
 
-parity_test_data = list(
-    ({k: v for k, v in zip([f"b{i}" for i in range(1, 5)], i)}, parity_reference(*i))
-    for i in itertools.product(range(2), repeat=4)
-)
+parity_test_data = {
+    i: parity_reference(*i) for i in itertools.product(range(2), repeat=4)
+}
 
 
 def quadratic(a, b, c, x):
