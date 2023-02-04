@@ -1,4 +1,4 @@
-from openelm.sandbox.server.utils import ErrorCode
+from openelm.sandbox.server.sandbox_codex_execute import ErrorCode
 from openelm.utils.code_eval import eval_completions, pool_exec_processes
 
 

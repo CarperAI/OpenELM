@@ -3,7 +3,7 @@ import itertools
 import multiprocessing as mp
 from typing import Any, Optional, Union
 
-from openelm.sandbox.server.utils import sandbox_unsafe_execute
+from openelm.sandbox.server.sandbox_codex_execute import unsafe_execute
 
 
 def pool_exec_processes(
@@ -32,7 +32,7 @@ def pool_exec_processes(
     """
     with mp.Pool(processes=processes) as pool:
         eval_fn = functools.partial(
-            sandbox_unsafe_execute,
+            unsafe_execute,
             func_name=func_name,
             args=args,
             timeout=timeout,

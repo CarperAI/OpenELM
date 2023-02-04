@@ -121,10 +121,7 @@ class ImageGeneration(Genotype):
             return ""
 
     def validate(self) -> bool:
-        return (
-            len(self.result_obj.shape) == 3
-            and self.result_obj.shape[2] == 3
-        )
+        return len(self.result_obj.shape) == 3 and self.result_obj.shape[2] == 3
 
     def to_phenotype(self, mode: str = "3-channel-avg") -> Optional[Phenotype]:
         if not self.valid:
@@ -162,6 +159,14 @@ class ImageOptim(BaseEnvironment[ImageGeneration]):
         run_name: Optional[str] = None,
     ):
         """
+        Mutate programs that return images.
+
+        Fitness is simply the absolute difference between the returning
+        image and the target image. To map into the behavior space,
+        if behavior_mode=="3-channel", the image will be divided into blocks
+        (specified in `block_size`), and average values of RGB channels in each
+        block will be put together as a point in the behavior space (average-pooling).
+
         Args:
             seed: the seed dict.
             config: the config file path or dict.
@@ -273,7 +278,7 @@ class MatchString(BaseEnvironment[StringArrayGenotype]):
 
 
 class Sodaracer(Genotype):
-    def __init__(self, program_str: str, result_obj: dict, error_code: bool):
+    def __init__(self, program_str: str, result_obj: dict, error_code: int):
         """
         The Sodaracer genotype.
 
@@ -308,9 +313,11 @@ class Sodaracer(Genotype):
     def to_phenotype(self) -> Optional[Phenotype]:
         if self.valid:
             return np.array(
-                [self.morphology["height"],
-                 self.morphology["width"],
-                 self.morphology["mass"]]
+                [
+                    self.morphology["height"],
+                    self.morphology["width"],
+                    self.morphology["mass"],
+                ]
             ).astype(int)
         else:
             return None

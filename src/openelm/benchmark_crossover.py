@@ -15,7 +15,7 @@ from openelm.constants import SRC_PATH
 from openelm.environments.environments import Sodaracer
 from openelm.environments.sodaracer.walker import Walker
 from openelm.map_elites import Map
-from openelm.sandbox.server.utils import sandbox_unsafe_execute
+from openelm.sandbox.server.sandbox_codex_execute import unsafe_execute
 
 CIRCLE = """
 def make_circle(wc, cx, cy, radius, num_points):
@@ -324,7 +324,7 @@ class CrossoverBenchmark:
         # Map setup
         n_bins = 12
         genotype_space = np.array([[0, 1000], [0, 1000], [0, 2000]]).T
-        bins = np.linspace(*genotype_space, n_bins + 1)[1:-1].T
+        bins = np.linspace(*genotype_space, n_bins + 1)[1:-1].T  # type: ignore
         fitness_map = Map(
             dims=(n_bins,) * genotype_space.shape[1],
             fill_value=-np.inf,
@@ -348,7 +348,7 @@ class CrossoverBenchmark:
             truncations = map(truncate, text)
             for truncation in truncations:
                 try:
-                    execution_result = sandbox_unsafe_execute(
+                    execution_result = unsafe_execute(
                         code_str=prompt + truncation,
                         func_name="make_walker",
                         debug=self.cfg.debug,
@@ -384,7 +384,7 @@ class CrossoverBenchmark:
         avg_fitnesses = np.nanmean(valid_fitnesses)
         qd_score = fitness_map.array[np.isfinite(fitness_map.array)].sum()
         if len(valid_fitnesses) != results.count(1):
-            print("Length mismatch ", len(valid_fitnesses, results.count(1)))
+            print("Length mismatch ", len(valid_fitnesses), results.count(1))
         print(f"Valid rate for {seed}: {valid_rate}%")
         print(f"Average fitness: {avg_fitnesses}")
         print(f"QD score: {qd_score}")
