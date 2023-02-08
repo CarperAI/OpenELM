@@ -311,6 +311,8 @@ class CrossoverBenchmark:
         for seed in seeds:
             if seed == SQUARE:
                 prompt_str += SQUARE_PREREQ
+            if seed == GALLOPER:
+                prompt_str += GALLOPER_PREREQ
             prompt_str += seed
             if instruction == INSTRUCTION_ONE:
                 instruction_str += self.reverse_seeds[seed] + ", "
