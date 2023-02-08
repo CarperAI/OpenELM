@@ -105,7 +105,7 @@ def mutate_code(n_bugs: int = 5, task: str = "parity", mutate_method="prompt") -
         "prompt": [
             "# A buggy implementation\n#!/usr/bin/python3\n",
             "",  # placeholder for the context, e.g., the buggy code
-            "\n# Fixed bugs\ndef parity(b1,b2,b3,b4):\n",
+            "\n# Fixed bugs\ndef",
         ],
     }
     mutation_template = mutation_templates[mutate_method]

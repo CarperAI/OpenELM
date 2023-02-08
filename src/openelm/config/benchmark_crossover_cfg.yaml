@@ -3,7 +3,7 @@ cuda: True
 seed: 42
 deterministic: False
 top_p: 0.95
-temp: 0.8
+temp: 0.85
 timeout: 5  # Seconds
 gpus: 1
 gen_max_len: 512
@@ -12,6 +12,7 @@ n_trials: 500
 n_bugs: 1
 fp16: True
 debug: False
+processes: 1
 pad_token: 50256
 seeds: ["radial", "wheel", "square"]
 run_name: ???  # Mandatory string argument that describes the run.

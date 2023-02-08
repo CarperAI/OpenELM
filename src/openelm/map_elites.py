@@ -92,6 +92,11 @@ class Map:
         """Returns the maximum value in the map."""
         return self.array.max()
 
+    @property
+    def niches_filled(self) -> int:
+        """Returns the number of niches in the map that have been explored."""
+        return np.count_nonzero(np.isfinite(self.array))
+
 
 class MAPElites:
     """

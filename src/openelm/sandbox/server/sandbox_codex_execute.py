@@ -52,15 +52,17 @@ def unsafe_execute(
             print("No code found or no function found.")
             print(code_str)
         return ExecResult(5)
-    func_match = re.search(r"def (\w+)\s*\((.*?)\):", code_str)
-    if not func_match:
+    # func_match = re.search(r"def (\w+)\s*\((.*?)\):", code_str)
+    func_match = re.findall(r"def (\w+)\s*\((.*?)\):", code_str)
+    if len(func_match) == 0:
         # No proper function found in code.
         if debug:
             print("No proper function found in code.")
             print(code_str)
         return ExecResult(5)
-    elif func_match and func_name is None:
-        func_name = func_match.groups()[0]
+    elif len(func_match) > 0 and func_name is None:
+        # func_name = func_match.groups()[0]
+        func_name = func_match[-1][0]
     with create_tempdir():
 
         # Disable functionalities that can make destructive changes.
