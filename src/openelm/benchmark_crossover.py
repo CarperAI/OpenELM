@@ -125,7 +125,7 @@ def make_sensor(wc, x0, y0, x1, y1, d):
 """
 
 GALLOPER = """
-def make_galloper_walker(
+def make_walker(
     dx=0.0,
     dy=0.0,
     ddr=0,
