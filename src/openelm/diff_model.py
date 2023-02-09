@@ -213,6 +213,50 @@ class PromptMutationForImgTask(PromptMutationModel):
             results[i]["result_obj"] = np.array(results[i]["result_obj"])
         return results
 
+class PromptMutationForP3(PromptMutationModel):
+    def __init__(self, cfg, sandbox_server="http://localhost:5000") -> None:
+        function_template = FunctionTemplate(
+            func_name="g6",
+            import_line="from typing import List", # TODO: get this from problem too
+            func_preamble="",
+            return_line="",
+        )
+        super().__init__(cfg, function_template, sandbox_server)
+
+    def truncate(self, code_list: str):
+        """
+        Keep only the g6() function code and truncate the rest of the output
+        """
+        new_code_list = []
+        for code in code_list:
+            new_code = ''
+            for line in code.split('\n'):
+                new_code += f'{line}\n'
+                if line.strip().startswith('return'):
+                    break
+            new_code_list.append(new_code)
+
+        return new_code_list
+
+    def _get_response(self,
+                      code: str,
+                      func_name=None,
+                      timeout=None) -> requests.models.Response:
+        if func_name is None:
+            func_name = self.func_template.func_name
+
+        if timeout is None:
+            timeout == self.cfg.timeout
+
+        return requests.post(
+            f"{self.sandbox_server}/eval_p3_solution",
+            json={"code": code, "func_name": func_name, "timeout": timeout},
+            timeout=timeout,
+        )
+
+    def _post_process(self, response_dict: dict) -> dict:
+        pass
+
 
 class DiffModel(PromptMutationModel):
     def __init__(

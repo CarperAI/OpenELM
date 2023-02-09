@@ -8,8 +8,13 @@ import numpy as np
 from omegaconf import DictConfig, OmegaConf
 
 from openelm.configs import BaseConfig, ImageELMConfig, SodaraceELMConfig
-from openelm.diff_model import PromptMutationForImgTask, PromptMutationForSodarace
+from openelm.diff_model import (
+    PromptMutationForImgTask,
+    PromptMutationForSodarace,
+    PromptMutationForP3
+)
 from openelm.environments.sodaracer import SodaraceSimulator
+from openelm.diff_model import FunctionTemplate
 
 Phenotype = Optional[np.ndarray]
 
@@ -414,3 +419,98 @@ class Sodarace(BaseEnvironment[Sodaracer]):
             return x.evaluate(self.eval_ms)
         else:
             return -np.inf
+
+
+class P3Solution(Genotype):
+    def __init__(self, program_str: str, result_obj: dict, error_code: bool):
+        """
+        Genotype for a programming puzzle solution.
+
+        Args:
+            program_str: the solution program string aka the g6() function definition.
+            result_obj: dict.
+            error_code: whether the code executes in the sandbox.
+        """
+        self.program_str = program_str
+        self.result_obj = result_obj
+        self.error_code = error_code
+
+    def __str__(self) -> str:
+        return self.program_str
+
+
+class P3Problem(BaseEnvironment[P3Solution]):
+    default_diff_model_cls = PromptMutationForP3
+
+    def __init__(
+        self,
+        seed: dict,
+        config: Union[str, dict, DictConfig],
+        diff_model,
+        problem_func: str,
+        solution_preamble: str,
+        run_name: Optional[str] = None,
+    ) -> None:
+        """
+        Args:
+            seed: the seed dict.
+            config: the config file path or dict.
+            diff_model: the diff model (or alternatives).
+            problem_func: the f6(<params>) function containing the programming problem
+            solution_preamble: the g6(<params>) function definition (must be passed in in order to include params)
+            run_name: (Optional) override the run_name in config.
+        """
+        if isinstance(seed, dict):
+            self.seed = seed
+            self.seed['program_str'] += "\n" + problem_func # add this particular problem
+        else:
+            raise TypeError
+        self.config = self._load_config(config)
+        if run_name is not None:
+            self.config.run_name = run_name
+
+        if diff_model is None:
+            self.diff_model = self.default_diff_model_cls(self.config)
+        else:
+            self.diff_model = diff_model
+
+        self.diff_model.func_template = FunctionTemplate(func_name=self.diff_model.func_template.func_name,
+                                                         import_line=self.diff_model.func_template.import_line,
+                                                         func_preamble=solution_preamble, # include params for g6()
+                                                         return_line=self.diff_model.func_template.return_line)
+
+        self.problem_func = problem_func
+
+    def generate_program(self, code: str) -> list[P3Solution]:
+        # Call LM to generate solution code and run it
+        return [
+            P3Solution(**generated)
+            for generated in self.diff_model.generate_program(code, without_trunc=False)
+        ]
+
+    def fitness(self, x: P3Solution) -> float:
+        """
+        If passing the solution to the problem returns True, fitness is 1.0
+            else 0.0
+        """
+        run_eval = ( 
+            f"{self.diff_model.func_template.import_line}\n"
+            f"{self.problem_func}\n"
+            f"def run_eval():\n"
+            f"    return f6({x.result_obj})"
+        )
+        result = self.diff_model.run_code(code=run_eval, func_name='run_eval')
+        if result['error_code'] == '0' and result['result_obj'] == 'True':
+            return 1.0
+        else:
+            return 0.0
+
+    def random(self) -> list[P3Solution]:
+        new_solutions = self.generate_program(self.seed['program_str'])
+        return new_solutions
+
+    def mutate(self, x: P3Solution) -> list[P3Solution]:
+        pass
+
+    def to_behavior_space(self, x: Sodaracer) -> Optional[Phenotype]:
+        pass

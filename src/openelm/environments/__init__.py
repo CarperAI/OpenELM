@@ -7,6 +7,7 @@ from openelm.environments.environments import (
     ImageOptim,
     MatchString,
     Sodarace,
+    P3Problem,
 )
 from openelm.environments.sodaracer import IMPORTS, SQUARE, SQUARE_PREREQ
 
@@ -54,6 +55,54 @@ SQUARE_SEED = {
     },
 }
 
+P3_SEED = {
+    'program_str': '''
+from typing import List
+
+def f1(s: str):
+    return "Hello " + s == "Hello world"
+
+def g1():
+    return "world"
+
+assert f1(g1())
+
+def f2(s: str):
+    return "Hello " + s[::-1] == "Hello world"
+
+def g2():
+    return "world"[::-1]
+
+assert f2(g2())
+
+def f3(x: List[int]):
+    return len(x) == 2 and sum(x) == 3
+
+def g3():
+    return [1, 2]
+
+assert f3(g3())
+
+def f4(s: List[str]):
+    return len(set(s)) == 1000 and all(
+        (x.count("a") > x.count("b")) and ('b' in x) for x in s)
+
+def g4():
+    return ["a"*(i+2)+"b" for i in range(1000)]
+
+assert f4(g4())
+
+def f5(n: int):
+    return str(n * n).startswith("123456789")
+
+def g5():
+    return int(int("123456789" + "0"*9) ** 0.5) + 1
+
+assert f5(g5())''',
+    "result_obj": {},
+    "error_code": 0,
+}
+
 # A sample init args for ImageOptim
 image_init_args = {
     "seed": IMAGE_SEED,
@@ -65,6 +114,13 @@ image_init_args = {
 
 # A sample init args for Sodarace
 sodarace_init_args = {"seed": SQUARE_SEED, "diff_model": None, "eval_ms": 1000}
+
+# A sample init args for P3
+p3_init_args = {
+    "seed": P3_SEED,
+    "config": "openelm/config/elm_p3_cfg.yaml",
+    "diff_model": None,
+}
 
 # ----- (Sample init args end) -----
 
@@ -79,4 +135,5 @@ __all__ = [
     "image_init_args",
     "SQUARE_SEED",
     "sodarace_init_args",
+    "P3Problem",
 ]
