@@ -217,7 +217,7 @@ class PromptMutationForP3(PromptMutationModel):
     def __init__(self, cfg, sandbox_server="http://localhost:5000") -> None:
         function_template = FunctionTemplate(
             func_name="g6",
-            import_line="from typing import List", # TODO: get this from problem too
+            import_line="from typing import List", # The only import that's necessary as of P3 v0.2
             func_preamble="",
             return_line="",
         )
