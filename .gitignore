@@ -134,6 +134,7 @@ checkpoints/
 logs/
 archive/
 data/
+*.out
 
 # generated dot files and tree graphs
 .gv
