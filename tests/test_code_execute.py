@@ -28,9 +28,9 @@ import time
 def test_func():
     print("Hello World!")
     time.sleep(1.1)
-    return 0
+    return 5
 """
-    result = pool_exec_processes(PROMPT, "test_func", timeout=1.0)[0]
+    result = pool_exec_processes(PROMPT, "test_func", timeout=1.0, debug=False)[0]
     assert result == ExecResult.TIMEOUT_EXCEPTION
 
     # Syntax error test
@@ -39,7 +39,7 @@ def test_func():
 test_dct = {}
     return 0
 """
-    result = pool_exec_processes(PROMPT, "test_func")[0]
+    result = pool_exec_processes(PROMPT, "test_func", debug=False)[0]
     assert result == ExecResult.SYNTAX_ERROR
 
     # Type error test
@@ -48,14 +48,15 @@ def test_func():
     result = 1 + "Hello World"
     return 0
 """
-    result = pool_exec_processes(PROMPT, "test_func")[0]
+    result = pool_exec_processes(PROMPT, "test_func", debug=False)[0]
     assert result == ExecResult.TYPE_ERROR
 
     # Other exception test
     PROMPT = """
 def test_func():
+    raise StopIteration
     result = 5 / 0
     return 0
 """
-    result = pool_exec_processes(PROMPT, "test_func")[0]
+    result = pool_exec_processes(PROMPT, "test_func", debug=False)[0]
     assert result == ExecResult.EXCEPTION

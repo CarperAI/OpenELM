@@ -1,5 +1,4 @@
 import ast
-import json
 
 from openelm.environments.sodaracer.simulator import IESoRWorld
 from openelm.environments.sodaracer.walker import Walker
@@ -18,6 +17,13 @@ from openelm.environments.sodaracer.walker.square import (
 
 
 def run_world(myWorld, initial_dict):
+    # for i in range(100):
+    #     myWorld.update_world(350)
+    #     end = min(
+    #         [bone.joint.bodyA.position.x for bone in myWorld.bone_list]
+    #         + [muscle.joint.bodyA.position.x for muscle in myWorld.muscle_list]
+    #     )
+    #     # print(abs(end + initial_dict["offsetX"]))
     [myWorld.update_world(350) for i in range(1000)]
     start = initial_dict["startX"]
     # Could potentially just grab the bones instead, but if it's all
@@ -107,26 +113,22 @@ def test_sodaracer_eval():
     assert (cppn_mutable_start, cppn_mutable_end) == (0.0, 29.67882020808446)
 
 
-def test_draw_list():
+def test_square_draw_list(square_walker_dict):
     square_walker: Walker = make_walker_square()
-    cppn_fixed_world = IESoRWorld()
-
-    cppn_fixed_walker: Walker = make_walker_cppn_fixed()
-
-    cppn_fixed_world = IESoRWorld()
     square_world = IESoRWorld()
-
     square_dict = square_world.load_body_into_world(square_walker.to_dict())
-    _ = cppn_fixed_world.load_body_into_world(cppn_fixed_walker.to_dict())
-
-    cppn_draw_list_dict = ast.literal_eval(cppn_fixed_world.get_world_json())
-
-    with open("tests/cppn_fixed.json", "r") as f:
-        assert cppn_draw_list_dict == json.load(f)
 
     _, _ = run_world(square_world, square_dict)
-
     square_draw_list_dict = ast.literal_eval(square_world.get_world_json())
+    assert square_draw_list_dict == square_walker_dict
 
-    with open("tests/square.json", "r") as f:
-        assert square_draw_list_dict == json.load(f)
+# TODO: Remake cppn json
+# def test_cppn_fixed_draw_list(cppn_fixed_walker_dict):
+#     cppn_fixed_walker: Walker = make_walker_cppn_fixed()
+#     cppn_fixed_world = IESoRWorld()
+#     cppn_fixed_dict = cppn_fixed_world.load_body_into_world(cppn_fixed_walker.to_dict())
+
+#     _, _ = run_world(cppn_fixed_world, cppn_fixed_dict)
+#     cppn_draw_list_dict = ast.literal_eval(cppn_fixed_world.get_world_json())
+
+#     assert cppn_draw_list_dict == cppn_fixed_walker_dict

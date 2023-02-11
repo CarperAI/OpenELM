@@ -1,4 +1,4 @@
-from openelm.codegen.codegen_utilities import truncate
+from openelm.codegen import truncate
 
 
 def test_truncate():
