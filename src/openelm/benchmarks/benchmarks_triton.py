@@ -1,15 +1,16 @@
 """Benchmark for OpenELM on Triton."""
 import functools
+import multiprocessing as mp
 
 import hydra
 import numpy as np
-import multiprocessing as mp
 from omegaconf import OmegaConf
 from tqdm import tqdm
-from openelm.codegen.codegen_utilities import truncate
+
+from openelm.codegen import truncate
 from openelm.codegen.codegen_triton import sample_triton, setup_triton
 from openelm.constants import SRC_PATH
-from openelm.utils.code_eval import mutate_code, eval_completions
+from openelm.utils.code_eval import eval_completions, mutate_code
 
 
 def run_benchmark(cfg):
@@ -29,7 +30,9 @@ def run_benchmark(cfg):
         text.append(tokenizer.batch_decode(mutated_encoding.input_ids[:, i]))
     num_batches = cfg.n_trials // cfg.batch_size
     eval_results = []
-    ev_func = functools.partial(eval_completions, task=cfg.tasks[0], timeout=cfg.timeout)
+    ev_func = functools.partial(
+        eval_completions, task=cfg.tasks[0], timeout=cfg.timeout
+    )
     for i in tqdm(range(num_batches), desc=f"Running benchmark with {cfg.n_bugs} bugs"):
 
         completions = sample_triton(

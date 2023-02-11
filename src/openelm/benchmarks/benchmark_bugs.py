@@ -11,7 +11,7 @@ from hydra.core.config_store import ConfigStore
 from omegaconf import OmegaConf
 from tqdm import tqdm, trange
 
-from openelm.codegen.codegen_utilities import model_setup, sample, truncate
+from openelm.codegen import model_setup, sample, truncate
 from openelm.configs import BaseConfig
 from openelm.utils.code_eval import eval_completions, mutate_code
 from openelm.utils.diff_eval import apply_diff, split_diff
@@ -184,7 +184,7 @@ class BenchmarkBugs:
             )
         return (corr_cnt / num_evaluated_bugs) * 100
 
-    def run_benchmark(self, **kwargs) -> dict[int, float]:
+    def run_benchmark(self, **kwargs) -> dict[str, float]:
         result_dict = {}
         if "parity" in self.cfg.tasks:
             for n_bug in self.cfg.n_bugs:
@@ -197,7 +197,7 @@ class BenchmarkBugs:
                     result = np.mean(temp_sweep)
                 else:
                     result = self.benchmark_parity(n_bugs=n_bug)
-                result_dict[n_bug] = result
+                result_dict[str(n_bug)] = result
         if "bugs" in self.cfg.tasks:
             result_dict["bugs"] = self.benchmark_bugs(**kwargs)
 

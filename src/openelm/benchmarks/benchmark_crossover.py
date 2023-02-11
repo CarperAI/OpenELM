@@ -14,7 +14,7 @@ from hydra.core.config_store import ConfigStore
 from omegaconf import OmegaConf
 from tqdm import trange
 
-from openelm.codegen.codegen_utilities import model_setup, sample, truncate
+from openelm.codegen import model_setup, sample, truncate
 from openelm.configs import BaseConfig
 from openelm.environments import SQUARE_SEED
 from openelm.environments.environments import Sodarace, Sodaracer
@@ -367,10 +367,10 @@ class CrossoverBenchmark:
 
         for _ in trange(self.cfg.n_trials // self.cfg.batch_size):
             completions: list[str] = sample(
+                encoding,
                 self.cfg,
                 self.model,
                 self.tokenizer,
-                encoding,
             )
             trunc = functools.partial(truncate, only_local_scope=local_scope_exec)
             truncations: list[str] = list(
