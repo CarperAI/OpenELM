@@ -34,7 +34,7 @@ def run_benchmark(cfg, model, tokenizer, device, n_bugs, temperature):
         range(num_batches), desc=f"Running benchmark with {n_bugs} bugs", disable=False
     ):
         completions = sample(
-            cfg, model, tokenizer, mutated_encoding, starting_idx=token_len - 16
+            cfg, model, tokenizer, mutated_encoding, starting_idx=token_len - 1
         )
         truncations = map(truncate, completions)
         eval_results.extend(

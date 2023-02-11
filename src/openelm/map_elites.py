@@ -135,7 +135,7 @@ class MAPElites:
         self.save_history = save_history
         # self.history will be set/reset each time when calling `.search(...)`
         self.history: dict = defaultdict(list)
-
+        # TODO: Allow the passing of already initialised maps.
         # discretization of space
         self.bins = np.linspace(*env.behavior_space, n_bins + 1)[1:-1].T  # type: ignore
         # perfomance of niches

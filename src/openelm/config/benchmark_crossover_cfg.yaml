@@ -1,4 +1,5 @@
-model: Salesforce/codegen-2B-mono
+model: Salesforce/codegen-350M-mono
+save_path: /fsx/home-hyperion/OpenELM/data
 cuda: True
 seed: 42
 deterministic: False
@@ -8,14 +9,20 @@ timeout: 5  # Seconds
 gpus: 1
 gen_max_len: 512
 batch_size: 16
-n_trials: 500
+n_trials: 1000
 n_bugs: 1
 fp16: True
 debug: False
 processes: 1
 pad_token: 50256
-seeds: ["radial", "wheel", "square"]
-run_name: ???  # Mandatory string argument that describes the run.
+seeds: ["square","radial","cppn_fixed"]
+# Instructoin = 0: No instruction
+# Instruction = 1: "def make_walker():\n"
+# Instruction = 2: "#Create a new walker by modifying the starting function above.\ndef make_walker():\n"
+# Instruction = 3: "#Combine the {seed_one}, {seed_two}, {seed_three} starting programs
+# above to make a new program\ndef make_walker():\n"
+instruction: 1
+run_name:  # String argument that describes the run.
 
 ###################################################################################################
 # Hydra config overrides:

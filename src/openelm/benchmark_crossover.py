@@ -4,15 +4,15 @@ import os
 import time
 from itertools import permutations
 from pathlib import Path
+from typing import Union
 
 import hydra
 import numpy as np
 import torch
 from omegaconf import OmegaConf
-from tqdm import tqdm
-from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
+from tqdm import trange
 
-from openelm.codegen.codegen_utilities import sample, truncate
+from openelm.codegen.codegen_utilities import model_setup, sample, truncate
 from openelm.constants import SRC_PATH
 from openelm.environments.environments import Sodaracer
 from openelm.environments.sodaracer.walker import Walker
@@ -247,20 +247,13 @@ from openelm.environments.sodaracer.walker import walker_creator
 import math
 
 """
-# Test version without instruction.
-# Try CodeGen 16B
-INSTRUCTION_ONE = [
-    "#Combine the ",
-    "starting programs above to make a new program.\ndef make_walker():\n",
-]
 
-INSTRUCTION_TWO = [
-    "#Create a new walker by modifying the starting function above.\ndef make_walker():\n"
-]
-
-INSTRUCTION_THREE = ["def make_walker():\n"]
-
-INSTRUCTION_FOUR = [""]
+INSTRUCTIONS = {
+    0: "",
+    1: "def make_walker():\n",
+    2: "#Create a new walker by modifying the starting function above.\ndef make_walker():\n",
+    3: "#Combine the ,starting programs above to make a new program.\ndef make_walker():\n",
+}
 
 SEEDS_DICT = {
     "wheel": WHEEL,
@@ -276,49 +269,39 @@ SEEDS_DICT = {
 class CrossoverBenchmark:
     def __init__(self, cfg):
         self.cfg = cfg
-        self.reverse_seeds = {v: k for k, v in SEEDS_DICT.items()}
+        self.reverse_seeds: dict[str, str] = {v: k for k, v in SEEDS_DICT.items()}
 
         os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
         self.device = torch.device("cuda" if cfg.cuda else "cpu")
-        self.config = AutoConfig.from_pretrained(cfg.model)
-        self.config.use_cache = True
-        self.tokenizer = AutoTokenizer.from_pretrained(cfg.model)
-        self.tokenizer.padding_side = "left"
-        self.tokenizer.pad_token = 50256
+        self.model, self.tokenizer, self.device = model_setup(cfg, self.device)
 
-        if cfg.fp16:
-            self.model = AutoModelForCausalLM.from_pretrained(
-                cfg.model, torch_dtype=torch.float16, low_cpu_mem_usage=True
-            ).to(self.device)
-        else:
-            self.model = AutoModelForCausalLM.from_pretrained(
-                cfg.model, config=self.config
-            ).to(self.device)
-
-    def construct_prompt(self, seeds, instruction):
-        prompt_str = IMPORTS
+    def construct_prompt(self, seeds):
+        prompt_str: str = IMPORTS
         seeds = [SEEDS_DICT[seed] for seed in seeds]
-        # if SQUARE in seeds:
-        #     prompt_str += SQUARE_PREREQ
-        # if GALLOPER in seeds:
-        #     prompt_str += GALLOPER_PREREQ
+        if SQUARE in seeds:
+            prompt_str += SQUARE_PREREQ
+        if GALLOPER in seeds:
+            prompt_str += GALLOPER_PREREQ
         if RADIAL in seeds or WHEEL in seeds:
             prompt_str += CIRCLE
         if CPPN_FIXED in seeds or CPPN_MUTABLE in seeds or RUNNER in seeds:
             prompt_str += QUERY_CPPN
-        instruction_str = instruction[0]
+        import_str: str = prompt_str
+        if self.cfg.instruction == 3:
+            instruction_str: str = INSTRUCTIONS[self.cfg.instruction].split(",")[0]
         for seed in seeds:
-            if seed == SQUARE:
-                prompt_str += SQUARE_PREREQ
-            if seed == GALLOPER:
-                prompt_str += GALLOPER_PREREQ
             prompt_str += seed
-            if instruction == INSTRUCTION_ONE:
+            if self.cfg.instruction == 3:
                 instruction_str += self.reverse_seeds[seed] + ", "
-        if instruction == INSTRUCTION_ONE:
-            instruction_str += instruction[-1]
-        return prompt_str + instruction_str
+        if self.cfg.instruction == 3:
+            instruction_str += INSTRUCTIONS[self.cfg.instruction].split(",")[1]
+        else:
+            instruction_str = INSTRUCTIONS[self.cfg.instruction]
+        if self.cfg.instruction != 0:
+            import_str += instruction_str
+        prompt_str += instruction_str
+        return prompt_str, import_str
 
     def to_mapindex(self, b, bins):
         """Converts a phenotype (position in behaviour space) to a map index."""
@@ -328,8 +311,8 @@ class CrossoverBenchmark:
             else tuple(np.digitize(x, bins) for x, bins in zip(b, bins))
         )
 
-    def benchmark_seeds(self, seed, instruction):
-        prompt = self.construct_prompt(seed, instruction)
+    def benchmark_seeds(self, seeds):
+        prompt, imports = self.construct_prompt(seeds)
         encoding = self.tokenizer(
             [prompt],
             truncation=True,
@@ -337,38 +320,39 @@ class CrossoverBenchmark:
             return_tensors="pt",
             max_length=2048,
         ).to(self.device)
-        token_len = encoding.input_ids.shape[1]
-        results, valid_fitnesses = [], []
+
         # Map setup
-        n_bins = 12
+        n_bins: int = 12
         genotype_space = np.array([[0, 1000], [0, 1000], [0, 2000]]).T
         bins = np.linspace(*genotype_space, n_bins + 1)[1:-1].T  # type: ignore
-        fitness_map = Map(
+        fitness_map: Map = Map(
             dims=(n_bins,) * genotype_space.shape[1],
             fill_value=-np.inf,
             dtype=float,
         )
-        print("Benchmarking seeds: ", ", ".join(seed))
-        print("Prompt length: ", token_len, " tokens.")
-        for _ in tqdm(range(self.cfg.n_trials // self.cfg.batch_size)):
-            completions = sample(
+
+        results: list[int] = []
+        valid_fitnesses: list[float] = []
+        local_scope_exec: bool = self.cfg.instruction != 0
+        token_len: int = encoding.input_ids.shape[1]
+        print("Benchmarking seeds: ", ", ".join(seeds))
+        print(f"Prompt length: {token_len} tokens.")
+
+        for _ in trange(self.cfg.n_trials // self.cfg.batch_size):
+            completions: list[str] = sample(
                 self.cfg,
                 self.model,
                 self.tokenizer,
                 encoding,
-                starting_idx=token_len - 1,
+                starting_idx=token_len,
             )
-            trunc = functools.partial(truncate, only_local_scope=True)
-            truncations = list(prompt + trunc for trunc in map(trunc, completions))
-            #            if seed == ('square'):
-            # for i in range(4):
-            #     print(truncations[i])
-            #     print("--------------")
-            #     print(completions[i])
-            #     print("--------------")
+            trunc = functools.partial(truncate, only_local_scope=local_scope_exec)
+            truncations: list[str] = list(
+                imports + trunc for trunc in map(trunc, completions)
+            )
             execution_results = pool_exec_processes(
                 truncations,
-                # func_name="make_walker",
+                func_name="make_walker",
                 processes=self.cfg.processes,
                 debug=self.cfg.debug,
             )
@@ -381,54 +365,62 @@ class CrossoverBenchmark:
                             error_code=0,
                         )
                         if sodaracer.valid:
-                            fitness = sodaracer.evaluate(1000)
+                            fitness: float = sodaracer.evaluate(1000)
                             if fitness is not None:
                                 valid_fitnesses.append(fitness)
                                 map_idx = self.to_mapindex(
                                     sodaracer.to_phenotype(), bins=bins
                                 )
+                                results.append(1)
                                 if fitness > fitness_map[map_idx]:
                                     fitness_map[map_idx] = fitness
-                                results.append(1)
                     else:
                         if self.cfg.debug:
                             print("Failed execution, type:", result)
+                            print(truncations[i])
                         results.append(result)
                 except Exception as e:
                     if self.cfg.debug:
-                        print(e, "Exception:")
+                        print(type(e), e)
                     results.append(6)
-        valid_rate = (results.count(1) / len(results)) * 100
-        avg_fitnesses = np.nanmean(valid_fitnesses)
-        qd_score = fitness_map.qd_score
-        niches_filled = fitness_map.niches_filled
-        if len(valid_fitnesses) != results.count(1):
-            print("Length mismatch ", len(valid_fitnesses), results.count(1))
-        print(f"Valid rate for {seed}: {valid_rate}%")
-        print(f"Average fitness: {avg_fitnesses}")
+
+        # TODO: Instantiate MAP-Elites here to evolve the map
+
+        valid_rate: float = (results.count(1) / len(results)) * 100
+        qd_score: float = fitness_map.qd_score
+        niches_filled: int = fitness_map.niches_filled
+        result_dict: dict[str, Union[list, float, int]] = {
+            "valid_rate": valid_rate,
+            "qd_score": qd_score,
+            "niches_filled": niches_filled,
+            "valid_fitnesses": valid_fitnesses,
+        }
+
+        print(f"Valid rate for {seeds}: {valid_rate}%")
         print(f"QD score: {qd_score}")
         print(f"Niches filled: {niches_filled}")
-        return valid_rate, valid_fitnesses, qd_score, niches_filled
+        print(f"Average fitness: {np.nanmean(valid_fitnesses)}")
+        return result_dict
 
     def run_benchmark(self):
-        # instruction = INSTRUCTION_ONE
-        if len(self.cfg.seeds) == 1:
-            instruction = INSTRUCTION_TWO
-        instruction = INSTRUCTION_FOUR
-        perm = list(permutations(self.cfg.seeds))
+        perm: list[tuple] = list(permutations(self.cfg.seeds))
+        valid_rates: list[float] = []
+        qd_scores: list[float] = []
+        niches: list[int] = []
+        all_fitnesses: dict[str, list[float]] = {}
         print("Permutations: ", perm)
-        valid_rates, all_fitnesses, qd_scores, niches = [], {}, [], []
+
         for seeds in perm:
-            valid_rate, fitnesses, qd_score, niches_filled = self.benchmark_seeds(
-                seeds, instruction
-            )
-            valid_rates.append(valid_rate)
-            all_fitnesses[", ".join(seeds)] = fitnesses
-            qd_scores.append(qd_score)
-            niches.append(niches_filled)
+            perm_results: dict = self.benchmark_seeds(seeds)
+            valid_rates.append(perm_results["valid_rate"])
+            qd_scores.append(perm_results["qd_score"])
+            niches.append(perm_results["niches_filled"])
+            all_fitnesses[", ".join(seeds)] = perm_results["valid_fitnesses"]
+
         valid_stats = (np.nanmean(valid_rates), np.nanstd(valid_rates))
         qd_stats = (np.nanmean(qd_scores), np.nanstd(qd_scores))
         niche_stats = (np.nanmean(niches), np.nanstd(niches))
+
         print(f"Validity stats: {valid_stats[0]:.2f}, {valid_stats[1]:.2f}")
         print(f"QD stats: {qd_stats[0]:.2f}, {qd_stats[1]:.2f}")
         print(f"Niche stats: {niche_stats[0]:.2f}, {niche_stats[1]:.2f}")
@@ -443,10 +435,10 @@ class CrossoverBenchmark:
             "config": OmegaConf.to_container(self.cfg),
             "permutations": perm,
         }
-        json_path = Path(
-            "/fsx/home-hyperion/OpenELM/data", f"{time.strftime('%Y%m%d-%H%M%S')}.json"
+
+        Path(self.cfg.save_path, f"{time.strftime('%Y%m%d-%H%M%S')}.json").write_text(
+            json.dumps(results_dct)
         )
-        json_path.write_text(json.dumps(results_dct))
 
 
 # Load hydra config from yaml files and command line arguments.
