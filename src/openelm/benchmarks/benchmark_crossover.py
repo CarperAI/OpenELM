@@ -270,7 +270,7 @@ SEEDS_DICT = {
 
 
 @dataclass
-class CrossoverConfig(BaseConfig):
+class BenchmarkCrossoverConfig(BaseConfig):
     hydra: Any = field(
         default_factory=lambda: {
             "run": {"dir": "logs/benchmarks/crossover/${hydra.job.override_dirname}"}
@@ -304,8 +304,8 @@ class CrossoverConfig(BaseConfig):
 
 
 class CrossoverBenchmark:
-    def __init__(self, cfg: CrossoverConfig):
-        self.cfg: CrossoverConfig = cfg
+    def __init__(self, cfg: BenchmarkCrossoverConfig):
+        self.cfg: BenchmarkCrossoverConfig = cfg
         self.reverse_seeds: dict[str, str] = {v: k for k, v in SEEDS_DICT.items()}
 
         os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -461,7 +461,7 @@ class CrossoverBenchmark:
 
 
 cs = ConfigStore.instance()
-cs.store(name="config", node=CrossoverConfig)
+cs.store(name="config", node=BenchmarkCrossoverConfig)
 
 
 @hydra.main(version_base="1.2", config_name="config")

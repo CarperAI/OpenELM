@@ -1,11 +1,8 @@
-import json
 import random
 import string
-import time
 
 import numpy as np
 import tritonclient.grpc as client_util
-from tokenizers import Tokenizer
 from tritonclient.utils import InferenceServerException, np_to_triton_dtype
 
 from .codegen_utilities import create_custom_gpt2_tokenizer
@@ -103,7 +100,9 @@ class CodeGenProxy:
         temperature = temperature * np.ones([input_start_ids.shape[0], 1]).astype(
             np.float32
         )
-        random_seed = np.random.randint(0, 1e9, [input_start_ids.shape[0], 1], dtype=np.int32)
+        random_seed = np.random.randint(
+            0, 1e9, [input_start_ids.shape[0], 1], dtype=np.int32
+        )
         # beam_width = np.ones([input_start_ids.shape[0], 1]).astype(np_type)
         # beam_search_diversity_rate = 0.5*np.ones([input_start_ids.shape[0], 1]).astype(np.float32)
         # frequency_penalty = 1.0*np.ones([input_start_ids.shape[0], 1]).astype(np.float32)
@@ -154,7 +153,7 @@ def setup_triton(cfg):
     return cg_triton, tokenizer
 
 
-def sample_triton(cfg, cg_triton, tokenizer, batch, add_def=False):
+def sample_triton(batch, cfg, cg_triton, tokenizer, add_def=False):
     input_ids = batch["input_ids"]
     input_ids_len = input_ids.shape[1]
     tokens = cg_triton.generate(
