@@ -110,7 +110,12 @@ class MAPElites:
     """
 
     def __init__(
-        self, env, n_bins: int, history_length: int, save_history: bool = False
+        self,
+        env,
+        n_bins: int,
+        init_map: Optional[Map] = None,
+        history_length: int = 1,
+        save_history: bool = False,
     ):
         """
         Class implementing MAP-Elites, a quality-diversity algorithm.
@@ -121,6 +126,8 @@ class MAPElites:
             methods to generate random solutions, mutate existing solutions,
             and evaluate solutions for their fitness in the environment.
             n_bins (int): Number of bins to partition the behavior space into.
+            init_map (Map, optional): A map to use for the algorithm. If not passed,
+            a new map will be created. Defaults to None.
             history_length (int): Length of history to store for each niche (cell)
             in the map. This acts as a circular buffer, so after storing
             `history_length` items, the buffer starts overwriting the oldest
@@ -139,12 +146,15 @@ class MAPElites:
         # discretization of space
         self.bins = np.linspace(*env.behavior_space, n_bins + 1)[1:-1].T  # type: ignore
         # perfomance of niches
-        self.fitnesses: Map = Map(
-            dims=(n_bins,) * env.behavior_ndim,
-            fill_value=-np.inf,
-            dtype=float,
-            history_length=history_length,
-        )
+        if init_map is None:
+            self.fitnesses: Map = Map(
+                dims=(n_bins,) * env.behavior_ndim,
+                fill_value=-np.inf,
+                dtype=float,
+                history_length=history_length,
+            )
+        else:
+            self.fitnesses = init_map
         # niches' sources
         self.genomes: Map = Map(
             dims=self.fitnesses.dims,
@@ -208,10 +218,12 @@ class MAPElites:
                 # Mutate the elite.
                 new_individuals = self.env.mutate(selected_elite)
 
-            # `new_individuals` is a list of generation/mutation. We put them into the behavior space one-by-one.
+            # `new_individuals` is a list of generation/mutation. We put them
+            # into the behavior space one-by-one.
             for individual in new_individuals:
                 map_ix = self.to_mapindex(individual.to_phenotype())
-                # if the return is None, the individual is invalid and is thrown into the recycle bin.
+                # if the return is None, the individual is invalid and is thrown
+                # into the recycle bin.
                 if map_ix is None:
                     self.recycled[self.recycled_count % len(self.recycled)] = individual
                     self.recycled_count += 1
@@ -232,7 +244,7 @@ class MAPElites:
                     max_genome = individual
 
                     tbar.set_description(f"{max_fitness=:.4f}")
-                # If best fitness is within atol of the maximum possible fitness, stop.
+                # Stop if best fitness is within atol of maximum possible fitness.
                 if np.isclose(max_fitness, self.env.max_fitness, atol=atol):
                     break
 
@@ -241,7 +253,7 @@ class MAPElites:
 
     def niches_filled(self):
         """Get the number of niches that have been explored in the map."""
-        return np.count_nonzero(self.nonzero.array)
+        return self.fitnesses.niches_filled
 
     def maximum_fitness(self):
         """Get the maximum fitness value in the map."""
