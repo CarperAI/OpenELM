@@ -30,7 +30,7 @@ def create_model(path=None, fp16=True):
         return AutoModelForCausalLM.from_pretrained(path)
 
 
-def truncate(completion, def_num=1, print_num=1, only_local_scope=False):
+def truncate(completion: str, def_num=1, print_num=0, only_local_scope=False):
     def find_re(string, pattern, start_pos):
         m = pattern.search(string, start_pos)
         return m.start() if m else -1
@@ -40,7 +40,7 @@ def truncate(completion, def_num=1, print_num=1, only_local_scope=False):
         for r in ["^#", re.escape("<|endoftext|>"), "^'''", '^"""', "\n\n\n"]
     ]
     prints = list(re.finditer("^print", completion, re.MULTILINE))
-    if len(prints) > print_num:
+    if print_num >= 0 and len(prints) > print_num:
         completion = completion[: prints[print_num].start()]
 
     if only_local_scope:

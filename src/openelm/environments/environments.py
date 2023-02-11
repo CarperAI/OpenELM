@@ -308,8 +308,8 @@ class Sodaracer(Genotype):
         else:
             self.valid = False
 
-    def evaluate(self, timesteps: int) -> float:
-        return self.simulator.evaluate(timesteps)
+    def evaluate(self, eval_ms: int) -> float:
+        return self.simulator.evaluate(eval_ms)
 
     def __str__(self) -> str:
         return self.program_str
@@ -335,7 +335,7 @@ class Sodarace(BaseEnvironment[Sodaracer]):
         seed: dict,
         config: Union[str, dict, DictConfig, BaseConfig],
         diff_model,
-        eval_steps: int,
+        eval_ms: int,
         max_height: int = 1000,
         max_width: int = 1000,
         max_mass: int = 2000,
@@ -349,7 +349,7 @@ class Sodarace(BaseEnvironment[Sodaracer]):
             seed: the seed dict.
             config: the config file path or dict.
             diff_model: the diff model (or alternatives).
-            eval_steps: the number of steps for sodaracer evaluation.
+            eval_ms: The time in ms for sodaracer evaluation.
             max_height: (Optional) the maximal height.
             max_width: (Optional) the maximal width.
             max_mass: (Optional) the maximal mass.
@@ -370,7 +370,7 @@ class Sodarace(BaseEnvironment[Sodaracer]):
         else:
             self.diff_model = diff_model
 
-        self.eval_steps = eval_steps
+        self.eval_ms = eval_ms
         self.genotype_ndim = ndim
         self.genotype_space = np.array(
             [[0, max_height], [0, max_width], [0, max_mass]]
@@ -387,7 +387,7 @@ class Sodarace(BaseEnvironment[Sodaracer]):
     def fitness(self, x: Sodaracer) -> float:
         # Call Sodaracers environment to get the fitness.
         if x.valid:
-            return x.evaluate(self.eval_steps)
+            return x.evaluate(self.eval_ms)
         else:
             return -np.inf
 

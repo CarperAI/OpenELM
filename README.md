@@ -46,8 +46,8 @@ wget -P checkpoints https://storage.googleapis.com/sfr-codegen-research/checkpoi
 ```
 Once it is done, run the MAP-Elites with prompt mutations using codegen-350M.
 ```bash
-python3 run_elm.py run_name=test
-python3 run_elm.py --config-name=elm_image_cfg  run_name=test
+python3 run_elm.py
+python3 run_elm.py --config-name=elm_image_cfg
 ```
 
 

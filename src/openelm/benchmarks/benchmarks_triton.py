@@ -3,7 +3,7 @@ from typing import Any, Optional
 
 import hydra
 from hydra.core.config_store import ConfigStore
-from omegaconf import OmegaConf
+from omegaconf import MISSING, OmegaConf
 from tqdm import trange
 
 from openelm.codegen import truncate
@@ -19,27 +19,27 @@ class BenchmarkTritonConfig(BaseConfig):
             "run": {"dir": "logs/benchmarks/triton/${hydra.job.override_dirname}"}
         }
     )
-    model: str = "Salesforce/codegen-2B-mono"
-    save_path: str = "/fsx/home-hyperion/OpenELM/data"
+    triton_host: str = MISSING
+    triton_port: int = 8001
     seed: Optional[int] = None
     deterministic: bool = False
     fp16: bool = True
     cuda: bool = True
     debug: bool = False
-    gpus: int = 1
+    # gpus: int = 1
     processes: int = 1
-    temp: float = 0.85
-    top_p: float = 0.95
-    gen_max_len: int = 512
-    batch_size: int = 16
-    n_trials: int = 1000
-    timeout: float = 5.0
+    temp: float = 0.8
+    top_p: float = 0.9
+    gen_max_len: int = 128
+    batch_size: int = 32
+    n_trials: int = 3200
+    timeout: float = 5.0  # Seconds
     n_bugs: int = 1
 
 
 def run_benchmark(cfg):
     cg_triton, tokenizer = setup_triton(cfg)
-    mutated_str = mutate_code(n_bugs=cfg.n_bugs, task=cfg.tasks[0])
+    mutated_str = mutate_code(n_bugs=cfg.n_bugs, task="parity")
     encoding = tokenizer(
         [mutated_str],
         truncation=True,
