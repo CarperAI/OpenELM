@@ -155,7 +155,7 @@ class IESoRWorld:
             timeStep = 1.0 / settings.hz
         else:
             timeStep = 0.0
-        self.updateWorld(timeStep * 1000.0)
+        self.update_world(timeStep * 1000.0)
         settings.velocityIterations = 10
         settings.positionIterations = 10
         settings.hz = 0.0

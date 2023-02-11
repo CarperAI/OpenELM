@@ -3,15 +3,14 @@ import re
 
 import numpy as np
 import torch
-from transformers import GPT2TokenizerFast
-
-from openelm.codegen.modelling_codegen import CodeGenForCausalLM
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 
-def set_seed(seed=None, deterministic=True):
+def set_seed(seed=None, deterministic=True) -> int:
     if seed is None:
         seed = torch.Generator().seed()
     random.seed(seed)
+    # TODO: test this
     # os.environ['PYTHONHASHSEED'] = str(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -19,44 +18,16 @@ def set_seed(seed=None, deterministic=True):
         torch.backends.cudnn.deterministic = deterministic
         torch.backends.cudnn.benchmark = not deterministic
         # torch.use_deterministic_algorithms(deterministic)
+    return seed
 
 
-def create_model(ckpt_path, fp16=True):
+def create_model(path=None, fp16=True):
     if fp16:
-        return CodeGenForCausalLM.from_pretrained(
-            ckpt_path, torch_dtype=torch.float16, low_cpu_mem_usage=True
+        return AutoModelForCausalLM.from_pretrained(
+            path, torch_dtype=torch.float16, low_cpu_mem_usage=True
         )
     else:
-        return CodeGenForCausalLM.from_pretrained(ckpt_path)
-
-
-def create_tokenizer():
-    t = GPT2TokenizerFast.from_pretrained("gpt2")
-    t.max_model_input_sizes["gpt2"] = 1e20
-    return t
-
-
-def include_whitespace(t, n_min=2, n_max=20, as_special_tokens=False):
-    t.add_tokens(
-        [" " * n for n in reversed(range(n_min, n_max))],
-        special_tokens=as_special_tokens,
-    )
-    return t
-
-
-def include_tabs(t, n_min=2, n_max=20, as_special_tokens=False):
-    t.add_tokens(
-        ["\t" * n for n in reversed(range(n_min, n_max))],
-        special_tokens=as_special_tokens,
-    )
-    return t
-
-
-def create_custom_gpt2_tokenizer():
-    t = create_tokenizer()
-    t = include_whitespace(t=t, n_min=2, n_max=32, as_special_tokens=False)
-    t = include_tabs(t=t, n_min=2, n_max=10, as_special_tokens=False)
-    return t
+        return AutoModelForCausalLM.from_pretrained(path)
 
 
 def truncate(completion, def_num=1, print_num=1, only_local_scope=False):
@@ -94,9 +65,10 @@ def truncate(completion, def_num=1, print_num=1, only_local_scope=False):
         return completion
 
 
-def model_setup(cfg):
+def model_setup(cfg, device=None):
     set_seed(cfg.seed, deterministic=True)
-    device = torch.device("cuda" if cfg.cuda else "cpu")
+    if device is None:
+        device = torch.device("cuda" if cfg.cuda else "cpu")
     use_fp16 = True
     if not cfg.fp16 or device.type == "cpu":
         use_fp16 = False
@@ -104,7 +76,7 @@ def model_setup(cfg):
     if cfg.model.startswith("codegen-16B"):
         use_fp16 = True
 
-    tokenizer = create_custom_gpt2_tokenizer()
+    tokenizer = AutoTokenizer.from_pretrained(cfg.model)
     tokenizer.padding_side = "left"
     tokenizer.pad_token = cfg.pad_token
 
@@ -115,10 +87,12 @@ def model_setup(cfg):
         ).to(device)
     else:
         model = create_model(ckpt_path, fp16=use_fp16).to(device)
-    return model, tokenizer
+    return model, tokenizer, device
 
 
-def sample(cfg, model, tokenizer, batch, batch_size=None, starting_idx=None):
+def sample(
+    cfg, model, tokenizer, batch, batch_size=None, starting_idx=None
+) -> list[str]:
     # TODO: add dict param for extra hparams
     """Run a model on a batch of contexts for a particular task."""
     if batch_size is None:

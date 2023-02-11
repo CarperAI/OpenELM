@@ -12,7 +12,7 @@ def pool_exec_processes(
     args: Optional[dict[str, Any]] = None,
     ground_truth: Optional[dict[tuple, Any]] = None,
     timeout: float = 5.0,
-    processes: int = 0,
+    processes: int = 1,
     debug: bool = False,
 ) -> list[Any]:
     """
@@ -125,7 +125,11 @@ def mutate_code(n_bugs: int = 5, task: str = "parity", mutate_method="prompt") -
 
 
 def parity_reference(b1, b2, b3, b4):
-    """Return binary parity of a sequence of input bits. Return 0 for even parity, 1 for odd parity."""
+    """
+    Return binary parity of a sequence of input bits.
+
+    Return 0 for even parity, 1 for odd parity.
+    """
     bit_sum = sum([b1, b2, b3, b4])
     return bit_sum % 2
 

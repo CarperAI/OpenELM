@@ -52,7 +52,6 @@ def unsafe_execute(
             print("No code found or no function found.")
             print(code_str)
         return ExecResult(5)
-    # func_match = re.search(r"def (\w+)\s*\((.*?)\):", code_str)
     func_match = re.findall(r"def (\w+)\s*\((.*?)\):", code_str)
     if len(func_match) == 0:
         # No proper function found in code.
@@ -61,63 +60,64 @@ def unsafe_execute(
             print(code_str)
         return ExecResult(5)
     elif len(func_match) > 0 and func_name is None:
-        # func_name = func_match.groups()[0]
         func_name = func_match[-1][0]
-    with create_tempdir():
-
-        # Disable functionalities that can make destructive changes.
-        func_dct: dict[str, Any] = reliability_guard()
-
+    with outer_guard():
         try:
-            # TODO: Check https://arxiv.org/abs/2209.07753 code.
-            code_dct: dict = {}
-            with swallow_io():
-                with time_limit(timeout):
-                    exec(code_str, code_dct)
-                    if ground_truth is None:
-                        if args is None:
-                            result = code_dct[func_name]()
-                        elif args is not None:
-                            result = code_dct[func_name](**args)
-                    elif ground_truth is not None:
-                        if all(
-                            [
-                                code_dct[func_name](*arguments) == res
-                                for arguments, res in ground_truth.items()
-                            ]
-                        ):
-                            result = 0
-                        else:
-                            result = ExecResult(1)
-        except TimeoutException as e:
-            if debug:
-                print(type(e), e.args)
-                print(code_str)
-            result = ExecResult(2)
-        except SyntaxError as e:
-            if debug:
-                print(type(e), e.args)
-                print(code_str)
-            result = ExecResult(3)
-        except TypeError as e:
-            if debug:
-                print(type(e), e.args)
-                print(code_str)
-            result = ExecResult(4)
+            with inner_guard(timeout):
+                code_dct: dict = {}
+                exec(code_str, code_dct)
+                if ground_truth is None:
+                    if args is None:
+                        return code_dct[func_name]()
+                    elif args is not None:
+                        return code_dct[func_name](**args)
+                elif ground_truth is not None:
+                    if all(
+                        [
+                            code_dct[func_name](*arguments) == res
+                            for arguments, res in ground_truth.items()
+                        ]
+                    ):
+                        return 0
+                    else:
+                        return ExecResult(1)
         except Exception as e:
             if debug:
-                print(type(e), e.args)
-                print(code_str)
-            result = ExecResult(5)
-
-        # Restore system functionalities.
-        reverse_reliability_guard(func_dct)
-
-        return result
+                print(type(e), e, "\n", code_str)
+            if isinstance(e, TimeoutException):
+                return ExecResult(2)
+            elif isinstance(e, SyntaxError):
+                return ExecResult(3)
+            elif isinstance(e, TypeError):
+                return ExecResult(4)
+            else:
+                return ExecResult(5)
 
 
 @contextlib.contextmanager
-def time_limit(seconds):
+def outer_guard():
+    with create_tempdir() as tempdir, safety_guard() as guard:
+        yield (tempdir, guard)
+
+
+@contextlib.contextmanager
+def inner_guard(timeout):
+    with swallow_io() as swallow, time_limit(timeout) as timer:
+        yield (swallow, timer)
+
+
+@contextlib.contextmanager
+def safety_guard(maximum_memory_bytes: Optional[int] = None):
+    func_dct: dict[str, Any] = reliability_guard(maximum_memory_bytes)
+    # TODO: Check https://arxiv.org/abs/2209.07753 code.
+    try:
+        yield
+    finally:
+        reverse_reliability_guard(func_dct)
+
+
+@contextlib.contextmanager
+def time_limit(seconds: float):
     def signal_handler(signum, frame):
         raise TimeoutException("Timed out!")
 
