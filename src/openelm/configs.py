@@ -5,7 +5,12 @@ from omegaconf import MISSING
 
 
 @dataclass
-class ConfigClass:
+class BaseConfig:
+    pass
+
+
+@dataclass
+class ConfigClass(BaseConfig):
     model: str = MISSING
     epochs: int = MISSING
     batch_size: int = MISSING
@@ -23,7 +28,6 @@ class ConfigClass:
     behavior_n_bins: int = MISSING
     evo_history_length: int = MISSING
     evaluation_steps: int = MISSING
-    pad_token: str = MISSING
     env_name: str = MISSING
     run_name: str = MISSING
 

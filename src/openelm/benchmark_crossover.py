@@ -2,21 +2,24 @@ import functools
 import json
 import os
 import time
+from dataclasses import asdict, dataclass, field
 from itertools import permutations
 from pathlib import Path
-from typing import Union
+from typing import Any, Optional, Union
 
 import hydra
 import numpy as np
 import torch
+from hydra.core.config_store import ConfigStore
 from omegaconf import OmegaConf
 from tqdm import trange
 
 from openelm.codegen.codegen_utilities import model_setup, sample, truncate
-from openelm.constants import SRC_PATH
-from openelm.environments.environments import Sodaracer
+from openelm.configs import BaseConfig
+from openelm.environments import SQUARE_SEED
+from openelm.environments.environments import Sodarace, Sodaracer
 from openelm.environments.sodaracer.walker import Walker
-from openelm.map_elites import Map
+from openelm.map_elites import MAPElites
 from openelm.utils.code_eval import pool_exec_processes
 
 CIRCLE = """
@@ -266,9 +269,43 @@ SEEDS_DICT = {
 }
 
 
+@dataclass
+class CrossoverConfig(BaseConfig):
+    hydra: Any = field(
+        default_factory=lambda: {
+            "run": {"dir": "logs/benchmarks/crossover/${hydra.job.override_dirname}"}
+        }
+    )
+    model: str = "Salesforce/codegen-2B-mono"
+    save_path: str = "/fsx/home-hyperion/OpenELM/data"
+    seed: Optional[int] = None
+    deterministic: bool = False
+    fp16: bool = True
+    cuda: bool = True
+    debug: bool = False
+    gpus: int = 1
+    processes: int = 1
+    temp: float = 0.85
+    top_p: float = 0.95
+    gen_max_len: int = 512
+    batch_size: int = 16
+    n_trials: int = 1000
+    eval_steps: int = 1000
+    timeout: float = 5.0
+    # Instruction = 0: No instruction
+    # Instruction = 1: "def make_walker():\n"
+    # Instruction = 2: "#Create a new walker by modifying the
+    # starting function above.\ndef make_walker():\n"
+    # Instruction = 3: "#Combine the {seed_one}, {seed_two}, {seed_three}
+    # starting programs above to make a new program\ndef make_walker():\n"
+    instruction: int = 1
+    seeds: list[str] = field(default_factory=lambda: ["square", "radial", "cppn_fixed"])
+    run_name: Optional[str] = None
+
+
 class CrossoverBenchmark:
-    def __init__(self, cfg):
-        self.cfg = cfg
+    def __init__(self, cfg: CrossoverConfig):
+        self.cfg: CrossoverConfig = cfg
         self.reverse_seeds: dict[str, str] = {v: k for k, v in SEEDS_DICT.items()}
 
         os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -303,14 +340,6 @@ class CrossoverBenchmark:
         prompt_str += instruction_str
         return prompt_str, import_str
 
-    def to_mapindex(self, b, bins):
-        """Converts a phenotype (position in behaviour space) to a map index."""
-        return (
-            None
-            if b is None
-            else tuple(np.digitize(x, bins) for x, bins in zip(b, bins))
-        )
-
     def benchmark_seeds(self, seeds):
         prompt, imports = self.construct_prompt(seeds)
         encoding = self.tokenizer(
@@ -321,15 +350,13 @@ class CrossoverBenchmark:
             max_length=2048,
         ).to(self.device)
 
-        # Map setup
-        n_bins: int = 12
-        genotype_space = np.array([[0, 1000], [0, 1000], [0, 2000]]).T
-        bins = np.linspace(*genotype_space, n_bins + 1)[1:-1].T  # type: ignore
-        fitness_map: Map = Map(
-            dims=(n_bins,) * genotype_space.shape[1],
-            fill_value=-np.inf,
-            dtype=float,
+        sodarace_env = Sodarace(
+            seed=SQUARE_SEED,
+            config=self.cfg,
+            diff_model=self.model,
+            eval_steps=self.cfg.eval_steps,
         )
+        map_elites = MAPElites(env=sodarace_env, n_bins=12)
 
         results: list[int] = []
         valid_fitnesses: list[float] = []
@@ -344,7 +371,6 @@ class CrossoverBenchmark:
                 self.model,
                 self.tokenizer,
                 encoding,
-                starting_idx=token_len,
             )
             trunc = functools.partial(truncate, only_local_scope=local_scope_exec)
             truncations: list[str] = list(
@@ -353,6 +379,7 @@ class CrossoverBenchmark:
             execution_results = pool_exec_processes(
                 truncations,
                 func_name="make_walker",
+                timeout=self.cfg.timeout,
                 processes=self.cfg.processes,
                 debug=self.cfg.debug,
             )
@@ -368,12 +395,12 @@ class CrossoverBenchmark:
                             fitness: float = sodaracer.evaluate(1000)
                             if fitness is not None:
                                 valid_fitnesses.append(fitness)
-                                map_idx = self.to_mapindex(
-                                    sodaracer.to_phenotype(), bins=bins
+                                map_idx = map_elites.to_mapindex(
+                                    sodaracer.to_phenotype()
                                 )
                                 results.append(1)
-                                if fitness > fitness_map[map_idx]:
-                                    fitness_map[map_idx] = fitness
+                                if fitness > map_elites.fitnesses[map_idx]:
+                                    map_elites.fitnesses[map_idx] = fitness
                     else:
                         if self.cfg.debug:
                             print("Failed execution, type:", result)
@@ -384,30 +411,22 @@ class CrossoverBenchmark:
                         print(type(e), e)
                     results.append(6)
 
-        # TODO: Instantiate MAP-Elites here to evolve the map
-
-        valid_rate: float = (results.count(1) / len(results)) * 100
-        qd_score: float = fitness_map.qd_score
-        niches_filled: int = fitness_map.niches_filled
         result_dict: dict[str, Union[list, float, int]] = {
-            "valid_rate": valid_rate,
-            "qd_score": qd_score,
-            "niches_filled": niches_filled,
+            "valid_rate": (results.count(1) / len(results)) * 100,
+            "qd_score": map_elites.qd_score(),
+            "niches_filled": map_elites.niches_filled(),
             "valid_fitnesses": valid_fitnesses,
         }
 
-        print(f"Valid rate for {seeds}: {valid_rate}%")
-        print(f"QD score: {qd_score}")
-        print(f"Niches filled: {niches_filled}")
+        print(f"Valid rate for {seeds}: {result_dict['valid_rate']}%")
+        print(f"QD score: {result_dict['qd_score']}")
+        print(f"Niches filled: {result_dict['niches_filled']}")
         print(f"Average fitness: {np.nanmean(valid_fitnesses)}")
         return result_dict
 
     def run_benchmark(self):
         perm: list[tuple] = list(permutations(self.cfg.seeds))
-        valid_rates: list[float] = []
-        qd_scores: list[float] = []
-        niches: list[int] = []
-        all_fitnesses: dict[str, list[float]] = {}
+        valid_rates, qd_scores, niches, all_fitnesses = [], [], [], {}
         print("Permutations: ", perm)
 
         for seeds in perm:
@@ -432,7 +451,7 @@ class CrossoverBenchmark:
             "valid_stats": valid_stats,
             "qd_stats": qd_stats,
             "niche_stats": niche_stats,
-            "config": OmegaConf.to_container(self.cfg),
+            "config": asdict(self.cfg),
             "permutations": perm,
         }
 
@@ -441,17 +460,16 @@ class CrossoverBenchmark:
         )
 
 
-# Load hydra config from yaml files and command line arguments.
-@hydra.main(
-    config_path=str(SRC_PATH / "config"),
-    config_name="benchmark_crossover_cfg",
-    version_base="1.2",
-)
+cs = ConfigStore.instance()
+cs.store(name="config", node=CrossoverConfig)
+
+
+@hydra.main(version_base="1.2", config_name="config")
 def main(cfg):
     print("----------------- Config ---------------")
     print(OmegaConf.to_yaml(cfg))
     print("-----------------  End -----------------")
-
+    cfg = OmegaConf.to_object(cfg)
     crossover = CrossoverBenchmark(cfg)
     crossover.run_benchmark()
 

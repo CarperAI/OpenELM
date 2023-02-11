@@ -49,15 +49,13 @@ def unsafe_execute(
     if len(code_str) == 0 or "def " not in code_str:
         # No code found or no function found.
         if debug:
-            print("No code found or no function found.")
-            print(code_str)
+            print("No code found or no function found.", "\n", code_str)
         return ExecResult(5)
     func_match = re.findall(r"def (\w+)\s*\((.*?)\):", code_str)
     if len(func_match) == 0:
         # No proper function found in code.
         if debug:
-            print("No proper function found in code.")
-            print(code_str)
+            print("No proper function found in code.", "\n", code_str)
         return ExecResult(5)
     elif len(func_match) > 0 and func_name is None:
         func_name = func_match[-1][0]

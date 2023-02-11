@@ -83,7 +83,9 @@ def eval_completions(
         raise ValueError(f"Unknown task: {task}")
 
 
-def mutate_code(n_bugs: int = 5, task: str = "parity", mutate_method="prompt") -> tuple:
+def mutate_code(
+    n_bugs: int = 5, task: str = "parity", mutate_method="prompt"
+) -> tuple[str, str]:
     """
     Mutate code to create n bugs. Output the prompt in diff format.
 

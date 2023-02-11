@@ -1,11 +1,13 @@
 import math
 import string
 from abc import ABC, abstractmethod
+from dataclasses import is_dataclass
 from typing import Generic, Optional, TypeVar, Union
 
 import numpy as np
 from omegaconf import DictConfig, OmegaConf
 
+from openelm.configs import BaseConfig
 from openelm.diff_model import PromptMutationForImgTask, PromptMutationForSodarace
 from openelm.environments.sodaracer import SodaraceSimulator
 
@@ -70,6 +72,8 @@ class BaseEnvironment(ABC, Generic[GenoType]):
             return OmegaConf.load(config)
         elif isinstance(config, (dict, DictConfig)):
             return DictConfig(config)
+        elif is_dataclass(config):
+            return OmegaConf.structured(config)
         else:
             raise ValueError
 
@@ -329,7 +333,7 @@ class Sodarace(BaseEnvironment[Sodaracer]):
     def __init__(
         self,
         seed: dict,
-        config: Union[str, dict, DictConfig],
+        config: Union[str, dict, DictConfig, BaseConfig],
         diff_model,
         eval_steps: int,
         max_height: int = 1000,
@@ -356,6 +360,7 @@ class Sodarace(BaseEnvironment[Sodaracer]):
             self.seed = Sodaracer(**seed)
         else:
             raise TypeError
+        # TODO: rewrite config code to make everything an instance of a dataclass
         self.config = self._load_config(config)
         if run_name is not None:
             self.config.run_name = run_name

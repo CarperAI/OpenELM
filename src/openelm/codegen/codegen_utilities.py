@@ -1,3 +1,4 @@
+import os
 import random
 import re
 
@@ -8,10 +9,9 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 def set_seed(seed=None, deterministic=True) -> int:
     if seed is None:
-        seed = torch.Generator().seed()
+        seed = np.random.default_rng().integers(2**32 - 1)
     random.seed(seed)
-    # TODO: test this
-    # os.environ['PYTHONHASHSEED'] = str(seed)
+    os.environ["PYTHONHASHSEED"] = str(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
     if torch.cuda.is_available():
@@ -78,26 +78,28 @@ def model_setup(cfg, device=None):
 
     tokenizer = AutoTokenizer.from_pretrained(cfg.model)
     tokenizer.padding_side = "left"
-    tokenizer.pad_token = cfg.pad_token
+    tokenizer.pad_token = 50256
 
-    ckpt_path = cfg.model
+    model_path = cfg.model
     if cfg.gpus > 1:
         model = torch.nn.DataParallel(
-            create_model(ckpt_path, fp16=use_fp16), device_ids=list(range(cfg.gpus))
+            create_model(model_path, fp16=use_fp16), device_ids=list(range(cfg.gpus))
         ).to(device)
     else:
-        model = create_model(ckpt_path, fp16=use_fp16).to(device)
+        model = create_model(model_path, fp16=use_fp16).to(device)
     return model, tokenizer, device
 
 
 def sample(
-    cfg, model, tokenizer, batch, batch_size=None, starting_idx=None
+    batch, cfg, model, tokenizer, decode: bool = True, starting_idx=None, **kwargs
 ) -> list[str]:
-    # TODO: add dict param for extra hparams
     """Run a model on a batch of contexts for a particular task."""
-    if batch_size is None:
-        batch_size = cfg.batch_size
-    device = torch.device("cuda" if cfg.cuda else "cpu")
+    batch_size = kwargs.get("batch_size", cfg.batch_size)
+    device = kwargs.get("device", torch.device("cuda" if cfg.cuda else "cpu"))
+    temperature = kwargs.get("temperature", cfg.temp)
+    top_p = kwargs.get("top_p", cfg.top_p)
+    gen_max_len = kwargs.get("gen_max_len", cfg.gen_max_len)
+
     input_ids_len = batch["input_ids"].shape[1]
     if starting_idx is None:
         starting_idx = input_ids_len
@@ -109,10 +111,10 @@ def sample(
                 **batch,
                 do_sample=True,
                 num_return_sequences=batch_size,
-                temperature=cfg.temp,
-                max_new_tokens=cfg.gen_max_len,
-                top_p=cfg.top_p,
-                pad_token_id=cfg.pad_token,
+                temperature=temperature,
+                max_new_tokens=gen_max_len,
+                top_p=top_p,
+                pad_token_id=tokenizer.pad_token_id,
                 use_cache=True,
             )
         else:
@@ -120,11 +122,14 @@ def sample(
                 **batch,
                 do_sample=True,
                 num_return_sequences=batch_size,
-                temperature=cfg.temp,
-                max_new_tokens=cfg.gen_max_len,
-                top_p=cfg.top_p,
-                pad_token_id=cfg.pad_token,
+                temperature=temperature,
+                max_new_tokens=gen_max_len,
+                top_p=top_p,
+                pad_token_id=tokenizer.pad_token_id,
                 use_cache=True,
             )
-        text = tokenizer.batch_decode(tokens[:, starting_idx:, ...])
-    return text
+        if decode:
+            text: list[str] = tokenizer.batch_decode(tokens[:, starting_idx:, ...])
+            return text
+        else:
+            return tokens[:, starting_idx:, ...]
