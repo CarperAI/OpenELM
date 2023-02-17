@@ -26,10 +26,10 @@ Roughly, ELM consists of a pipeline of different components:
 The basic workflow consists of generate -> evaluate -> finetune. We currently have implemented everything except the conditional RL part.
 
 # Running ELM
-Currently, we can run the MAP-Elites algorithm on [a few environments](https://github.com/CarperAI/OpenELM/blob/main/elm/environments/environments.py), apply [prompt mutations](https://github.com/CarperAI/OpenELM/blob/main/elm/diff_model.py), and connect with an optional [sandbox server](https://github.com/CarperAI/OpenELM/tree/main/elm/sandbox).
+Currently, we can run the MAP-Elites algorithm on [a few environments](https://github.com/CarperAI/OpenELM/blob/main/src/openelm/environments/environments.py), apply [prompt mutations](https://github.com/CarperAI/OpenELM/blob/main/src/openelm/diff_model.py), and connect with an optional [sandbox server](https://github.com/CarperAI/OpenELM/blob/main/src/openelm/sandbox).
 
 ## Sandbox
-To use the code execution sandbox, see the [sandboxing readme](https://github.com/CarperAI/OpenELM/tree/main/elm/sandbox) for instructions to set it up in a docker container. But for quick testing purpose, one may try the following:
+To use the code execution sandbox, see the [sandboxing readme](https://github.com/CarperAI/OpenELM/blob/main/src/openelm/sandbox/README.md) for instructions to set it up in a docker container. But for quick testing purpose, one may try the following:
 ```bash
 cd elm/sandbox/server
 export FLASK_APP=index.py
@@ -37,3 +37,6 @@ flask run
 ```
 ## Running MAP-Elites
 We have a few toy environments implemented as well as the Sodarace environment in the ELM paper. The `run_elm.py` file gives an example of how to run an ELM loop with MAP-Elites using the Sodarace environment.
+
+## Triton
+We also have code to run models in Nvidia's Triton Inference Server. See the [Triton Readme](https://github.com/CarperAI/OpenELM/blob/main/src/openelm/codegen/triton_utils/readme.md) to get started

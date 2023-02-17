@@ -14,16 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import argparse
 import configparser
 import multiprocessing as mp
-import os
-import sys
 from pathlib import Path
 
 import numpy as np
 import torch
-from transformers import GPTJForCausalLM
 
 
 def get_weight_data_type(data_type):
@@ -110,10 +106,10 @@ def split_and_convert_main(
         for k, v in vars(model.config).items():
             config["gpt"][k] = f"{v}"
         config["gpt"]["weight_data_type"] = weight_data_type
-        with open((Path(saved_dir) / f"config.ini").as_posix(), "w") as configfile:
+        with open((Path(saved_dir) / "config.ini").as_posix(), "w") as configfile:
             config.write(configfile)
     except Exception as e:
-        print(f"Fail to save the config in config.ini.")
+        print("Fail to save the config in config.ini.")
         print(e)
     np_weight_data_type = get_weight_data_type(weight_data_type)
 

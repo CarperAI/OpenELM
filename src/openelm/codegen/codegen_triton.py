@@ -75,8 +75,10 @@ class CodeGenProxy:
     def generate(self, input_ids, batch_size, temperature, top_p, gen_max_length):
 
         model_name = "fastertransformer"
-        # ugly hack to set the data type correctly. Huggingface models want int32, but fastertransformer needs uint32
-        # i could've done the conversion from uint32 to int32 in the model but that'd be inefficient.
+        # ugly hack to set the data type correctly. Huggingface models want
+        # int32, but fastertransformer needs uint32
+        # i could've done the conversion from uint32 to int32 in the model but
+        # that'd be inefficient.
         np_type = np.uint32
         input_start_ids = input_ids.astype(np_type)
         input_start_ids = np.repeat(input_start_ids, batch_size, axis=0).astype(np_type)

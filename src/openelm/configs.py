@@ -89,7 +89,7 @@ class ImageELMConfig(BaseConfig):
     evo_history_length: int = 1
     processes: int = 12
     run_name: Optional[str] = None
-    sandbox: bool = True
+    sandbox: bool = False
 
 
 # TODO: Hierarchy of configs
