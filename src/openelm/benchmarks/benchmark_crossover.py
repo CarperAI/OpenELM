@@ -68,15 +68,15 @@ class BenchmarkCrossoverConfig(BaseConfig):
     n_trials: int = 1000
     eval_ms: int = 1000  # Milliseconds
     timeout: float = 5.0  # Seconds
+    run_name: Optional[str] = None
+    seeds: list[str] = field(default_factory=lambda: ["square", "radial", "cppn_fixed"])
     # Instruction = 0: No instruction
     # Instruction = 1: "def make_walker():\n"
     # Instruction = 2: "#Create a new walker by modifying the
     # starting function above.\ndef make_walker():\n"
     # Instruction = 3: "#Combine the {seed_one}, {seed_two}, {seed_three}
     # starting programs above to make a new program\ndef make_walker():\n"
-    instruction: int = 1
-    seeds: list[str] = field(default_factory=lambda: ["square", "radial", "cppn_fixed"])
-    run_name: Optional[str] = None
+    instruction: int = 0
 
 
 class CrossoverBenchmark:
@@ -117,13 +117,12 @@ class CrossoverBenchmark:
         return prompt_str, import_str
 
     def benchmark_seeds(self, seeds):
-        prompt, imports = self.construct_prompt(seeds)
+        prompt, preamble = self.construct_prompt(seeds)
         encoding = self.tokenizer(
             [prompt],
             truncation=True,
             padding=True,
             return_tensors="pt",
-            max_length=2048,
         ).to(self.device)
 
         sodarace_env = Sodarace(
@@ -150,7 +149,7 @@ class CrossoverBenchmark:
             )
             trunc = functools.partial(truncate, only_local_scope=local_scope_exec)
             truncations: list[str] = list(
-                imports + trunc for trunc in map(trunc, completions)
+                preamble + trunc for trunc in map(trunc, completions)
             )
             execution_results = pool_exec_processes(
                 truncations,
@@ -165,11 +164,10 @@ class CrossoverBenchmark:
                         sodaracer = Sodaracer(
                             program_str=truncations[i],
                             result_obj=result.to_dict(),
-                            error_code=0,
                         )
                         if sodaracer.valid:
                             fitness: float = sodarace_env.fitness(sodaracer)
-                            if fitness is not None:
+                            if fitness is not None and fitness < 4000:
                                 valid_fitnesses.append(fitness)
                                 map_idx = map_elites.to_mapindex(
                                     sodaracer.to_phenotype()
@@ -204,8 +202,9 @@ class CrossoverBenchmark:
         perm: list[tuple] = list(permutations(self.cfg.seeds))
         valid_rates, qd_scores, niches, all_fitnesses = [], [], [], {}
         print("Permutations: ", perm)
-
-        for seeds in perm:
+        # TODO: add an option to disable permutations and instead sample
+        # from each permutation randomly
+        for seeds in reversed(perm):
             perm_results: dict = self.benchmark_seeds(seeds)
             valid_rates.append(perm_results["valid_rate"])
             qd_scores.append(perm_results["qd_score"])

@@ -7,7 +7,7 @@ from typing import Generic, Optional, TypeVar, Union
 import numpy as np
 from omegaconf import DictConfig, OmegaConf
 
-from openelm.configs import BaseConfig
+from openelm.configs import BaseConfig, ImageELMConfig, SodaraceELMConfig
 from openelm.diff_model import PromptMutationForImgTask, PromptMutationForSodarace
 from openelm.environments.sodaracer import SodaraceSimulator
 
@@ -40,13 +40,14 @@ GenoType = TypeVar("GenoType", bound=Genotype)
 class BaseEnvironment(ABC, Generic[GenoType]):
     def __init__(self) -> None:
         self.genotype_space: np.ndarray
+        self.batch_size: int
 
     @abstractmethod
     def random(self) -> list[GenoType]:
         raise NotImplementedError
 
     @abstractmethod
-    def mutate(self, x: GenoType) -> list[GenoType]:
+    def mutate(self, x: list[GenoType]) -> list[GenoType]:
         raise NotImplementedError
 
     @abstractmethod
@@ -68,6 +69,7 @@ class BaseEnvironment(ABC, Generic[GenoType]):
 
     @staticmethod
     def _load_config(config):
+        # TODO: convert all to dataclass
         if isinstance(config, str):
             return OmegaConf.load(config)
         elif isinstance(config, (dict, DictConfig)):
@@ -95,27 +97,70 @@ class FunctionOptim(BaseEnvironment[ArrayGenotype]):
     def __init__(self, ndim=2):
         self.genotype_ndim = ndim
         self.genotype_space = np.repeat([[-4, 4]], self.genotype_ndim, axis=0).T
+        self.batch_size: int = 1
 
     def random(self) -> list[ArrayGenotype]:
-        return [ArrayGenotype(np.random.uniform(*self.genotype_space))]
+        return [
+            ArrayGenotype(np.random.uniform(*self.genotype_space))
+            for _ in range(self.batch_size)
+        ]
 
-    def mutate(self, x: ArrayGenotype) -> list[ArrayGenotype]:
-        x = x.copy()
-        ix = np.random.randint(self.genotype_ndim)
-        x[ix] = x[ix] + np.random.uniform(-1, 1)
-        return [x]
+    def mutate(self, x: list[ArrayGenotype]) -> list[ArrayGenotype]:
+        for i in range(self.batch_size):
+            ix = np.random.randint(self.genotype_ndim)
+            x[i][ix] = x[i][ix] + np.random.uniform(-1, 1)
+        return x
 
     def fitness(self, x: ArrayGenotype) -> float:
         return ackley(x[None])[0]
 
 
+class StringArrayGenotype(ArrayGenotype):
+    def __str__(self) -> str:
+        x: np.ndarray = np.round(self)
+        return "".join(
+            string.ascii_letters[ix]
+            for ix in np.clip(x.astype(int), 0, len(string.ascii_letters) - 1)
+        )
+
+    def to_phenotype(self) -> Phenotype:
+        return np.asarray(self)
+
+
+class MatchString(BaseEnvironment[StringArrayGenotype]):
+    # find a string by mutating one character at a time
+
+    def __init__(self, target: str):
+        self.alphabet = string.ascii_letters
+
+        self.target = np.array([self.alphabet.index(ch) for ch in target])
+        self.genotype_ndim = self.target.shape[0]
+        self.genotype_space = np.repeat(
+            [[0, len(self.alphabet)]], self.genotype_ndim, axis=0
+        ).T
+
+    def random(self) -> list[StringArrayGenotype]:
+        return [
+            StringArrayGenotype(np.random.uniform(*self.genotype_space))
+            for _ in range(self.batch_size)
+        ]
+
+    def mutate(self, x: list[StringArrayGenotype]) -> list[StringArrayGenotype]:
+        for i in range(self.batch_size):
+            ix = np.random.randint(self.genotype_ndim)
+            x[i][ix] = x[i][ix] + np.random.uniform(-1, 1)
+        return x
+
+    def fitness(self, x: StringArrayGenotype) -> float:
+        return -np.abs(x - self.target).sum()
+
+
 class ImageGeneration(Genotype):
     """Genotype for generated images."""
 
-    def __init__(self, program_str: str, result_obj: np.ndarray, error_code: bool):
+    def __init__(self, program_str: str, result_obj: np.ndarray):
         self.program_str = program_str
         self.result_obj = result_obj
-        self.error_code = error_code
         self.valid = self.validate()
 
     def __str__(self) -> str:
@@ -145,8 +190,10 @@ class ImageOptim(BaseEnvironment[ImageGeneration]):
 
     Fitness is simply the absolute difference between the returning
     image and the target image. To map into the behavior space,
-    if behavior_mode=="3-channel", the image will be divided into blocks (specified in `block_size`), and average
-    values of RGB channels in each block will be put together as a point in the behavior space (average-pooling).
+    if behavior_mode=="3-channel", the image will be divided into blocks
+    (specified in `block_size`), and average
+    values of RGB channels in each block will be put together as a point in the
+    behavior space (average-pooling).
     """
 
     default_diff_model_cls = PromptMutationForImgTask
@@ -176,7 +223,8 @@ class ImageOptim(BaseEnvironment[ImageGeneration]):
             config: the config file path or dict.
             target_img: the target image.
             diff_model: the diff model (or alternatives).
-            behavior_mode: (Optional) a string indicating the way an individual is mapped into behavior space.
+            behavior_mode: (Optional) a string indicating the way an individual
+            is mapped into behavior space.
             run_name: (Optional) override the run_name in config.
         """
         if isinstance(seed, dict):
@@ -184,7 +232,7 @@ class ImageOptim(BaseEnvironment[ImageGeneration]):
         else:
             raise TypeError
 
-        self.config = self._load_config(config)
+        self.config: ImageELMConfig = self._load_config(config)
         if run_name is not None:
             self.config.run_name = run_name
 
@@ -202,7 +250,7 @@ class ImageOptim(BaseEnvironment[ImageGeneration]):
         ]
         self.genotype_space = np.repeat([[0, 255]], self.genotype_ndim, axis=0).T
 
-    def generate_program(self, code: str) -> list[ImageGeneration]:
+    def generate_program(self, code_batch: list[str]) -> list[ImageGeneration]:
         """
         Call LM to generate a new program and run it.
 
@@ -210,32 +258,34 @@ class ImageOptim(BaseEnvironment[ImageGeneration]):
             An ImageGeneration object containing the code, the resulting image
             and the error code.
         """
-        return [
-            ImageGeneration(**generated)
-            for generated in self.diff_model.generate_program(code)
-        ]
+        generated_programs = self.diff_model.generate_program(code_batch)
+        return [ImageGeneration(**p) for p in generated_programs]
 
     def random(self) -> list[ImageGeneration]:
         """
         Randomly generate a batch of codes and evaluate their outputs.
 
         Returns:
-            a tuple of the code string and the returning result (None if there is error).
+            a tuple of the code string and the returning result (None if there
+            is error).
         """
-        new_images = self.generate_program(self.seed.program_str)
+        program_str_list = [self.seed.program_str] * self.batch_size
+        new_images = self.generate_program(program_str_list)
         return new_images
 
-    def mutate(self, x: ImageGeneration) -> list[ImageGeneration]:
+    def mutate(self, images_list: list[ImageGeneration]) -> list[ImageGeneration]:
         """
-        Randomly mutate a batch of codes from a given individual and evaluate their outputs.
+        Randomly mutate a batch of codes and evaluate their outputs.
 
         Args:
             x: the individual to be mutated.
 
         Returns:
-            a tuple of the code string and the returning result (None if there is error).
+            a tuple of the code string and the returning result (None if there
+            is an error).
         """
-        new_images = self.generate_program(x.program_str)
+        program_str_list = [sr.program_str for sr in images_list]
+        new_images = self.generate_program(program_str_list)
         return new_images
 
     def fitness(self, x: ImageGeneration) -> float:
@@ -244,72 +294,33 @@ class ImageOptim(BaseEnvironment[ImageGeneration]):
         return -np.abs(x.result_obj - self.target_img).sum()
 
 
-class StringArrayGenotype(ArrayGenotype):
-    def __str__(self) -> str:
-        x: np.ndarray = np.round(self)
-        return "".join(
-            string.ascii_letters[ix]
-            for ix in np.clip(x.astype(int), 0, len(string.ascii_letters) - 1)
-        )
-
-
-class MatchString(BaseEnvironment[StringArrayGenotype]):
-    # find a string by mutating one character at a time
-
-    def __init__(self, target: str):
-        self.alphabet = string.ascii_letters
-
-        self.target = np.array([self.alphabet.index(ch) for ch in target])
-        self.genotype_ndim = self.target.shape[0]
-        self.genotype_space = np.repeat(
-            [[0, len(self.alphabet)]], self.genotype_ndim, axis=0
-        ).T
-
-    def random(self) -> list[StringArrayGenotype]:
-        return [StringArrayGenotype(np.random.uniform(*self.genotype_space))]
-
-    def mutate(self, x: StringArrayGenotype) -> list[StringArrayGenotype]:
-        x = x.copy()
-        ix = np.random.randint(self.genotype_ndim)
-        x[ix] = x[ix] + np.random.uniform(-5, 5)
-        return [x]
-
-    def fitness(self, x: StringArrayGenotype) -> float:
-        return -np.abs(x - self.target).sum()
-
-    def to_behavior_space(self, x: StringArrayGenotype) -> Phenotype:
-        return np.asarray(x)
-
-
 class Sodaracer(Genotype):
-    def __init__(self, program_str: str, result_obj: dict, error_code: int):
+    def __init__(self, program_str: str, result_obj: dict):
         """
         The Sodaracer genotype.
 
         Args:
             program_str: the string for the original code.
             result_obj: the dict of sodaracer.
-            error_code: whether the code executes in the sandbox.
         """
-        self.program_str = program_str
-        self.result_obj = result_obj
-        self.error_code = error_code
+        self.program_str: str = program_str
+        self.result_obj: dict = result_obj
+        # self._fitness: Optional[float] = None
 
         # Check whether the Sodaracer is valid.
-        if self.error_code == 0:
-            try:
-                # Test the Sodaracer by actually invoking all the necessary simulations/evaluations.
-                self.simulator = SodaraceSimulator(body=self.result_obj)
-                self.morphology = self.simulator.morphology
-                self.evaluate(0)
-                self.valid = True
-            except Exception:
-                self.valid = False
-        else:
+        try:
+            # Test the Sodaracer by instantiating a simulation.
+            self.simulator = SodaraceSimulator(body=self.result_obj)
+            self.morphology = self.simulator.morphology
+            self.evaluate(0)
+            self.valid = True
+        except Exception:
             self.valid = False
 
     def evaluate(self, eval_ms: int) -> float:
-        return self.simulator.evaluate(eval_ms)
+        self._fitness = self.simulator.evaluate(eval_ms)
+        # if self._fitness is None:
+        return self._fitness
 
     def __str__(self) -> str:
         return self.program_str
@@ -325,6 +336,10 @@ class Sodaracer(Genotype):
             ).astype(int)
         else:
             return None
+
+    @property
+    def fitness(self) -> Optional[float]:
+        return self._fitness
 
 
 class Sodarace(BaseEnvironment[Sodaracer]):
@@ -361,7 +376,7 @@ class Sodarace(BaseEnvironment[Sodaracer]):
         else:
             raise TypeError
         # TODO: rewrite config code to make everything an instance of a dataclass
-        self.config = self._load_config(config)
+        self.config: SodaraceELMConfig = self._load_config(config)
         if run_name is not None:
             self.config.run_name = run_name
 
@@ -370,19 +385,28 @@ class Sodarace(BaseEnvironment[Sodaracer]):
         else:
             self.diff_model = diff_model
 
+        self.batch_size = self.config.batch_size
         self.eval_ms = eval_ms
         self.genotype_ndim = ndim
         self.genotype_space = np.array(
             [[0, max_height], [0, max_width], [0, max_mass]]
         ).T
 
-    def generate_program(self, code: str) -> list[Sodaracer]:
-        # Call LM to generate a new program and run it, returning a dict containing the program string
-        # and the dict from running it.
-        return [
-            Sodaracer(**generated)
-            for generated in self.diff_model.generate_program(code)
-        ]
+    def generate_program(self, code_batch: list[str]) -> list[Sodaracer]:
+        # Call LM to generate a new program and run it, returning a dict
+        # containing the program string and the dict from running it.
+        generated_programs = self.diff_model.generate_program(code_batch)
+        return [Sodaracer(**p) for p in generated_programs]
+
+    def random(self) -> list[Sodaracer]:
+        program_str_list = [self.seed.program_str] * self.batch_size
+        new_sodaracers = self.generate_program(program_str_list)
+        return new_sodaracers
+
+    def mutate(self, sodaracer_list: list[Sodaracer]) -> list[Sodaracer]:
+        program_str_list = [sr.program_str for sr in sodaracer_list]
+        new_sodaracers = self.generate_program(program_str_list)
+        return new_sodaracers
 
     def fitness(self, x: Sodaracer) -> float:
         # Call Sodaracers environment to get the fitness.
@@ -390,11 +414,3 @@ class Sodarace(BaseEnvironment[Sodaracer]):
             return x.evaluate(self.eval_ms)
         else:
             return -np.inf
-
-    def random(self) -> list[Sodaracer]:
-        new_sodaracers = self.generate_program(self.seed.program_str)
-        return new_sodaracers
-
-    def mutate(self, x: Sodaracer) -> list[Sodaracer]:
-        new_sodaracers = self.generate_program(x.program_str)
-        return new_sodaracers

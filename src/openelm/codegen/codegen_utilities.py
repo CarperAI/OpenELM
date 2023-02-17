@@ -39,9 +39,10 @@ def truncate(completion: str, def_num=1, print_num=0, only_local_scope=False):
         re.compile(r, re.MULTILINE)
         for r in ["^#", re.escape("<|endoftext|>"), "^'''", '^"""', "\n\n\n"]
     ]
-    prints = list(re.finditer("^print", completion, re.MULTILINE))
-    if print_num >= 0 and len(prints) > print_num:
-        completion = completion[: prints[print_num].start()]
+    if print_num > 0:
+        prints = list(re.finditer("^print", completion, re.MULTILINE))
+        if print_num >= 0 and len(prints) > print_num:
+            completion = completion[: prints[print_num].start()]
 
     if only_local_scope:
         global_lines = list(re.finditer("^[a-zA-Z]", completion, re.MULTILINE))

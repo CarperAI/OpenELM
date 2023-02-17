@@ -20,7 +20,8 @@ class ELM:
 
         Args:
             cfg: The config (e.g. OmegaConf who uses dot to access members).
-            diff_model_cls: (Optional) The class of diff model. One can apply alternative models here for comparison.
+            diff_model_cls: (Optional) The class of diff model. One can apply
+            alternative models here for comparison.
             env_args: (Optional) The argument dict for Environment.
         """
         self.cfg = cfg
@@ -38,7 +39,6 @@ class ELM:
             self.diff_model = None
 
         self.seed = env_args["seed"]
-
         self.environment = ENVS_DICT[self.cfg.env_name](**env_args)
         self.qd_algorithm = MAPElites(
             self.environment,

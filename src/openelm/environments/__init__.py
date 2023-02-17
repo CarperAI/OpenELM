@@ -27,7 +27,6 @@ def draw_blue_rectangle() -> np.ndarray:
 \treturn pic
 """,
     "result_obj": None,
-    "error_code": 0,
 }
 exec(IMAGE_SEED["program_str"], globals())
 IMAGE_SEED["result_obj"] = globals()["draw_blue_rectangle"]()
@@ -53,7 +52,6 @@ SQUARE_SEED = {
             [2, 4, {"type": "muscle", "amplitude": 2.0, "phase": 0.0}],
         ],
     },
-    "error_code": 0,
 }
 
 # A sample init args for ImageOptim
@@ -66,12 +64,7 @@ image_init_args = {
 }
 
 # A sample init args for Sodarace
-sodarace_init_args = {
-    "seed": SQUARE_SEED,
-    "config": "openelm/config/elm_sodarace_cfg.yaml",
-    "diff_model": None,
-    "eval_steps": 1000,
-}
+sodarace_init_args = {"seed": SQUARE_SEED, "diff_model": None, "eval_ms": 1000}
 
 # ----- (Sample init args end) -----
 

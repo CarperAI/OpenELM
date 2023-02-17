@@ -1,10 +1,5 @@
 import torch
-from transformers import (
-    CodeGenForCausalLM,
-    CodeGenTokenizer,
-    GPTJConfig,
-    GPTJForCausalLM,
-)
+from transformers import CodeGenForCausalLM, GPTJConfig, GPTJForCausalLM
 
 
 def cg2gptj(model_name):

@@ -10,16 +10,19 @@ Python dictionaries are evolved over.
 
 """
 import hydra
+from hydra.core.config_store import ConfigStore
 from omegaconf import OmegaConf
 
 from openelm import ELM
-from openelm.constants import SRC_PATH
+from openelm.configs import SodaraceELMConfig
+
+cs = ConfigStore.instance()
+cs.store(name="config", node=SodaraceELMConfig)
 
 
 # Load hydra config from yaml files and command line arguments.
 @hydra.main(
-    config_path=str(SRC_PATH / "config"),
-    config_name="elm_sodarace_cfg",
+    config_name="config",
     version_base="1.2",
 )
 def main(cfg):
@@ -27,7 +30,7 @@ def main(cfg):
     print(OmegaConf.to_yaml(cfg))
     print("-----------------  End -----------------")
     elm = ELM(cfg)
-    print("Best Sodaracer: ", elm.run())
+    print("Best Individual: ", elm.run())
 
 
 if __name__ == "__main__":

@@ -40,7 +40,8 @@ class SodaraceELMConfig(BaseConfig):
             "run": {"dir": "logs/elm/sodarace/${hydra.job.override_dirname}"}
         }
     )
-    model: str = "codegen-350M-mono"
+    model: str = "Salesforce/codegen-350M-mono"
+    env_name: str = "sodarace"
     batch_size: int = 32
     fp16: bool = True
     cuda: bool = True
@@ -51,15 +52,15 @@ class SodaraceELMConfig(BaseConfig):
     top_p: float = 0.95
     temp: float = 0.85
     timeout: float = 5.0  # Seconds
-    evaluation_steps: int = 1000  # Milliseconds
+    eval_ms: int = 1000  # Milliseconds
     gen_max_len: int = 768
-    evo_init_steps: int = 10
-    evo_n_steps: int = 20
+    evo_init_steps: int = 2
+    evo_n_steps: int = 5
     behavior_n_bins: int = 12
     evo_history_length: int = 1
     processes: int = 12
     run_name: Optional[str] = None
-    sandbox: bool = True
+    sandbox: bool = False
 
 
 @dataclass
@@ -69,7 +70,7 @@ class ImageELMConfig(BaseConfig):
             "run": {"dir": "logs/elm/image/${hydra.job.override_dirname}"}
         }
     )
-    model: str = "codegen-350M-mono"
+    model: str = "Salesforce/codegen-350M-mono"
     batch_size: int = 32
     fp16: bool = True
     cuda: bool = True

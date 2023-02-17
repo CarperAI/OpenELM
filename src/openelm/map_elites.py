@@ -4,10 +4,10 @@ from typing import Optional
 import numpy as np
 from tqdm import trange
 
-from openelm.environments import BaseEnvironment
+from openelm.environments import BaseEnvironment, Genotype
 
 Phenotype = Optional[np.ndarray]
-Mapindex = Optional[tuple]
+MapIndex = Optional[tuple]
 
 
 class Map:
@@ -142,9 +142,9 @@ class MAPElites:
         self.save_history = save_history
         # self.history will be set/reset each time when calling `.search(...)`
         self.history: dict = defaultdict(list)
-        # TODO: Allow the passing of already initialised maps.
         # discretization of space
         self.bins = np.linspace(*env.behavior_space, n_bins + 1)[1:-1].T  # type: ignore
+        # TODO: abstract all maps out to a single class.
         # perfomance of niches
         if init_map is None:
             self.fitnesses: Map = Map(
@@ -170,7 +170,7 @@ class MAPElites:
 
         print(f"MAP of size: {self.fitnesses.dims} = {self.fitnesses.map_size}")
 
-    def to_mapindex(self, b: Phenotype) -> Mapindex:
+    def to_mapindex(self, b: Phenotype) -> MapIndex:
         """Converts a phenotype (position in behaviour space) to a map index."""
         return (
             None
@@ -178,12 +178,12 @@ class MAPElites:
             else tuple(np.digitize(x, bins) for x, bins in zip(b, self.bins))
         )
 
-    def random_selection(self) -> Mapindex:
+    def random_selection(self) -> MapIndex:
         """Randomly select a niche (cell) in the map that has been explored."""
         ix = np.random.choice(np.flatnonzero(self.nonzero.array))
         return np.unravel_index(ix, self.nonzero.dims)
 
-    def search(self, initsteps: int, totalsteps: int, atol=1) -> str:
+    def search(self, initsteps: int, totalsteps: int, atol: float = 1.0) -> str:
         """
         Run the MAP-Elites search algorithm.
 
@@ -191,7 +191,7 @@ class MAPElites:
             initsteps (int): Number of initial random solutions to generate.
             totalsteps (int): Total number of steps to run the algorithm for,
                 including initial steps.
-            atol (int, optional): Tolerance for how close the best performing
+            atol (float, optional): Tolerance for how close the best performing
                 solution has to be to the maximum possible fitness before the
                 search stops early. Defaults to 1.
 
@@ -210,16 +210,20 @@ class MAPElites:
             if n_steps < initsteps or self.genomes.empty:
                 # Initialise by generating initsteps random solutions.
                 # If map is still empty: force to do generation instead of mutation.
-                new_individuals = self.env.random()
+                new_individuals: list[Genotype] = self.env.random()
             else:
-                # Randomly select an elite from the map.
-                map_ix = self.random_selection()
-                selected_elite = self.genomes[map_ix]
+                # Randomly select a batch of elites from the map.
+                batch: list[Genotype] = []
+                for _ in range(self.env.batch_size):
+                    map_ix = self.random_selection()
+                    batch.append(self.genomes[map_ix])
                 # Mutate the elite.
-                new_individuals = self.env.mutate(selected_elite)
+                new_individuals = self.env.mutate(batch)
 
             # `new_individuals` is a list of generation/mutation. We put them
             # into the behavior space one-by-one.
+            # TODO: account for the case where multiple new individuals are
+            # placed in the same niche, for saving histories.
             for individual in new_individuals:
                 map_ix = self.to_mapindex(individual.to_phenotype())
                 # if the return is None, the individual is invalid and is thrown
@@ -230,6 +234,7 @@ class MAPElites:
                     continue
 
                 if self.save_history:
+                    # TODO: thresholding
                     self.history[map_ix].append(individual)
                 self.nonzero[map_ix] = True
 

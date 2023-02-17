@@ -39,7 +39,7 @@ flask run
 ```
 ## Running the MAP-Elites
 We have a few toy environments implemented as well as the Sodarace environment in the ELM paper. One may try to do the following (after setting up with the sandbox server in the same machine).
-
+# TODO: Update
 First, download the codegen-350M model.
 ```bash
 wget -P checkpoints https://storage.googleapis.com/sfr-codegen-research/checkpoints/codegen-350M-mono.tar.gz && tar -xvf checkpoints/codegen-350M-mono.tar.gz -C checkpoints/
