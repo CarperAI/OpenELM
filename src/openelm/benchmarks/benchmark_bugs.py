@@ -151,7 +151,7 @@ class BenchmarkBugs:
             completions: list[str] = sample(
                 encoding, self.cfg, self.model, self.tokenizer, starting_idx=0, **kwargs
             )
-            for j, text in enumerate(completions):
+            for _, text in enumerate(completions):
                 # split the diff text according to <NME>, <BEF>, <MSG>, <DFF>.
                 parsed: dict = split_diff(text)
                 # truncate the diff hunk at the first line not starting with " ",

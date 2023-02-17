@@ -23,42 +23,17 @@ Roughly, ELM consists of a pipeline of different components:
 | Conditional RL | --------------> | Language model | <---------------------> | Sandbox server |
 +----------------+                 +----------------+                         +----------------+
 ```
-We currently implemented MapElites, Environment, a part of the Language model mutation operator (prompt mutation), and the sandbox server.
-
-In the next stage, we will complete the conditional generation with RL pipeline.
+The basic workflow consists of generate -> evaluate -> finetune. We currently have implemented everything except the conditional RL part.
 
 # Running ELM
-Currently, we can run the MAP-Elites algorithm on [a few environments](https://github.com/CarperAI/OpenELM/blob/main/elm/environments/environments.py), apply [prompt mutations](https://github.com/CarperAI/OpenELM/blob/main/elm/diff_model.py), and connect with [sandbox server](https://github.com/CarperAI/OpenELM/tree/main/elm/sandbox). The RL components are still on-going.
+Currently, we can run the MAP-Elites algorithm on [a few environments](https://github.com/CarperAI/OpenELM/blob/main/elm/environments/environments.py), apply [prompt mutations](https://github.com/CarperAI/OpenELM/blob/main/elm/diff_model.py), and connect with an optional [sandbox server](https://github.com/CarperAI/OpenELM/tree/main/elm/sandbox).
 
-## Setting up the sandbox
-Ideally, please follow the [sandboxing readme](https://github.com/CarperAI/OpenELM/tree/main/elm/sandbox) to set it up in a docker container. But for quick testing purpose, one may try the following:
+## Sandbox
+To use the code execution sandbox, see the [sandboxing readme](https://github.com/CarperAI/OpenELM/tree/main/elm/sandbox) for instructions to set it up in a docker container. But for quick testing purpose, one may try the following:
 ```bash
 cd elm/sandbox/server
 export FLASK_APP=index.py
 flask run
 ```
-## Running the MAP-Elites
-We have a few toy environments implemented as well as the Sodarace environment in the ELM paper. One may try to do the following (after setting up with the sandbox server in the same machine).
-# TODO: Update
-First, download the codegen-350M model.
-```bash
-wget -P checkpoints https://storage.googleapis.com/sfr-codegen-research/checkpoints/codegen-350M-mono.tar.gz && tar -xvf checkpoints/codegen-350M-mono.tar.gz -C checkpoints/
-```
-Once it is done, run the MAP-Elites with prompt mutations using codegen-350M.
-```bash
-python3 run_elm.py
-python3 run_elm.py --config-name=elm_image_cfg
-```
-
-
-# Milestones & Progress
-
-Weekly meetings are in the EleutherAI discord at 20:00 UTC on Fridays.
-
-- [x] Sodarace environment implemented
-- [x] Stage 1: Diff Models & MAP-Elites
-  - [x] Prompt Engineering on CodeGen
-  - [x] Train diff model
-  - [x] MAP-Elites implemented
-- [ ] Stage 2: Train LLM on generated data
-- [ ] Stage 3: Conditional generation with PPO
+## Running MAP-Elites
+We have a few toy environments implemented as well as the Sodarace environment in the ELM paper. The `run_elm.py` file gives an example of how to run an ELM loop with MAP-Elites using the Sodarace environment.
