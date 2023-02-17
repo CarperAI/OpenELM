@@ -1,4 +1,4 @@
-from openelm.environments.sodaracer.walker.walk_creator import walker_creator
+from openelm.environments.sodaracer.walker import walker_creator
 
 
 def make_square(wc, x0, y0, x1, y1):

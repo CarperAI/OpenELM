@@ -1,6 +1,6 @@
 import numpy as np
 
-from .environments import (
+from openelm.environments.environments import (
     BaseEnvironment,
     FunctionOptim,
     Genotype,
@@ -8,6 +8,7 @@ from .environments import (
     MatchString,
     Sodarace,
 )
+from openelm.environments.sodaracer import IMPORTS, SQUARE, SQUARE_PREREQ
 
 # ----- Generate sample seeds and init args for environments -----
 # They are simple template arguments to initialize several environments.
@@ -26,7 +27,6 @@ def draw_blue_rectangle() -> np.ndarray:
 \treturn pic
 """,
     "result_obj": None,
-    "error_code": 0,
 }
 exec(IMAGE_SEED["program_str"], globals())
 IMAGE_SEED["result_obj"] = globals()["draw_blue_rectangle"]()
@@ -38,41 +38,7 @@ for y in range(32):
 
 
 SQUARE_SEED = {
-    "program_str": """from openelm.environments.sodaracer.walker.walk_creator import walker_creator
-
-
-def make_square(wc, x0, y0, x1, y1):
-    \"\"\"Make a square with top left x0,y0 and top right x1,y1.\"\"\"
-    j0 = wc.add_joint(x0, y0)
-    j1 = wc.add_joint(x0, y1)
-    j2 = wc.add_joint(x1, y1)
-    j3 = wc.add_joint(x1, y0)
-    return j0, j1, j2, j3
-
-
-def make_walker():
-    wc = walker_creator()
-
-    # the main body is a square
-    sides = make_square(wc, 0, 0, 10, 10)
-    center = wc.add_joint(5, 5)
-
-    # connect the square with distance muscles
-    for k in range(len(sides) - 1):
-        wc.add_muscle(sides[k], sides[k + 1])
-    wc.add_muscle(sides[3], sides[0])
-
-    # one prong of the square is a distance muscle
-    wc.add_muscle(sides[3], center)
-
-    # the other prongs from the center of the square are active
-    wc.add_muscle(sides[0], center, 5.0, 0.0)
-    wc.add_muscle(sides[1], center, 10.0, 0.0)
-    wc.add_muscle(sides[2], center, 2.0, 0.0)
-
-    return wc.get_walker()
-
-""",
+    "program_str": IMPORTS + SQUARE_PREREQ + SQUARE,
     "result_obj": {
         "joints": [(0, 0), (0, 10), (10, 10), (10, 0), (5, 5)],
         "muscles": [
@@ -86,7 +52,6 @@ def make_walker():
             [2, 4, {"type": "muscle", "amplitude": 2.0, "phase": 0.0}],
         ],
     },
-    "error_code": 0,
 }
 
 # A sample init args for ImageOptim
@@ -99,12 +64,7 @@ image_init_args = {
 }
 
 # A sample init args for Sodarace
-sodarace_init_args = {
-    "seed": SQUARE_SEED,
-    "config": "openelm/config/elm_sodarace_cfg.yaml",
-    "diff_model": None,
-    "eval_steps": 1000,
-}
+sodarace_init_args = {"seed": SQUARE_SEED, "diff_model": None, "eval_ms": 1000}
 
 # ----- (Sample init args end) -----
 

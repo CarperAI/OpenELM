@@ -4,10 +4,10 @@ from typing import Optional
 import numpy as np
 from tqdm import trange
 
-from openelm.environments import BaseEnvironment
+from openelm.environments import BaseEnvironment, Genotype
 
 Phenotype = Optional[np.ndarray]
-Mapindex = Optional[tuple]
+MapIndex = Optional[tuple]
 
 
 class Map:
@@ -16,6 +16,7 @@ class Map:
 
     This class is necessary to handle the circular buffer for the history dimension.
     """
+
     def __init__(
         self,
         dims: tuple,
@@ -81,6 +82,21 @@ class Map:
         else:
             return self.array[0].size
 
+    @property
+    def qd_score(self) -> float:
+        """Returns the quality-diversity score of the map."""
+        return self.array[np.isfinite(self.array)].sum()
+
+    @property
+    def maximum(self) -> float:
+        """Returns the maximum value in the map."""
+        return self.array.max()
+
+    @property
+    def niches_filled(self) -> int:
+        """Returns the number of niches in the map that have been explored."""
+        return np.count_nonzero(np.isfinite(self.array))
+
 
 class MAPElites:
     """
@@ -92,8 +108,14 @@ class MAPElites:
     the solutions in the map, and places the mutated solutions in the map if they
     outperform the solutions already in their niche.
     """
+
     def __init__(
-        self, env, n_bins: int, history_length: int, save_history: bool = False
+        self,
+        env,
+        n_bins: int,
+        init_map: Optional[Map] = None,
+        history_length: int = 1,
+        save_history: bool = False,
     ):
         """
         Class implementing MAP-Elites, a quality-diversity algorithm.
@@ -104,6 +126,8 @@ class MAPElites:
             methods to generate random solutions, mutate existing solutions,
             and evaluate solutions for their fitness in the environment.
             n_bins (int): Number of bins to partition the behavior space into.
+            init_map (Map, optional): A map to use for the algorithm. If not passed,
+            a new map will be created. Defaults to None.
             history_length (int): Length of history to store for each niche (cell)
             in the map. This acts as a circular buffer, so after storing
             `history_length` items, the buffer starts overwriting the oldest
@@ -118,16 +142,19 @@ class MAPElites:
         self.save_history = save_history
         # self.history will be set/reset each time when calling `.search(...)`
         self.history: dict = defaultdict(list)
-
         # discretization of space
         self.bins = np.linspace(*env.behavior_space, n_bins + 1)[1:-1].T  # type: ignore
+        # TODO: abstract all maps out to a single class.
         # perfomance of niches
-        self.fitnesses: Map = Map(
-            dims=(n_bins,) * env.behavior_ndim,
-            fill_value=-np.inf,
-            dtype=float,
-            history_length=history_length,
-        )
+        if init_map is None:
+            self.fitnesses: Map = Map(
+                dims=(n_bins,) * env.behavior_ndim,
+                fill_value=-np.inf,
+                dtype=float,
+                history_length=history_length,
+            )
+        else:
+            self.fitnesses = init_map
         # niches' sources
         self.genomes: Map = Map(
             dims=self.fitnesses.dims,
@@ -143,7 +170,7 @@ class MAPElites:
 
         print(f"MAP of size: {self.fitnesses.dims} = {self.fitnesses.map_size}")
 
-    def to_mapindex(self, b: Phenotype) -> Mapindex:
+    def to_mapindex(self, b: Phenotype) -> MapIndex:
         """Converts a phenotype (position in behaviour space) to a map index."""
         return (
             None
@@ -151,12 +178,12 @@ class MAPElites:
             else tuple(np.digitize(x, bins) for x, bins in zip(b, self.bins))
         )
 
-    def random_selection(self) -> Mapindex:
+    def random_selection(self) -> MapIndex:
         """Randomly select a niche (cell) in the map that has been explored."""
         ix = np.random.choice(np.flatnonzero(self.nonzero.array))
         return np.unravel_index(ix, self.nonzero.dims)
 
-    def search(self, initsteps: int, totalsteps: int, atol=1) -> str:
+    def search(self, initsteps: int, totalsteps: int, atol: float = 1.0) -> str:
         """
         Run the MAP-Elites search algorithm.
 
@@ -164,7 +191,7 @@ class MAPElites:
             initsteps (int): Number of initial random solutions to generate.
             totalsteps (int): Total number of steps to run the algorithm for,
                 including initial steps.
-            atol (int, optional): Tolerance for how close the best performing
+            atol (float, optional): Tolerance for how close the best performing
                 solution has to be to the maximum possible fitness before the
                 search stops early. Defaults to 1.
 
@@ -183,24 +210,31 @@ class MAPElites:
             if n_steps < initsteps or self.genomes.empty:
                 # Initialise by generating initsteps random solutions.
                 # If map is still empty: force to do generation instead of mutation.
-                new_individuals = self.env.random()
+                new_individuals: list[Genotype] = self.env.random()
             else:
-                # Randomly select an elite from the map.
-                map_ix = self.random_selection()
-                selected_elite = self.genomes[map_ix]
+                # Randomly select a batch of elites from the map.
+                batch: list[Genotype] = []
+                for _ in range(self.env.batch_size):
+                    map_ix = self.random_selection()
+                    batch.append(self.genomes[map_ix])
                 # Mutate the elite.
-                new_individuals = self.env.mutate(selected_elite)
+                new_individuals = self.env.mutate(batch)
 
-            # `new_individuals` is a list of generation/mutation. We put them into the behavior space one-by-one.
+            # `new_individuals` is a list of generation/mutation. We put them
+            # into the behavior space one-by-one.
+            # TODO: account for the case where multiple new individuals are
+            # placed in the same niche, for saving histories.
             for individual in new_individuals:
-                map_ix = self.to_mapindex(self.env.to_behavior_space(individual))
-                # if the return is None, the individual is invalid and is thrown into the recycle bin.
+                map_ix = self.to_mapindex(individual.to_phenotype())
+                # if the return is None, the individual is invalid and is thrown
+                # into the recycle bin.
                 if map_ix is None:
                     self.recycled[self.recycled_count % len(self.recycled)] = individual
                     self.recycled_count += 1
                     continue
 
                 if self.save_history:
+                    # TODO: thresholding
                     self.history[map_ix].append(individual)
                 self.nonzero[map_ix] = True
 
@@ -215,42 +249,26 @@ class MAPElites:
                     max_genome = individual
 
                     tbar.set_description(f"{max_fitness=:.4f}")
-                # If best fitness is within atol of the maximum possible fitness, stop.
+                # Stop if best fitness is within atol of maximum possible fitness.
                 if np.isclose(max_fitness, self.env.max_fitness, atol=atol):
                     break
 
         self.current_max_genome = max_genome
         return str(max_genome)
 
-    def plot(self):
-        import matplotlib
-        from matplotlib import pyplot
-
-        matplotlib.rcParams["font.family"] = "Futura"
-        matplotlib.rcParams["figure.dpi"] = 100
-        matplotlib.style.use("ggplot")
-
-        ix = tuple(np.zeros(self.fitnesses.array.ndim - 2, int))
-        print(ix)
-        map2d = self.fitnesses[ix]
-        print(f"{map2d.shape=}")
-
-        pyplot.pcolor(map2d, cmap="inferno")
-        pyplot.show()
-
     def niches_filled(self):
         """Get the number of niches that have been explored in the map."""
-        return np.count_nonzero(self.nonzero.array)
+        return self.fitnesses.niches_filled
 
     def maximum_fitness(self):
         """Get the maximum fitness value in the map."""
-        return self.fitnesses.array.max()
+        return self.fitnesses.maximum
 
-    def quality_diversity_score(self):
+    def qd_score(self):
         """
         Get the quality-diversity score of the map.
 
         The quality-diversity score is the sum of the performance of all solutions
         in the map.
         """
-        return self.fitnesses.array[np.isfinite(self.fitnesses.array)].sum()
+        return self.fitnesses.qd_score

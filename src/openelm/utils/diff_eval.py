@@ -2,7 +2,9 @@ import re
 from enum import Enum
 from typing import Optional
 
-line_number_pattern = re.compile(r"(?m)^@@ -(?P<l1>\d*),*?(?P<s1>\d*?) \+(?P<l2>\d*),*?(?P<s2>\d*?) @@")
+line_number_pattern = re.compile(
+    r"(?m)^@@ -(?P<l1>\d*),*?(?P<s1>\d*?) \+(?P<l2>\d*),*?(?P<s2>\d*?) @@"
+)
 diff_pattern = re.compile(
     r"""<NME> (?P<name>.*?)
 <BEF> (?P<file>(.|\n)*?)
@@ -69,12 +71,17 @@ def parse_line_info(content: str) -> tuple:
         return ()
     match_dict = match.groupdict()
     # line numbers are mandatory
-    if not match_dict['l1'] or not match_dict['l2']:
+    if not match_dict["l1"] or not match_dict["l2"]:
         return ()
-    for s in ['s1', 's2']:
+    for s in ["s1", "s2"]:
         # line ranges are optional and default to 1
-        match_dict[s] = match_dict[s] if match_dict[s] else '1'
-    return int(match_dict['l1']), int(match_dict['s1']), int(match_dict['l2']), int(match_dict['s2'])
+        match_dict[s] = match_dict[s] if match_dict[s] else "1"
+    return (
+        int(match_dict["l1"]),
+        int(match_dict["s1"]),
+        int(match_dict["l2"]),
+        int(match_dict["s2"]),
+    )
 
 
 def parse_diff_content(
@@ -111,11 +118,13 @@ def parse_diff_content(
         return "\n".join(before_diff), "\n".join(after_diff)
 
 
-def replace_text(text: str,
-                 before: str,
-                 after: str,
-                 start_pointer: int,
-                 reject_incomplete_line: bool = True) -> tuple[str, int]:
+def replace_text(
+    text: str,
+    before: str,
+    after: str,
+    start_pointer: int,
+    reject_incomplete_line: bool = True,
+) -> tuple[str, int]:
     """
     Try to match `before` within `text` and replace the content into `after`.
     If not found, return the original text.
@@ -135,14 +144,20 @@ def replace_text(text: str,
 
     if reject_incomplete_line:
         # If the end of the match is neither EOF nor \n, reject the patch.
-        if idx >= 0 and start_idx + len(before) < len(text) and text[start_idx + len(before)] != '\n':
+        if (
+            idx >= 0
+            and start_idx + len(before) < len(text)
+            and text[start_idx + len(before)] != "\n"
+        ):
             return text, start_pointer
 
     if idx < 0:
         return text, start_pointer
     else:
         # Even if start_idx + len(before) is out-of-bound, the list slicing would return ""
-        return text[:start_idx] + after + text[start_idx + len(before):], start_idx + len(after)
+        return text[:start_idx] + after + text[
+            start_idx + len(before) :
+        ], start_idx + len(after)
 
 
 def apply_diff(file: str, diff: str, use_line_number=False, allow_add_file=True) -> str:
@@ -212,20 +227,27 @@ def apply_diff(file: str, diff: str, use_line_number=False, allow_add_file=True)
                 if start_idx == 0:  # Add lines to the beginning.
                     file_by_line = parsed_diff[1] + file_by_line
                 else:
-                    file_by_line = file_by_line[: start_idx - 1] + parsed_diff[1] + \
-                                   file_by_line[start_idx - 1 + line_info[1]:]
+                    file_by_line = (
+                        file_by_line[: start_idx - 1]
+                        + parsed_diff[1]
+                        + file_by_line[start_idx - 1 + line_info[1] :]
+                    )
                 line_offset += len(parsed_diff[1]) - line_info[1]
         else:
             # CAUTION: this way of handling empty context is being very lenient and could lead to
             # undesirable behaviors. Only do this when you want to be as tolerant as possible.
             if parsed_diff[0] == "":
-                if patch_pointer != 0:  # Lack of matching context can only happen at the beginning of file.
+                if (
+                    patch_pointer != 0
+                ):  # Lack of matching context can only happen at the beginning of file.
                     continue
                 file = parsed_diff[1] + "\n" + file
                 patch_pointer = len(parsed_diff[0]) + 1
             else:
                 # Directly (and naively) apply patch by match-and-replace.
-                file, patch_pointer = replace_text(file, parsed_diff[0], parsed_diff[1], patch_pointer)
+                file, patch_pointer = replace_text(
+                    file, parsed_diff[0], parsed_diff[1], patch_pointer
+                )
 
     if use_line_number:
         file = "\n".join(file_by_line)
@@ -243,7 +265,9 @@ def verify_diff(diff_text: str) -> DiffState:
     Returns:
         A DiffState (see above).
     """
-    diff_dict = split_diff(ignored.sub("", diff_text))  # Ignore the GitHub warning on the end of file
+    diff_dict = split_diff(
+        ignored.sub("", diff_text)
+    )  # Ignore the GitHub warning on the end of file
     line_offset = 0
 
     keys = ["name", "file", "message", "diff"]

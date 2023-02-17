@@ -1,4 +1,4 @@
-from openelm.sandbox.server.environments.walker.walk_creator import walker_creator
+from .walk_creator import walker_creator
 
 
 def make_square(wc, x0, y0, x1, y1):

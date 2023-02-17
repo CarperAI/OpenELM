@@ -1,4 +1,4 @@
-from openelm.sandbox.server.environments.walker.walk_creator import walker_creator
+from .walk_creator import walker_creator
 
 
 def query_cppn(wc, xgrid, ygrid, scale, connect_func, amp_func, phase_func):
