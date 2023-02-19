@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from Box2D import Box2D as b2
+from Box2D.examples.framework import Framework, main
 
 from openelm.environments.sodaracer.helpers import (
     Bone,
@@ -23,10 +24,12 @@ from openelm.environments.sodaracer.helpers import (
 )
 
 
-class IESoRWorld:
+class IESoRWorld(Framework):
     """Class for the Sodarace simulation."""
+    name: "IESoRWorld"
 
     def __init__(self, canvas_size: tuple[int, int] = (200, 150)):
+        super(IESoRWorld, self).__init__()
         """
         Initialize the world.
 
@@ -578,7 +581,6 @@ class IESoRWorld:
         self.shape_list.append(shape_id)
         return shape_id
 
-
 def load_data_file(file_path: Path) -> str:
     """Load object from data file."""
     with open(file_path) as f:
@@ -633,3 +635,7 @@ class SodaraceSimulator:
             # print(self.world.bone_list)
             # print(self.world.muscle_list)
             return None
+
+
+if __name__ == "__main__":
+    main(IESoRWorld)

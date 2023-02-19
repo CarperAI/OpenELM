@@ -6,11 +6,15 @@ Python version of [iesor-physics](https://github.com/OptimusLime/iesor-physics)
 
 Get https://github.com/pybox2d/pybox2d
 
-Also if you want to view what's happening from a specific json,
+Use pygame to view your world.
+Install the requirements:
 
 ```bash
-pip install -r requirements_test.txt
+pip install -r requirements_visualization.txt
 ```
+
+View your world:
+python simulator.py --backend=pygame
 
 ## How to use
 
