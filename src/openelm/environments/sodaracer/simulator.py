@@ -56,7 +56,8 @@ class IESoRWorld(Framework):
         self.gravity = b2.b2Vec2(0.0, -15.0)  # ??? Magic numbers.
         # Construct a world object, which will hold and simulate the rigid bodies.
 
-        self.world: b2.b2World = b2.b2World(self.gravity)
+        self.world.gravity = self.gravity
+        #self.world: b2.b2World = b2.b2World(self.gravity)
         self.world.autoClearForces = False
 
         self.groundBodyDef: b2.b2BodyDef = b2.b2BodyDef()
