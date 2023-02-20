@@ -23,8 +23,9 @@ def make_walker():
     center = wc.add_joint(cx + 1, cy + 1)
     for j in range(num_points):
         for i in range(num_points - 5):
+            # removed 0.0 (old 3rd param value) as it was used in deprecated isDistance
             wc.add_muscle(
-                points[j], points[(i + j) % num_points], 0.0, 1.0, (j + 1) / num_points
+                points[j], points[(i + j) % num_points], 1.0, (j + 1) / num_points
             )
         wc.add_muscle(points[j], center, 3, (j + 1) / num_points)
     return wc.get_walker()
