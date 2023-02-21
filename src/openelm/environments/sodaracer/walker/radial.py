@@ -19,7 +19,6 @@ def make_circle(wc, cx, cy, radius, num_points):
 
 
 def make_walker():
-
     wc = walker_creator()
 
     num_points = 8

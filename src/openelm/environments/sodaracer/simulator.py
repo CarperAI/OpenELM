@@ -208,8 +208,7 @@ class IESoRWorld(Framework):
                     1.0
                     + muscle.amplitude
                     * math.cos(self.radians + muscle.phase * 2 * math.pi)
-                    * muscle.original_length
-                )
+                ) * muscle.original_length
                 # Set our length as the calculate value for this joint
                 DistanceAccessor.setLength(distance_joint, length_calc)
             # Frame rate, velocity iterations, position iterations
