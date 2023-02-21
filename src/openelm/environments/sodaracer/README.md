@@ -7,42 +7,46 @@ Python version of [iesor-physics](https://github.com/OptimusLime/iesor-physics)
 Get https://github.com/pybox2d/pybox2d
 
 Use pygame to view your world.
-Install the requirements:
+Install the requirements from the OpenELM base directory:
 
 ```bash
-pip install -r requirements_visualization.txt
+pip install -e .[sodaracer]
 ```
 
 View your world:
 python simulator.py --backend=pygame
 
-## How to use
+## Loading and visualizing walker on terrain
+
+Run the example script:
+```bash
+python environment_sandbox.py --backend=pygame
+```
+
+Which contains something like:
 
 ```python
-import simulator
-import json
-
-myWorld = simulator.IESoRWorld()
-with open('example_bodies/jsBody142856.json', 'r') as f:
-    initial_dict = myWorld.load_body_into_world(json.load(f), myWorld.canvas)
-# 350 is the maximum, so just run it a bunch...
-[myWorld.updateWorld(350) for i in range(1000)]
-start = initial_dict['startX']
-# Could potentially just grab the bones instead, but if it's all
-# muscle then you'd need to grab a muscle.
-end = min(
-    [bone.joint.bodyA.position.x for bone in myWorld.bone_list] +
-    [muscle.joint.bodyA.position.x for muscle in myWorld.muscle_list]
+from openelm.environments.sodaracer.simulator import IESoRWorld
+from openelm.environments.sodaracer.walker.runner import (
+    make_walker as make_walker_runner,
 )
-print(start, end - initial_dict['offsetX'])
+from Box2D.examples.framework import main
+
+
+# demo class and script (inherits from original simulator.py class)
+class DemoLoadWalkerWorld(IESoRWorld):
+    def __init__(self, canvas_size: tuple[int, int] = (200, 150)):
+        super().__init__(canvas_size)
+        # here we import an example make_walker method, and load it to world
+        self.load_body_into_world(make_walker_runner().to_dict())
+
+
+if __name__ == "__main__":
+    # run with `python environment_sandbox.py backend=pygame`
+    main(DemoLoadWalkerWorld)
 ```
 
-to simulate your world.
-
-if you want to view it:
-```bash
-python -m framework_simulator
-```
+To load a different walker on the flat terrain (aside from the `runner`), you can change the second import to load the desired walker from implemented walkers.
 
 ## TODO
 

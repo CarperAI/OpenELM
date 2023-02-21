@@ -21,7 +21,7 @@ def make_walker(
     wc = walker_creator()
     ends = [
         make_sensor(wc, 5 + dx, -1 + dy, ddr, ddc, 4.5),
-        make_sensor(wc, 0, -0.1, 8.0, 9.5, 0.03), # replace "sid" with 8.0 (from paper)
+        make_sensor(wc, 0, -0.1, 8.0, 9.5, 0.03),  # replace "sid" with 8.0 (from paper)
         make_sensor(wc, 5.5, -0.001, 5.0, 4.86 + 0.8, 0.07),
         make_sensor(wc, 5.5, -3.0, 6.0, 4.86 + 0.8, 0.07),
         make_sensor(wc, 0, dx, ddr, ddc, 1.0),

@@ -26,6 +26,7 @@ from openelm.environments.sodaracer.helpers import (
 
 class IESoRWorld(Framework):
     """Class for the Sodarace simulation."""
+
     name: "IESoRWorld"
 
     def __init__(self, canvas_size: tuple[int, int] = (200, 150)):
@@ -57,7 +58,7 @@ class IESoRWorld(Framework):
         # Construct a world object, which will hold and simulate the rigid bodies.
 
         self.world.gravity = self.gravity
-        #self.world: b2.b2World = b2.b2World(self.gravity)
+        # self.world: b2.b2World = b2.b2World(self.gravity)
         self.world.autoClearForces = False
 
         self.groundBodyDef: b2.b2BodyDef = b2.b2BodyDef()
@@ -581,6 +582,7 @@ class IESoRWorld(Framework):
         shape_id = str(self.static_body_count)
         self.shape_list.append(shape_id)
         return shape_id
+
 
 def load_data_file(file_path: Path) -> str:
     """Load object from data file."""
