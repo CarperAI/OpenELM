@@ -2,7 +2,7 @@ from flask import Flask, request
 from numpy import ndarray
 
 from .environments.walker.walk_creator import Walker
-from .sandbox_codex_execute import unsafe_execute
+from .sandbox_codex_execute import unsafe_execute, ExecResult
 
 app = Flask(__name__)
 
@@ -32,9 +32,9 @@ def generate_racer(code_str, timeout):
                 walker=execution_result.to_dict(),
                 unsafe_execute_error_code=1,
             )
-    elif isinstance(execution_result, int):
+    elif isinstance(execution_result, ExecResult):
         return bad_request(
-            "Failed sandbox_unsafe_execute", unsafe_execute_error_code=execution_result
+            "Failed sandbox_unsafe_execute", unsafe_execute_error_code=execution_result.name
         )
     else:
         return bad_request(
@@ -67,10 +67,10 @@ def evaluate_function():
                 "program_str": req_json["code"],
                 "result_obj": execution_result.tolist().__repr__(),
             }, 200
-        elif isinstance(execution_result, int):
+        elif isinstance(execution_result, ExecResult):
             return bad_request(
                 "Failed sandbox_unsafe_execute",
-                unsafe_execute_error_code=execution_result,
+                unsafe_execute_error_code=execution_result.name,
             )
         else:
             bad_request(
