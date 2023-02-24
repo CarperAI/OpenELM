@@ -26,7 +26,6 @@ import tempfile
 from enum import Enum
 from typing import Any, Optional
 
-
 class ExecResult(Enum):
     """An Enum to represent the result for the execution of generated code."""
 
@@ -66,9 +65,15 @@ def unsafe_execute(
                 exec(code_str, code_dct)
                 if ground_truth is None:
                     if args is None:
-                        return code_dct[func_name]()
+                        result = code_dct[func_name]()
                     elif args is not None:
-                        return code_dct[func_name](**args)
+                        result = code_dct[func_name](**args)
+                    
+                    # Temporary fix: multiprocessing.pool.map cannot return 'generators'
+                    if isinstance(result, range):
+                        result = list(result)
+
+                    return result
                 elif ground_truth is not None:
                     if all(
                         [

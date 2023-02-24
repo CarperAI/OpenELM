@@ -217,9 +217,9 @@ class PromptMutationForP3(PromptMutationModel):
     def __init__(self, cfg, sandbox_server="http://localhost:5000") -> None:
         function_template = FunctionTemplate(
             func_name="g6",
-            import_line="from typing import List", # The only import that's necessary as of P3 v0.2
+            import_line="from typing import List\n", # The only import that's necessary as of P3 v0.2
             func_preamble="",
-            return_line="",
+            instruction="",
         )
         super().__init__(cfg, function_template, sandbox_server)
 
@@ -254,8 +254,19 @@ class PromptMutationForP3(PromptMutationModel):
             timeout=timeout,
         )
 
-    def _post_process(self, response_dict: dict) -> dict:
-        pass
+    def _post_process(self, results: list) -> list:
+        if self.cfg.sandbox:
+            return results
+        else:
+            result_list: list = []
+            for i, result in enumerate(results):
+                result_list.append(
+                    {
+                        "program_str": self.truncations[i],
+                        "result_obj": result,
+                    }
+                )
+            return result_list
 
 
 class DiffModel(PromptMutationModel):

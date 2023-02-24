@@ -88,9 +88,9 @@ def evaluate_p3_solution():
         execution_result = unsafe_execute(
             req_json["code"], req_json["func_name"], req_json["timeout"]
         )
-        if isinstance(execution_result, int):
+        if isinstance(execution_result, ExecResult):
             return bad_request(
-                f"failed sandbox_unsafe_execute", unsafe_execute_error_code=execution_result.error_code
+                f"failed sandbox_unsafe_execute", unsafe_execute_error_code=execution_result.name
             )
         return {"program_str": req_json["code"],
                 "result_obj": execution_result.__repr__()}, 200

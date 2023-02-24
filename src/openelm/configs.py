@@ -91,6 +91,35 @@ class ImageELMConfig(BaseConfig):
     run_name: Optional[str] = None
     sandbox: bool = False
 
+@dataclass
+class P3ELMConfig(BaseConfig):
+    hydra: Any = field(
+        default_factory=lambda: {
+            "run": {"dir": "logs/elm/p3/${hydra.job.override_dirname}"}
+        }
+    )
+    model: str = "Salesforce/codegen-350M-mono"
+    batch_size: int = 32
+    solutions_per_problem: int = 128
+    prompt_size: str = 'long' # med or long
+    fp16: bool = True
+    cuda: bool = True
+    gpus: int = 1
+    seed: Optional[int] = None
+    debug: bool = False
+    deterministic: bool = False
+    top_p: float = 0.95
+    temp: float = 0.85
+    timeout: float = 1.0  # Seconds
+    evaluation_steps: int = 1000  # Milliseconds
+    gen_max_len: int = 1024
+    evo_init_steps: int = 10
+    evo_n_steps: int = 15
+    behavior_n_bins: int = 12
+    evo_history_length: int = 1
+    processes: int = 12
+    run_name: Optional[str] = None
+    sandbox: bool = False
 
 # TODO: Hierarchy of configs
 # e.g. ModelConfig, QDConfig, EnvConfig, etc.

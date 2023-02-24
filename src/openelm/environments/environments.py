@@ -15,6 +15,7 @@ from openelm.diff_model import (
 )
 from openelm.environments.sodaracer import SodaraceSimulator
 from openelm.diff_model import FunctionTemplate
+from openelm.utils.code_eval import pool_exec_processes
 
 Phenotype = Optional[np.ndarray]
 
@@ -422,21 +423,22 @@ class Sodarace(BaseEnvironment[Sodaracer]):
 
 
 class P3Solution(Genotype):
-    def __init__(self, program_str: str, result_obj: dict, error_code: bool):
+    def __init__(self, program_str: str, result_obj: dict):
         """
         Genotype for a programming puzzle solution.
 
         Args:
-            program_str: the solution program string aka the g6() function definition.
+            program_str: the solution program string (the g6() function).
             result_obj: dict.
-            error_code: whether the code executes in the sandbox.
         """
         self.program_str = program_str
         self.result_obj = result_obj
-        self.error_code = error_code
 
     def __str__(self) -> str:
         return self.program_str
+
+    def to_phenotype(self) -> Optional[Phenotype]:
+        return None
 
 
 class P3Problem(BaseEnvironment[P3Solution]):
@@ -462,7 +464,7 @@ class P3Problem(BaseEnvironment[P3Solution]):
         """
         if isinstance(seed, dict):
             self.seed = seed
-            self.seed['program_str'] += "\n" + problem_func # add this particular problem
+            self.seed['program_str'] += "\n\n" + problem_func + "\n\n" # add this particular problem to the prompt
         else:
             raise TypeError
         self.config = self._load_config(config)
@@ -476,16 +478,17 @@ class P3Problem(BaseEnvironment[P3Solution]):
 
         self.diff_model.func_template = FunctionTemplate(func_name=self.diff_model.func_template.func_name,
                                                          import_line=self.diff_model.func_template.import_line,
-                                                         func_preamble=solution_preamble, # include params for g6()
-                                                         return_line=self.diff_model.func_template.return_line)
+                                                         func_preamble=f'{solution_preamble}\n', # include params for g6()
+                                                         instruction=self.diff_model.func_template.instruction)
 
         self.problem_func = problem_func
+        self.config = config
 
-    def generate_program(self, code: str) -> list[P3Solution]:
+    def generate_program(self, code_batch: list[str]) -> list[P3Solution]:
         # Call LM to generate solution code and run it
         return [
             P3Solution(**generated)
-            for generated in self.diff_model.generate_program(code, without_trunc=False)
+            for generated in self.diff_model.generate_program(code_batch)
         ]
 
     def fitness(self, x: P3Solution) -> float:
@@ -493,20 +496,28 @@ class P3Problem(BaseEnvironment[P3Solution]):
         If passing the solution to the problem returns True, fitness is 1.0
             else 0.0
         """
-        run_eval = ( 
+        eval_code = ( 
             f"{self.diff_model.func_template.import_line}\n"
             f"{self.problem_func}\n"
             f"def run_eval():\n"
             f"    return f6({x.result_obj})"
         )
-        result = self.diff_model.run_code(code=run_eval, func_name='run_eval')
-        if result['error_code'] == '0' and result['result_obj'] == 'True':
+
+        result = pool_exec_processes(
+            eval_code,
+            func_name='run_eval',
+            timeout=self.config['timeout'],
+            processes=self.config['processes'],
+            debug=self.config['debug'],
+        )
+        if result[0] == True:
             return 1.0
         else:
             return 0.0
 
     def random(self) -> list[P3Solution]:
-        new_solutions = self.generate_program(self.seed['program_str'])
+        program_str_list = [self.seed['program_str']] * self.config['batch_size']
+        new_solutions = self.generate_program(program_str_list)
         return new_solutions
 
     def mutate(self, x: P3Solution) -> list[P3Solution]:
