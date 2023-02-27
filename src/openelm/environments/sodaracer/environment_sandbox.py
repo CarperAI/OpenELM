@@ -1,7 +1,7 @@
-from Box2D.examples.framework import main
+from openelm.environments.sodaracer.box2d_examples.framework import main
 
 from openelm.environments.sodaracer.simulator import IESoRWorld
-from openelm.environments.sodaracer.walker.runner import (
+from openelm.environments.sodaracer.walker.radial import (
     make_walker as make_walker_runner,
 )
 

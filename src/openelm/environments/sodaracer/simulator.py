@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from Box2D import Box2D as b2
-from Box2D.examples.framework import Framework, main
+from openelm.environments.sodaracer.box2d_examples.framework import Framework, main
 
 from openelm.environments.sodaracer.helpers import (
     Bone,
