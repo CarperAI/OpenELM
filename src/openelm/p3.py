@@ -12,10 +12,8 @@ from openelm.utils.code_eval import pass_at_k
 from codegen.codegen_utilities import set_seed
 
 import hydra
-from hydra.core.config_store import ConfigStore
 from omegaconf import OmegaConf
-cs = ConfigStore.instance()
-cs.store(name="config", node=P3ELMConfig)
+
 
 class P3:
     def __init__(self, cfg, diff_model_cls=None, env_args: dict = None) -> None:

@@ -11,120 +11,108 @@ class BaseConfig:
 
 
 @dataclass
-class ConfigClass(BaseConfig):
-    model: str = MISSING
-    epochs: int = MISSING
-    batch_size: int = MISSING
-    fp16: bool = MISSING
-    cuda: bool = MISSING
-    gpus: int = MISSING
-    seed: int = MISSING
-    deterministic: bool = MISSING
-    top_p: float = MISSING
-    temp: float = MISSING
-    timeout: float = MISSING
-    gen_max_len: int = MISSING
-    evo_init_steps: int = MISSING
-    evo_n_steps: int = MISSING
-    behavior_n_bins: int = MISSING
-    evo_history_length: int = MISSING
-    evaluation_steps: int = MISSING
-    env_name: str = MISSING
-    run_name: str = MISSING
-
-
-@dataclass
-class SodaraceELMConfig(BaseConfig):
-    hydra: Any = field(
-        default_factory=lambda: {
-            "run": {"dir": "logs/elm/sodarace/${hydra.job.override_dirname}"}
-        }
-    )
-    model: str = "Salesforce/codegen-350M-mono"
-    env_name: str = "sodarace"
-    batch_size: int = 32
+class ModelConfig(BaseConfig):
     fp16: bool = True
     cuda: bool = True
     gpus: int = 1
     seed: Optional[int] = None
-    debug: bool = False
     deterministic: bool = False
     top_p: float = 0.95
     temp: float = 0.85
-    timeout: float = 5.0  # Seconds
-    eval_ms: int = 1000  # Milliseconds
     gen_max_len: int = 768
-    evo_init_steps: int = 2
-    evo_n_steps: int = 5
-    behavior_n_bins: int = 12
-    evo_history_length: int = 1
-    processes: int = 12
-    run_name: Optional[str] = None
-    sandbox: bool = False
+    batch_size: int = 32
+    model_path: str = MISSING  # Can be HF model name or path to local model
 
 
 @dataclass
-class ImageELMConfig(BaseConfig):
-    hydra: Any = field(
-        default_factory=lambda: {
-            "run": {"dir": "logs/elm/image/${hydra.job.override_dirname}"}
-        }
-    )
-    model: str = "Salesforce/codegen-350M-mono"
-    batch_size: int = 32
-    fp16: bool = True
-    cuda: bool = True
-    gpus: int = 1
-    seed: Optional[int] = None
-    debug: bool = False
-    deterministic: bool = False
-    top_p: float = 0.95
-    temp: float = 0.85
+class PromptModelConfig(ModelConfig):
+    model_path: str = "Salesforce/codegen-350M-mono"
+
+
+@dataclass
+class DiffModelConfig(ModelConfig):
+    model_path: str = "CarperAI/diff-codegen-350m-v2"
+
+
+@dataclass
+class QDConfig(BaseConfig):
+    init_steps: int = 2
+    total_steps: int = 5
+
+
+@dataclass
+class MAPElitesConfig(QDConfig):
+    history_length: int = 1
+    save_history: bool = False
+    map_grid_size: tuple[int, ...] = field(default_factory=lambda: (12,))
+
+
+@dataclass
+class EnvConfig(BaseConfig):
     timeout: float = 5.0  # Seconds
-    evaluation_steps: int = 1000  # Milliseconds
-    gen_max_len: int = 1024
-    evo_init_steps: int = 10
-    evo_n_steps: int = 15
-    behavior_n_bins: int = 12
-    evo_history_length: int = 1
-    processes: int = 12
-    run_name: Optional[str] = None
     sandbox: bool = False
+    sandbox_server: str = "http://localhost:5000"
+    processes: int = 12
+    batch_size: int = 32  # Batch size of MAP-Elites
+    env_name: str = MISSING
+    debug: bool = False
+
 
 @dataclass
-class P3ELMConfig(BaseConfig):
-    hydra: Any = field(
-        default_factory=lambda: {
-            "run": {"dir": "logs/elm/p3/${hydra.job.override_dirname}"}
-        }
+class SodaraceEnvConfig(EnvConfig):
+    env_name: str = "sodarace"
+    eval_ms: int = 1000  # Milliseconds
+    behavior_space: list[list[float]] = field(
+        default_factory=lambda: [
+            # Height, Width, Mass dimensions
+            [0, 1000],
+            [0, 1000],
+            [0, 2000],
+        ]
     )
-    model: str = "Salesforce/codegen-350M-mono"
-    batch_size: int = 32
+    starting_seeds: list[str] = field(default_factory=lambda: ["square"])
+    instruction: int = 1
+    crossover: bool = True
+
+
+@dataclass
+class ImageEnvConfig(EnvConfig):
+    env_name: str = "image_evolution"
+
+@dataclass
+class P3EnvConfig(BaseConfig):
+    env_name: str = "p3"
     solutions_per_problem: int = 128
     prompt_size: str = 'long' # med or long
-    fp16: bool = True
-    cuda: bool = True
-    gpus: int = 1
-    seed: Optional[int] = None
-    debug: bool = False
-    deterministic: bool = False
-    top_p: float = 0.95
-    temp: float = 0.85
-    timeout: float = 1.0  # Seconds
-    evaluation_steps: int = 1000  # Milliseconds
-    gen_max_len: int = 1024
-    evo_init_steps: int = 10
-    evo_n_steps: int = 15
-    behavior_n_bins: int = 12
-    evo_history_length: int = 1
-    processes: int = 12
-    run_name: Optional[str] = None
-    sandbox: bool = False
 
-# TODO: Hierarchy of configs
-# e.g. ModelConfig, QDConfig, EnvConfig, etc.
-# Also add base ELMConfig(BaseConfig)
+defaults = [
+    {"model": "prompt"},
+    {"qd": "mapelites"},
+    {"env": "sodarace"},
+    "_self_",
+]
+
+
+@dataclass
+class ELMConfig(BaseConfig):
+    hydra: Any = field(
+        default_factory=lambda: {
+            "run": {"dir": "logs/elm/${hydra.job.override_dirname}"}
+        }
+    )
+    defaults: list[Any] = field(default_factory=lambda: defaults)
+    model: Any = MISSING
+    qd: Any = MISSING
+    env: Any = MISSING
+    run_name: Optional[str] = None
+
 
 
 cs = ConfigStore.instance()
-cs.store(name="elm_cfg", node=ConfigClass)
+cs.store(group="env", name="sodarace", node=SodaraceEnvConfig)
+cs.store(group="env", name="image_evolution", node=ImageEnvConfig)
+cs.store(group="env", name="p3", node=P3EnvConfig)
+cs.store(group="qd", name="mapelites", node=MAPElitesConfig)
+cs.store(group="model", name="prompt", node=PromptModelConfig)
+cs.store(group="model", name="diff", node=DiffModelConfig)
+cs.store(name="elmconfig", node=ELMConfig)

@@ -1,3 +1,5 @@
+from typing import Any
+
 import numpy as np
 
 from openelm.environments.environments import (
@@ -10,12 +12,14 @@ from openelm.environments.environments import (
     P3Problem,
 )
 from openelm.environments.sodaracer import IMPORTS, SQUARE, SQUARE_PREREQ
+from openelm.mutation_model import (
+    ImagePromptModel,
+    SodaraceDiffModel,
+    SodaracePromptModel,
+)
 
 # ----- Generate sample seeds and init args for environments -----
 # They are simple template arguments to initialize several environments.
-# Sample usage:
-#   from openelm.environment import sodarace_init_args
-#   sodarace = Sodarace(**sodarace_init_args, run_name="test")
 
 
 IMAGE_SEED = {
@@ -27,7 +31,6 @@ def draw_blue_rectangle() -> np.ndarray:
 \t\t\tpic[x, y] = np.array([0, 0, 255])
 \treturn pic
 """,
-    "result_obj": None,
 }
 exec(IMAGE_SEED["program_str"], globals())
 IMAGE_SEED["result_obj"] = globals()["draw_blue_rectangle"]()
@@ -40,19 +43,6 @@ for y in range(32):
 
 SQUARE_SEED = {
     "program_str": IMPORTS + SQUARE_PREREQ + SQUARE,
-    "result_obj": {
-        "joints": [(0, 0), (0, 10), (10, 10), (10, 0), (5, 5)],
-        "muscles": [
-            [0, 1, {"type": "distance", "amplitude": 0.0, "phase": 0.0}],
-            [1, 2, {"type": "distance", "amplitude": 0.0, "phase": 0.0}],
-            [2, 3, {"type": "distance", "amplitude": 0.0, "phase": 0.0}],
-            [3, 0, {"type": "distance", "amplitude": 0.0, "phase": 0.0}],
-            [3, 4, {"type": "distance", "amplitude": 0.0, "phase": 0.0}],
-            [0, 4, {"type": "muscle", "amplitude": 5.0, "phase": 0.0}],
-            [1, 4, {"type": "muscle", "amplitude": 10.0, "phase": 0.0}],
-            [2, 4, {"type": "muscle", "amplitude": 2.0, "phase": 0.0}],
-        ],
-    },
 }
 
 P3_MED_SEED = {
@@ -154,19 +144,14 @@ assert f5(g5())''',
     "result_obj": {},
 }
 
-# A sample init args for ImageOptim
 image_init_args = {
     "seed": IMAGE_SEED,
-    "config": "openelm/config/elm_image_cfg.yaml",
     "target_img": target,
     "diff_model": None,
+    "prompt_model": ImagePromptModel,
     "behavior_mode": "3-channel",
 }
 
-# A sample init args for Sodarace
-sodarace_init_args = {"seed": SQUARE_SEED, "diff_model": None, "eval_ms": 1000}
-
-# A sample init args for P3
 p3_med_init_args = {
     "seed": P3_MED_SEED,
     "config": "openelm/config/elm_p3_cfg.yaml",
@@ -179,7 +164,17 @@ p3_long_init_args = {
     "diff_model": None,
 }
 
-# ----- (Sample init args end) -----
+MODELS_DICT: dict[str, dict[str, Any]] = {
+    "sodarace": {
+        "prompt_model": SodaracePromptModel,
+        "diff_model": SodaraceDiffModel,
+    },
+    "image_evolution": {
+        "prompt_model": ImagePromptModel,
+    },
+}
+
+ENVS_DICT: dict[str, Any] = {"sodarace": Sodarace, "image_evolution": ImageOptim, "p3": P3Problem}
 
 __all__ = [
     "Genotype",
@@ -189,8 +184,8 @@ __all__ = [
     "MatchString",
     "Sodarace",
     "IMAGE_SEED",
-    "image_init_args",
     "SQUARE_SEED",
+    "image_init_args",
     "sodarace_init_args",
     "P3Problem",
 ]

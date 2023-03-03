@@ -1,27 +1,31 @@
 import sys
+import json
 import math
 import string
 from abc import ABC, abstractmethod
-from dataclasses import is_dataclass
 from typing import Generic, Optional, TypeVar, Union
 
 import numpy as np
-from omegaconf import DictConfig, OmegaConf
+import requests
 
-from openelm.configs import BaseConfig, ImageELMConfig, SodaraceELMConfig
-from openelm.diff_model import (
-    PromptMutationForImgTask,
-    PromptMutationForSodarace,
-    PromptMutationForP3
+from openelm.configs import EnvConfig, ImageEnvConfig, SodaraceEnvConfig, P3EnvConfig
+from openelm.environments.sodaracer import (
+    CIRCLE,
+    GALLOPER_PREREQ,
+    IMPORTS,
+    INSTRUCTIONS,
+    QUERY_CPPN,
+    SEEDS_DICT,
+    SQUARE_PREREQ,
+    SodaraceSimulator,
+    Walker,
 )
-from openelm.environments.sodaracer import SodaraceSimulator
-from openelm.diff_model import FunctionTemplate
+from openelm.mutation_model import MutationModel
 from openelm.utils.code_eval import pool_exec_processes
 
 sys.set_int_max_str_digits(0) # remove length limitation for int->str conversion (model sometimes outputs really long ints)
 
 Phenotype = Optional[np.ndarray]
-
 
 def ackley(x: np.ndarray) -> np.ndarray:
     d = x.shape[-1]
@@ -50,6 +54,7 @@ class BaseEnvironment(ABC, Generic[GenoType]):
     def __init__(self) -> None:
         self.genotype_space: np.ndarray
         self.batch_size: int
+        self.config: EnvConfig
 
     @abstractmethod
     def random(self) -> list[GenoType]:
@@ -75,18 +80,6 @@ class BaseEnvironment(ABC, Generic[GenoType]):
     @property
     def behavior_ndim(self) -> int:
         return self.behavior_space.shape[1]
-
-    @staticmethod
-    def _load_config(config):
-        # TODO: convert all to dataclass
-        if isinstance(config, str):
-            return OmegaConf.load(config)
-        elif isinstance(config, (dict, DictConfig)):
-            return DictConfig(config)
-        elif is_dataclass(config):
-            return OmegaConf.structured(config)
-        else:
-            raise ValueError
 
 
 class ArrayGenotype(Genotype, np.ndarray):
@@ -205,18 +198,16 @@ class ImageOptim(BaseEnvironment[ImageGeneration]):
     behavior space (average-pooling).
     """
 
-    default_diff_model_cls = PromptMutationForImgTask
     # Record different definitions of behavior spaces in a dict. Feel free to add.
     behavior_mode_spec = {"3-channel-avg": {"genotype_ndim": 3}}
 
     def __init__(
         self,
-        seed: dict,
-        config: Union[str, dict, DictConfig],
+        seed: Union[dict, ImageGeneration],
         target_img: np.ndarray,
-        diff_model,
+        config: ImageEnvConfig,
+        mutation_model: MutationModel,
         behavior_mode: str = "3-channel",
-        run_name: Optional[str] = None,
     ):
         """
         Mutate programs that return images.
@@ -229,29 +220,21 @@ class ImageOptim(BaseEnvironment[ImageGeneration]):
 
         Args:
             seed: the seed dict.
-            config: the config file path or dict.
+            config: the config dict.
             target_img: the target image.
-            diff_model: the diff model (or alternatives).
+            mutation_model: the diff model (or alternatives).
             behavior_mode: (Optional) a string indicating the way an individual
             is mapped into behavior space.
-            run_name: (Optional) override the run_name in config.
         """
         if isinstance(seed, dict):
             self.seed = ImageGeneration(**seed)
-        else:
+        elif not isinstance(seed, ImageGeneration):
             raise TypeError
-
-        self.config: ImageELMConfig = self._load_config(config)
-        if run_name is not None:
-            self.config.run_name = run_name
 
         self.target_img = target_img
         self.shape = target_img.shape
 
-        if diff_model is None:
-            self.diff_model = self.default_diff_model_cls(self.config)
-        else:
-            self.diff_model = diff_model
+        self.mutation_model: MutationModel = mutation_model
 
         self.behavior_mode = behavior_mode
         self.genotype_ndim: int = self.behavior_mode_spec[self.behavior_mode][
@@ -259,7 +242,7 @@ class ImageOptim(BaseEnvironment[ImageGeneration]):
         ]
         self.genotype_space = np.repeat([[0, 255]], self.genotype_ndim, axis=0).T
 
-    def generate_program(self, code_batch: list[str]) -> list[ImageGeneration]:
+    def generate_programs(self, code_batch: list[str]) -> list[ImageGeneration]:
         """
         Call LM to generate a new program and run it.
 
@@ -267,7 +250,7 @@ class ImageOptim(BaseEnvironment[ImageGeneration]):
             An ImageGeneration object containing the code, the resulting image
             and the error code.
         """
-        generated_programs = self.diff_model.generate_program(code_batch)
+        generated_programs = self.mutation_model.generate_programs(code_batch)
         return [ImageGeneration(**p) for p in generated_programs]
 
     def random(self) -> list[ImageGeneration]:
@@ -279,7 +262,7 @@ class ImageOptim(BaseEnvironment[ImageGeneration]):
             is error).
         """
         program_str_list = [self.seed.program_str] * self.batch_size
-        new_images = self.generate_program(program_str_list)
+        new_images = self.generate_programs(program_str_list)
         return new_images
 
     def mutate(self, images_list: list[ImageGeneration]) -> list[ImageGeneration]:
@@ -294,7 +277,7 @@ class ImageOptim(BaseEnvironment[ImageGeneration]):
             is an error).
         """
         program_str_list = [sr.program_str for sr in images_list]
-        new_images = self.generate_program(program_str_list)
+        new_images = self.generate_programs(program_str_list)
         return new_images
 
     def fitness(self, x: ImageGeneration) -> float:
@@ -352,75 +335,151 @@ class Sodaracer(Genotype):
 
 
 class Sodarace(BaseEnvironment[Sodaracer]):
-    default_diff_model_cls = PromptMutationForSodarace
-
     def __init__(
         self,
-        seed: dict,
-        config: Union[str, dict, DictConfig, BaseConfig],
-        diff_model,
-        eval_ms: int,
-        max_height: int = 1000,
-        max_width: int = 1000,
-        max_mass: int = 2000,
-        ndim: int = 3,
-        run_name: Optional[str] = None,
+        seeds: list[Union[dict, Sodaracer]],
+        config: SodaraceEnvConfig,
+        mutation_model: MutationModel,
     ) -> None:
         """
         Sodarace environment.
 
         Args:
-            seed: the seed dict.
-            config: the config file path or dict.
-            diff_model: the diff model (or alternatives).
-            eval_ms: The time in ms for sodaracer evaluation.
-            max_height: (Optional) the maximal height.
-            max_width: (Optional) the maximal width.
-            max_mass: (Optional) the maximal mass.
-            ndim: (Optional) the dimension of behavior space.
-            run_name: (Optional) override the run_name in config.
+            seeds: the seed dict.
+            config: the environment config.
+            mutation_model: the mutation model.
         """
-        if isinstance(seed, dict):
-            self.seed = Sodaracer(**seed)
-        else:
+        if isinstance(seeds, dict):
+            self.seeds: Sodaracer = Sodaracer(**seeds)
+        elif not isinstance(seeds, Sodaracer):
             raise TypeError
-        # TODO: rewrite config code to make everything an instance of a dataclass
-        self.config: SodaraceELMConfig = self._load_config(config)
-        if run_name is not None:
-            self.config.run_name = run_name
+        self.config: SodaraceEnvConfig = config
+        self.mutation_model: MutationModel = mutation_model
 
-        if diff_model is None:
-            self.diff_model = self.default_diff_model_cls(self.config)
+        self.genotype_space = np.array(self.config.behavior_space).T
+        self.genotype_ndim = self.genotype_space.shape[1]
+
+        self.seed_strs: list[str] = self.config.starting_seeds
+
+    def construct_prompt(
+        self, code_batch: Optional[Union[list[str], str]] = None
+    ) -> dict[str, str]:
+        prompt_str: str = IMPORTS
+        if "square" in self.seed_strs:
+            prompt_str += SQUARE_PREREQ
+        if "galloper" in self.seed_strs:
+            prompt_str += GALLOPER_PREREQ
+        if "radial" in self.seed_strs or "wheel" in self.seed_strs:
+            prompt_str += CIRCLE
+        if (
+            "cppn_fixed" in self.seed_strs
+            or "cppn_mutable" in self.seed_strs
+            or "runner" in self.seed_strs
+        ):
+            prompt_str += QUERY_CPPN
+        # For crossover:
+        # If init steps, combine seeds and prereqs, and use instruction 3 code below.
+        # For all other steps, prepend all prereqs and ignore instruction 3 code.
+        # For non-crossover
+        # Always preprend prereq, and len(code_batch) == 1
+        import_str: str = prompt_str
+        if code_batch is None:
+            # Initialization steps
+            seeds = [SEEDS_DICT[seed] for seed in self.seed_strs]
+            if not self.config.crossover:
+                # TODO: Sample from seeds randomly
+                prompt_str += seeds[0]
+            elif self.config.crossover:
+                if self.config.instruction == 3:
+                    instruction_str: str = INSTRUCTIONS[self.config.instruction].split(
+                        ","
+                    )[0]
+                for seed in seeds:
+                    prompt_str += seed
+                    if self.config.instruction == 3:
+                        reverse_seeds: dict[str, str] = {
+                            v: k for k, v in SEEDS_DICT.items()
+                        }
+                        instruction_str += reverse_seeds[seed] + ", "
+                if self.config.instruction == 3:
+                    instruction_str += INSTRUCTIONS[self.config.instruction].split(",")[
+                        1
+                    ]
+                raise NotImplementedError
         else:
-            self.diff_model = diff_model
+            # Evolution steps
+            if not self.config.crossover:
+                if isinstance(code_batch, list):
+                    prompt_str += code_batch[0]
+                elif isinstance(code_batch, str):
+                    prompt_str += code_batch
+            elif self.config.crossover:
+                # Crossover
+                raise NotImplementedError
+        instruction_str = INSTRUCTIONS[self.config.instruction]
+        import_str += instruction_str
+        prompt_str += instruction_str
+        return {"prompt": prompt_str, "template": import_str}
 
-        self.batch_size = self.config.batch_size
-        self.eval_ms = eval_ms
-        self.genotype_ndim = ndim
-        self.genotype_space = np.array(
-            [[0, max_height], [0, max_width], [0, max_mass]]
-        ).T
-
-    def generate_program(self, code_batch: list[str]) -> list[Sodaracer]:
-        # Call LM to generate a new program and run it, returning a dict
-        # containing the program string and the dict from running it.
-        generated_programs = self.diff_model.generate_program(code_batch)
-        return [Sodaracer(**p) for p in generated_programs]
+    def generate_programs(self, code_batch: list[dict[str, str]]) -> list[Sodaracer]:
+        """Generate new programs with a mutation model and evaluate them."""
+        local_scope_exec: bool = self.config.instruction != 0
+        generated_programs = self.mutation_model.generate_programs(
+            code_batch, local_scope_exec
+        )
+        if self.config.sandbox:
+            results = []
+            for code in generated_programs:
+                resp = requests.post(
+                    f"{self.config.sandbox_server}/gen_racer",
+                    json={"code": code, "timeout": self.config.timeout},
+                    timeout=self.config.timeout,
+                )
+                if resp.status_code == 200:
+                    return_dict = json.loads(resp.text)
+                    results.append(return_dict)
+            return [Sodaracer(**p) for p in results]
+        else:
+            results = pool_exec_processes(
+                generated_programs,
+                func_name="make_walker",
+                timeout=self.config.timeout,
+                processes=self.config.processes,
+                debug=self.config.debug,
+            )
+            result_list: list = []
+            for i, result in enumerate(results):
+                try:
+                    if isinstance(result, Walker) and result.validate():
+                        result_list.append(
+                            {
+                                "program_str": generated_programs[i],
+                                "result_obj": result.to_dict(),
+                            }
+                        )
+                    else:
+                        if self.config.debug:
+                            print("Failed execution, type:", result)
+                            print(generated_programs[i])
+                except Exception as e:
+                    if self.config.debug:
+                        print(type(e), e)
+            return [Sodaracer(**p) for p in result_list]
 
     def random(self) -> list[Sodaracer]:
-        program_str_list = [self.seed.program_str] * self.batch_size
-        new_sodaracers = self.generate_program(program_str_list)
+        program_list = [self.construct_prompt() for _ in range(self.config.batch_size)]
+        new_sodaracers = self.generate_programs(program_list)
         return new_sodaracers
 
     def mutate(self, sodaracer_list: list[Sodaracer]) -> list[Sodaracer]:
         program_str_list = [sr.program_str for sr in sodaracer_list]
-        new_sodaracers = self.generate_program(program_str_list)
+        new_sodaracers = self.generate_programs(program_str_list)
         return new_sodaracers
 
     def fitness(self, x: Sodaracer) -> float:
         # Call Sodaracers environment to get the fitness.
         if x.valid:
-            return x.evaluate(self.eval_ms)
+            return x.evaluate(self.config.eval_ms)
         else:
             return -np.inf
 
@@ -445,54 +504,71 @@ class P3Solution(Genotype):
 
 
 class P3Problem(BaseEnvironment[P3Solution]):
-    default_diff_model_cls = PromptMutationForP3
 
     def __init__(
         self,
         seed: dict,
-        config: Union[str, dict, DictConfig],
-        diff_model,
+        config: P3EnvConfig,
+        mutation_model: MutationModel,
         problem_func: str,
         solution_preamble: str,
-        run_name: Optional[str] = None,
     ) -> None:
         """
         Args:
             seed: the seed dict.
             config: the config file path or dict.
-            diff_model: the diff model (or alternatives).
+            mutation_model: the diff model (or alternatives).
             problem_func: the f6(<params>) function containing the programming problem
             solution_preamble: the g6(<params>) function definition (must be passed in in order to include params)
-            run_name: (Optional) override the run_name in config.
         """
         if isinstance(seed, dict):
             self.seed = seed
-            self.seed['program_str'] += "\n\n" + problem_func + "\n\n" # add this particular problem to the prompt
         else:
             raise TypeError
         self.config = self._load_config(config)
-        if run_name is not None:
-            self.config.run_name = run_name
-
-        if diff_model is None:
-            self.diff_model = self.default_diff_model_cls(self.config)
-        else:
-            self.diff_model = diff_model
-
-        self.diff_model.func_template = FunctionTemplate(func_name=self.diff_model.func_template.func_name,
-                                                         import_line=self.diff_model.func_template.import_line,
-                                                         func_preamble=f'{solution_preamble}\n', # include params for g6()
-                                                         instruction=self.diff_model.func_template.instruction)
-
+        self.mutation_model = mutation_model
         self.problem_func = problem_func
+        self.solution_preamble = solution_preamble
         self.config = config
+        self.import_line = "from typing import List\n" # The only import that's necessary as of P3 v0.2
+
+    def construct_prompt(self) -> dict[str, str]:
+        prompt_str = (
+            self.seed['program_str'] +
+            f'\n\n{self.problem_func}' # add this particular problem, f6(), to the prompt
+            f'\n\n{self.solution_preamble}' # add g6() preamble
+        )
+
+        template = f'{self.import_line}\n{self.solution_preamble}'
+        return {'prompt_str': prompt_str, 'template': template}
 
     def generate_program(self, code_batch: list[str]) -> list[P3Solution]:
-        # Call LM to generate solution code and run it
-        return [
-            P3Solution(**generated)
-            for generated in self.diff_model.generate_program(code_batch)
-        ]
+        """Generate new programs with a mutation model and evaluate them."""
+        local_scope_exec = True
+        generated_programs = self.mutation_model.generate_programs(
+            code_batch, local_scope_exec
+        )
+
+        if self.config.sandbox:
+            results = []
+            for code in generated_programs:
+                resp = requests.post(
+                    f"{self.sandbox_server}/eval_p3_solution",
+                    json={"code": code, "timeout": self.config.timeout},
+                    timeout=self.config.timeout,
+                )
+                if resp.status_code == 200:
+                    return_dict = json.loads(resp.text)
+                    results.append(return_dict)
+        else:
+            results = pool_exec_processes(
+                generated_programs,
+                func_name="f6",
+                timeout=self.config.timeout,
+                processes=self.config.processes,
+                debug=self.config.debug,
+            )
+        return [P3Solution(**p) for p in results]
 
     def fitness(self, x: P3Solution) -> float:
         """
@@ -519,8 +595,8 @@ class P3Problem(BaseEnvironment[P3Solution]):
             return 0.0
 
     def random(self) -> list[P3Solution]:
-        program_str_list = [self.seed['program_str']] * self.config['batch_size']
-        new_solutions = self.generate_program(program_str_list)
+        program_list = [self.construct_prompt() for _ in range(self.config.batch_size)]
+        new_solutions = self.generate_program(program_list)
         return new_solutions
 
     def mutate(self, x: P3Solution) -> list[P3Solution]:
