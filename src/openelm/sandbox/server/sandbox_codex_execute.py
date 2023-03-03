@@ -69,7 +69,8 @@ def unsafe_execute(
                     elif args is not None:
                         result = code_dct[func_name](**args)
                     
-                    # Temporary fix: multiprocessing.pool.map cannot return 'generators'
+                    # Multiprocessing.pool.map (in utils.code_eval.pool_exec_processes()) cannot return 'generators'
+                    # (this may not catch all 'invalid' generator uses)
                     if isinstance(result, range):
                         result = list(result)
 

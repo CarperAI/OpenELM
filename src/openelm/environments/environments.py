@@ -1,3 +1,4 @@
+import sys
 import math
 import string
 from abc import ABC, abstractmethod
@@ -16,6 +17,8 @@ from openelm.diff_model import (
 from openelm.environments.sodaracer import SodaraceSimulator
 from openelm.diff_model import FunctionTemplate
 from openelm.utils.code_eval import pool_exec_processes
+
+sys.set_int_max_str_digits(0) # remove length limitation for int->str conversion (model sometimes outputs really long ints)
 
 Phenotype = Optional[np.ndarray]
 

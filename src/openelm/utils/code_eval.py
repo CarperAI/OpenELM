@@ -3,6 +3,8 @@ import itertools
 import multiprocessing as mp
 from typing import Any, Iterable, Optional, Union
 
+import numpy as np
+
 from openelm.sandbox.server.sandbox_codex_execute import ExecResult, unsafe_execute
 
 
@@ -144,3 +146,13 @@ parity_test_data = {
 def quadratic(a, b, c, x):
     """Return quadratic: a,b,c are coefficients and x is the independent variable."""
     return a * x**2 + b * x + c
+
+
+def pass_at_k(n, c, k):
+    """
+    :param n: total number of samples
+    :param c: number of correct samples
+    :param k: k in pass@k
+    """
+    if n - c < k: return 1.0
+    return 1.0 - np.prod(1.0 - k / np.arange(n - c + 1, n + 1))
