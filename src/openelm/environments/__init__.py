@@ -12,12 +12,6 @@ from openelm.environments.environments import (
     P3Problem,
 )
 from openelm.environments.sodaracer import IMPORTS, SQUARE, SQUARE_PREREQ
-from openelm.mutation_model import (
-    ImagePromptModel,
-    SodaraceDiffModel,
-    SodaracePromptModel,
-)
-
 # ----- Generate sample seeds and init args for environments -----
 # They are simple template arguments to initialize several environments.
 
@@ -148,7 +142,6 @@ image_init_args = {
     "seed": IMAGE_SEED,
     "target_img": target,
     "diff_model": None,
-    "prompt_model": ImagePromptModel,
     "behavior_mode": "3-channel",
 }
 
@@ -162,16 +155,6 @@ p3_long_init_args = {
     "seed": P3_LONG_SEED,
     "config": "openelm/config/elm_p3_cfg.yaml",
     "diff_model": None,
-}
-
-MODELS_DICT: dict[str, dict[str, Any]] = {
-    "sodarace": {
-        "prompt_model": SodaracePromptModel,
-        "diff_model": SodaraceDiffModel,
-    },
-    "image_evolution": {
-        "prompt_model": ImagePromptModel,
-    },
 }
 
 ENVS_DICT: dict[str, Any] = {"sodarace": Sodarace, "image_evolution": ImageOptim, "p3": P3Problem}

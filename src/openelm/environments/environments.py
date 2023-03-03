@@ -337,7 +337,6 @@ class Sodaracer(Genotype):
 class Sodarace(BaseEnvironment[Sodaracer]):
     def __init__(
         self,
-        seeds: list[Union[dict, Sodaracer]],
         config: SodaraceEnvConfig,
         mutation_model: MutationModel,
     ) -> None:
@@ -349,11 +348,12 @@ class Sodarace(BaseEnvironment[Sodaracer]):
             config: the environment config.
             mutation_model: the mutation model.
         """
-        if isinstance(seeds, dict):
-            self.seeds: Sodaracer = Sodaracer(**seeds)
-        elif not isinstance(seeds, Sodaracer):
-            raise TypeError
+        # if isinstance(seeds, dict):
+        #     self.seeds: Sodaracer = Sodaracer(**seeds)
+        # elif not isinstance(seeds, Sodaracer):
+        #     raise TypeError
         self.config: SodaraceEnvConfig = config
+        self.batch_size = self.config.batch_size
         self.mutation_model: MutationModel = mutation_model
 
         self.genotype_space = np.array(self.config.behavior_space).T

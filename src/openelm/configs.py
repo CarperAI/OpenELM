@@ -72,7 +72,7 @@ class SodaraceEnvConfig(EnvConfig):
     )
     starting_seeds: list[str] = field(default_factory=lambda: ["square"])
     instruction: int = 1
-    crossover: bool = True
+    crossover: bool = False
 
 
 @dataclass
