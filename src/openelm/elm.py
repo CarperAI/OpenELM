@@ -1,7 +1,7 @@
 from typing import Optional
 
 from openelm.configs import DiffModelConfig, ELMConfig, PromptModelConfig
-from openelm.environments import ENVS_DICT, MODELS_DICT
+from openelm.environments import ENVS_DICT
 from openelm.map_elites import MAPElites
 from openelm.mutation_model import DiffModel, MutationModel, PromptModel
 from openelm.utils import validate_config
@@ -23,13 +23,11 @@ class ELM:
         # TODO: rename mutation_model.py to mutation_models.py
         env_name: str = self.cfg.env.env_name
         if isinstance(self.cfg.model, PromptModelConfig):
-            mutation_model_cls = MODELS_DICT[env_name].get("prompt_model", PromptModel)
+            self.mutation_model: MutationModel = PromptModel(self.cfg.model)
         elif isinstance(self.cfg.model, DiffModelConfig):
-            mutation_model_cls = MODELS_DICT[env_name].get("diff_model", DiffModel)
-        self.mutation_model: MutationModel = mutation_model_cls(self.cfg)
+            self.mutation_model: MutationModel = DiffModel(self.cfg.model)
 
         self.environment = ENVS_DICT[env_name](
-            seeds=self.cfg.env.seeds,
             config=self.cfg.env,
             mutation_model=self.mutation_model,
         )

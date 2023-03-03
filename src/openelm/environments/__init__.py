@@ -11,12 +11,6 @@ from openelm.environments.environments import (
     Sodarace,
 )
 from openelm.environments.sodaracer import IMPORTS, SQUARE, SQUARE_PREREQ
-from openelm.mutation_model import (
-    ImagePromptModel,
-    SodaraceDiffModel,
-    SodaracePromptModel,
-)
-
 # ----- Generate sample seeds and init args for environments -----
 # They are simple template arguments to initialize several environments.
 
@@ -48,18 +42,7 @@ image_init_args = {
     "seed": IMAGE_SEED,
     "target_img": target,
     "diff_model": None,
-    "prompt_model": ImagePromptModel,
     "behavior_mode": "3-channel",
-}
-
-MODELS_DICT: dict[str, dict[str, Any]] = {
-    "sodarace": {
-        "prompt_model": SodaracePromptModel,
-        "diff_model": SodaraceDiffModel,
-    },
-    "image_evolution": {
-        "prompt_model": ImagePromptModel,
-    },
 }
 
 ENVS_DICT: dict[str, Any] = {"sodarace": Sodarace, "image_evolution": ImageOptim}
