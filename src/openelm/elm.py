@@ -1,17 +1,14 @@
-from openelm.environments import (
-    ImageOptim,
-    Sodarace,
-    image_init_args,
-    sodarace_init_args,
-)
-from openelm.map_elites import MAPElites
+from typing import Optional
 
-ENVS_DICT = {"sodarace": Sodarace, "imageoptim": ImageOptim}
-ARG_DICT = {"sodarace": sodarace_init_args, "imageoptim": image_init_args}
+from openelm.configs import DiffModelConfig, ELMConfig, PromptModelConfig
+from openelm.environments import ENVS_DICT, MODELS_DICT
+from openelm.map_elites import MAPElites
+from openelm.mutation_model import DiffModel, MutationModel, PromptModel
+from openelm.utils import validate_config
 
 
 class ELM:
-    def __init__(self, cfg, diff_model_cls=None, env_args: dict = None) -> None:
+    def __init__(self, cfg: ELMConfig) -> None:
         """
         The main class of ELM.
 
@@ -19,41 +16,47 @@ class ELM:
         from the passed config.
 
         Args:
-            cfg: The config (e.g. OmegaConf who uses dot to access members).
-            diff_model_cls: (Optional) The class of diff model. One can apply
-            alternative models here for comparison.
-            env_args: (Optional) The argument dict for Environment.
+            cfg: The config containing the diff model, environment, and QD algorithm.
         """
-        self.cfg = cfg
+        self.cfg: ELMConfig = cfg
+        # TODO: Make sure all seeds are available to choose
+        # TODO: rename mutation_model.py to mutation_models.py
+        env_name: str = self.cfg.env.env_name
+        if isinstance(self.cfg.model, PromptModelConfig):
+            mutation_model_cls = MODELS_DICT[env_name].get("prompt_model", PromptModel)
+        elif isinstance(self.cfg.model, DiffModelConfig):
+            mutation_model_cls = MODELS_DICT[env_name].get("diff_model", DiffModel)
+        self.mutation_model: MutationModel = mutation_model_cls(self.cfg)
 
-        # Get the defaults if `env_args` is not specified.
-        if env_args is None:
-            env_args = ARG_DICT[self.cfg.env_name]
-        env_args["config"] = self.cfg  # Override default environment config
-
-        # Override diff model if `diff_model_cls` is specified.
-        if diff_model_cls is not None:
-            self.diff_model = diff_model_cls(self.cfg)
-            env_args = {**env_args, "diff_model": self.diff_model}
-        else:
-            self.diff_model = None
-
-        self.seed = env_args["seed"]
-        self.environment = ENVS_DICT[self.cfg.env_name](**env_args)
+        self.environment = ENVS_DICT[env_name](
+            seeds=self.cfg.env.seeds,
+            config=self.cfg.env,
+            mutation_model=self.mutation_model,
+        )
         self.qd_algorithm = MAPElites(
             self.environment,
-            n_bins=self.cfg.behavior_n_bins,
-            history_length=self.cfg.evo_history_length,
+            map_grid_size=self.cfg.qd.map_grid_size,
+            history_length=self.cfg.qd.history_length,
+            save_history=self.cfg.qd.save_history,
         )
 
-    def run(self) -> str:
+    def run(
+        self, init_steps: Optional[int] = None, total_steps: Optional[int] = None
+    ) -> str:
         """
         Run the ELM algorithm to evolve the population in the environment.
+
+        Args:
+            init_steps: The number of steps to run the initialisation phase.
+            total_steps: The number of steps to run the QD algorithm in total,
+            including init_steps.
 
         Returns:
             str: A string representing the maximum fitness genotype. The
             `qd_algorithm` class attribute will be updated.
         """
-        return self.qd_algorithm.search(
-            initsteps=self.cfg.evo_init_steps, totalsteps=self.cfg.evo_n_steps
-        )
+        if init_steps is None:
+            init_steps = self.cfg.qd.init_steps
+        if total_steps is None:
+            total_steps = self.cfg.qd.total_steps
+        return self.qd_algorithm.search(init_steps=init_steps, total_steps=total_steps)
