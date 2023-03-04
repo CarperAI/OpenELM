@@ -102,10 +102,12 @@ def sample(
     tokenizer,
     decode: bool = True,
     starting_idx: Optional[int] = None,
+    num_return_sequences: Optional[int] = None,
     **kwargs
 ) -> list[str]:
     """Run a model on a batch of contexts for a particular task."""
-    batch_size = kwargs.get("batch_size", cfg.batch_size)
+    if num_return_sequences is None:
+        num_return_sequences = cfg.batch_size
     device = kwargs.get("device", torch.device("cuda"))
     temperature = kwargs.get("temperature", cfg.temp)
     top_p = kwargs.get("top_p", cfg.top_p)
@@ -121,7 +123,7 @@ def sample(
             tokens = model.module.generate(
                 **batch,
                 do_sample=True,
-                num_return_sequences=batch_size,
+                num_return_sequences=num_return_sequences,
                 temperature=temperature,
                 max_new_tokens=gen_max_len,
                 top_p=top_p,
@@ -132,7 +134,7 @@ def sample(
             tokens = model.generate(
                 **batch,
                 do_sample=True,
-                num_return_sequences=batch_size,
+                num_return_sequences=num_return_sequences,
                 temperature=temperature,
                 max_new_tokens=gen_max_len,
                 top_p=top_p,

@@ -24,12 +24,8 @@ class MutationModel(ABC):
 class PromptModel(MutationModel):
     """Mutation model that uses prompts to change a seed."""
 
-    def __init__(
-        self,
-        cfg: ModelConfig,
-    ) -> None:
-
-        self.config: ModelConfig = cfg
+    def __init__(self, config: ModelConfig) -> None:
+        self.config: ModelConfig = config
         seed: int = set_seed(self.config.seed)
         # Use RNG to rotate random seeds during inference.
         self.rng = np.random.default_rng(seed=seed)
@@ -46,9 +42,10 @@ class PromptModel(MutationModel):
         and return the result.
 
         Args:
-            code_batch (list[str]): A list of code strings.
-            local_scope_truncate (bool): Whether to truncate the code to the
-            local scope.
+            prompt_dicts (list[dict[str, str]): A list of dictionaries containing
+            the prompt and template for each program.
+            local_scope_truncate (bool): Whether or not to truncate the code to
+            the local scope.
 
         Returns:
             A list of code strings.
@@ -66,7 +63,7 @@ class PromptModel(MutationModel):
             self.config,
             self.model,
             self.tokenizer,
-            batch_size=1,
+            num_return_sequences=1,
         )
         trunc = functools.partial(truncate, only_local_scope=local_scope_truncate)
         truncations: list[str] = [
@@ -76,45 +73,16 @@ class PromptModel(MutationModel):
 
 
 class DiffModel(PromptModel):
-    def __init__(
-        self,
-        cfg: ModelConfig,
-    ) -> None:
-        super().__init__(cfg)
+    def __init__(self, config: ModelConfig) -> None:
+        super().__init__(config)
 
-    def construct_prompt(self, code: str) -> tuple[str, str]:
-        prompt_list = [
-            "<NME> walker.py\n<BEF> ",
-            code,
-            "\n<MSG> Fixed bugs",
-        ]
-        prompt_str = "".join(prompt_list)
-        prompt_str = (
-            code + self.func_template.instruction + self.func_template.func_preamble
-        )
-        preamble_str = (
-            self.func_template.import_line
-            + self.func_template.instruction
-            + self.func_template.func_preamble
-        )
-        return prompt_str, preamble_str
-
-    def generate_programs(self, code_batch: list[str]) -> list[str]:
-        """
-        Generate a new program for a diff model from a batch of programs.
-
-        Given a piece of code, do prompt mutation, execute the code,
-        and return the result.
-
-        Args:
-            code (str): The full code string.
-
-        Returns:
-            A numpy array (if successful) or the exception object.
-        """
-        prompts, preamble_strings = zip(*map(self.construct_prompt, code_batch))
+    def generate_programs(
+        self, prompt_dicts: list[dict[str, str]], local_scope_truncate: bool, **kwargs
+    ) -> list[str]:
+        prompts = [prompt_dict["prompt"] for prompt_dict in prompt_dicts]
+        templates = [prompt_dict["template"] for prompt_dict in prompt_dicts]
         encodings = self.tokenizer(
-            list(prompts),
+            prompts,
             truncation=True,
             padding=True,
             return_tensors="pt",
@@ -124,17 +92,16 @@ class DiffModel(PromptModel):
             self.config,
             self.model,
             self.tokenizer,
-            batch_size=1,
+            num_return_sequences=1,
         )
 
-        local_scope_exec: bool = len(self.func_template.func_preamble) > 0
         end_of_diff = re.compile("\n[^ +-@]+")
-        trunc = functools.partial(truncate, only_local_scope=local_scope_exec)
-        self.truncations: list[str] = [
-            preamble_strings[i] + trunc(completions[i]) for i in range(len(completions))
+        trunc = functools.partial(truncate, only_local_scope=local_scope_truncate)
+        truncations: list[str] = [
+            templates[i] + trunc(completions[i]) for i in range(len(completions))
         ]
-        outputs = []
-        for i, code in enumerate(self.truncations):
+        outputs: list[str] = []
+        for i, code in enumerate(truncations):
             # split the diff text according to <NME>, <BEF>, <MSG>, <DFF>.
             parsed: dict = split_diff(code)
             # truncate the diff hunk at the first line not starting with " ",

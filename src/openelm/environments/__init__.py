@@ -10,10 +10,6 @@ from openelm.environments.environments import (
     MatchString,
     Sodarace,
 )
-from openelm.environments.sodaracer import IMPORTS, SQUARE, SQUARE_PREREQ
-# ----- Generate sample seeds and init args for environments -----
-# They are simple template arguments to initialize several environments.
-
 
 IMAGE_SEED = {
     "program_str": """import numpy as np
@@ -32,11 +28,6 @@ for y in range(32):
     for x in range(32):
         if (y - 16) ** 2 + (x - 16) ** 2 <= 100:  # a radius-10 circle
             target[y, x] = np.array([1, 1, 0])
-
-
-SQUARE_SEED = {
-    "program_str": IMPORTS + SQUARE_PREREQ + SQUARE,
-}
 
 image_init_args = {
     "seed": IMAGE_SEED,

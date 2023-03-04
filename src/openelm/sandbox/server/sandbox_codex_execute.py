@@ -76,7 +76,7 @@ def unsafe_execute(
                             for arguments, res in ground_truth.items()
                         ]
                     ):
-                        return 0
+                        return ExecResult(0)
                     else:
                         return ExecResult(1)
         except Exception as e:

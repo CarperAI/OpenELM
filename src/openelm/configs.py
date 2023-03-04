@@ -102,10 +102,16 @@ class ELMConfig(BaseConfig):
     run_name: Optional[str] = None
 
 
-cs = ConfigStore.instance()
-cs.store(group="env", name="sodarace", node=SodaraceEnvConfig)
-cs.store(group="env", name="image_evolution", node=ImageEnvConfig)
-cs.store(group="qd", name="mapelites", node=MAPElitesConfig)
-cs.store(group="model", name="prompt", node=PromptModelConfig)
-cs.store(group="model", name="diff", node=DiffModelConfig)
-cs.store(name="elmconfig", node=ELMConfig)
+def register_configstore() -> ConfigStore:
+    """Register configs with Hydra's ConfigStore."""
+    cs = ConfigStore.instance()
+    cs.store(group="env", name="sodarace", node=SodaraceEnvConfig)
+    cs.store(group="env", name="image_evolution", node=ImageEnvConfig)
+    cs.store(group="qd", name="mapelites", node=MAPElitesConfig)
+    cs.store(group="model", name="prompt", node=PromptModelConfig)
+    cs.store(group="model", name="diff", node=DiffModelConfig)
+    cs.store(name="elmconfig", node=ELMConfig)
+    return cs
+
+
+CONFIGSTORE = register_configstore()
