@@ -26,11 +26,13 @@ class ModelConfig(BaseConfig):
 
 @dataclass
 class PromptModelConfig(ModelConfig):
+    model_name: str = "prompt"
     model_path: str = "Salesforce/codegen-350M-mono"
 
 
 @dataclass
 class DiffModelConfig(ModelConfig):
+    model_name: str = "diff"
     model_path: str = "CarperAI/diff-codegen-350m-v2"
 
 
@@ -80,19 +82,18 @@ class ImageEnvConfig(EnvConfig):
     env_name: str = "image_evolution"
 
 @dataclass
-class P3EnvConfig(BaseConfig):
-    env_name: str = "p3"
+class P3EnvConfig(EnvConfig):
+    env_name: str = "p3_problem"
     solutions_per_problem: int = 128
     prompt_size: str = 'long' # med or long
+    timeout: float = 1.0
 
-defaults = [
+defaults_elm = [
     {"model": "prompt"},
     {"qd": "mapelites"},
     {"env": "sodarace"},
     "_self_",
 ]
-
-
 @dataclass
 class ELMConfig(BaseConfig):
     hydra: Any = field(
@@ -100,19 +101,39 @@ class ELMConfig(BaseConfig):
             "run": {"dir": "logs/elm/${hydra.job.override_dirname}"}
         }
     )
-    defaults: list[Any] = field(default_factory=lambda: defaults)
+    defaults: list[Any] = field(default_factory=lambda: defaults_elm)
     model: Any = MISSING
     qd: Any = MISSING
     env: Any = MISSING
     run_name: Optional[str] = None
 
+defaults_p3 = [
+    {"model": "prompt"},
+    {"env": "p3_problem"},
+    "_self_",
+]
+@dataclass
+class P3Config(BaseConfig):
+    hydra: Any = field(
+        default_factory=lambda: {
+            "run": {"dir": "logs/p3/${hydra.job.override_dirname}"}
+        }
+    )
+    defaults: list[Any] = field(default_factory=lambda: defaults_p3)
+    model: Any = MISSING
+    env: Any = MISSING
+    save_result_obj: bool = False
+    eval_k: int = -1 # set >0, evaluate pass@k of previous runs using this k, instead of doing a new run
+    eval_timestamp: str = '' # optionally provide timestamp of run to eval pass@k, otherwise eval with latest run of every problem
+    run_name: Optional[str] = None
 
 
 cs = ConfigStore.instance()
 cs.store(group="env", name="sodarace", node=SodaraceEnvConfig)
 cs.store(group="env", name="image_evolution", node=ImageEnvConfig)
-cs.store(group="env", name="p3", node=P3EnvConfig)
+cs.store(group="env", name="p3_problem", node=P3EnvConfig)
 cs.store(group="qd", name="mapelites", node=MAPElitesConfig)
 cs.store(group="model", name="prompt", node=PromptModelConfig)
 cs.store(group="model", name="diff", node=DiffModelConfig)
 cs.store(name="elmconfig", node=ELMConfig)
+cs.store(name="p3config", node=P3Config)

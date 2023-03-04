@@ -40,8 +40,7 @@ SQUARE_SEED = {
 }
 
 P3_MED_SEED = {
-    'program_str': '''
-from typing import List
+    'program_str': '''from typing import List
 
 def f1(s: str):
     return "Hello " + s == "Hello world"
@@ -87,8 +86,7 @@ assert f5(g5())''',
 }
 
 P3_LONG_SEED = {
-    'program_str': '''
-from typing import List
+    'program_str': '''from typing import List
 
 def f1(s: str):
     return "Hello " + s == "Hello world"

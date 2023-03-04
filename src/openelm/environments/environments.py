@@ -3,7 +3,7 @@ import json
 import math
 import string
 from abc import ABC, abstractmethod
-from typing import Generic, Optional, TypeVar, Union
+from typing import Generic, Optional, TypeVar, Union, Type
 
 import numpy as np
 import requests
@@ -21,7 +21,7 @@ from openelm.environments.sodaracer import (
     Walker,
 )
 from openelm.mutation_model import MutationModel
-from openelm.utils.code_eval import pool_exec_processes
+from openelm.utils.code_eval import pool_exec_processes, type_check
 
 sys.set_int_max_str_digits(0) # remove length limitation for int->str conversion (model sometimes outputs really long ints)
 
@@ -512,6 +512,7 @@ class P3Problem(BaseEnvironment[P3Solution]):
         mutation_model: MutationModel,
         problem_func: str,
         solution_preamble: str,
+        ans_type: Type
     ) -> None:
         """
         Args:
@@ -520,17 +521,18 @@ class P3Problem(BaseEnvironment[P3Solution]):
             mutation_model: the diff model (or alternatives).
             problem_func: the f6(<params>) function containing the programming problem
             solution_preamble: the g6(<params>) function definition (must be passed in in order to include params)
+            ans_type: answer type
         """
         if isinstance(seed, dict):
             self.seed = seed
         else:
             raise TypeError
-        self.config = self._load_config(config)
         self.mutation_model = mutation_model
         self.problem_func = problem_func
         self.solution_preamble = solution_preamble
         self.config = config
         self.import_line = "from typing import List\n" # The only import that's necessary as of P3 v0.2
+        self.ans_type = ans_type
 
     def construct_prompt(self) -> dict[str, str]:
         prompt_str = (
@@ -540,7 +542,7 @@ class P3Problem(BaseEnvironment[P3Solution]):
         )
 
         template = f'{self.import_line}\n{self.solution_preamble}'
-        return {'prompt_str': prompt_str, 'template': template}
+        return {'prompt': prompt_str, 'template': template}
 
     def generate_program(self, code_batch: list[str]) -> list[P3Solution]:
         """Generate new programs with a mutation model and evaluate them."""
@@ -549,13 +551,13 @@ class P3Problem(BaseEnvironment[P3Solution]):
             code_batch, local_scope_exec
         )
 
-        if self.config.sandbox:
+        if self.config.env.sandbox:
             results = []
             for code in generated_programs:
                 resp = requests.post(
                     f"{self.sandbox_server}/eval_p3_solution",
-                    json={"code": code, "timeout": self.config.timeout},
-                    timeout=self.config.timeout,
+                    json={"code": code, "timeout": self.config.env.timeout},
+                    timeout=self.config.env.timeout,
                 )
                 if resp.status_code == 200:
                     return_dict = json.loads(resp.text)
@@ -563,31 +565,35 @@ class P3Problem(BaseEnvironment[P3Solution]):
         else:
             results = pool_exec_processes(
                 generated_programs,
-                func_name="f6",
-                timeout=self.config.timeout,
-                processes=self.config.processes,
-                debug=self.config.debug,
+                func_name="g6",
+                timeout=self.config.env.timeout,
+                processes=self.config.env.processes,
+                debug=self.config.env.debug,
             )
+        results = [{'program_str': gen_prog, 'result_obj': res_obj}
+                    for (gen_prog, res_obj) in zip(generated_programs, results)]
         return [P3Solution(**p) for p in results]
 
-    def fitness(self, x: P3Solution) -> float:
+    def fitness(self, sol: P3Solution) -> float:
         """
         If passing the solution to the problem returns True, fitness is 1.0
             else 0.0
         """
+        if not type_check(self.ans_type, sol.result_obj): return 0.0
+
         eval_code = ( 
-            f"{self.diff_model.func_template.import_line}\n"
+            f"{self.import_line}\n"
             f"{self.problem_func}\n"
             f"def run_eval():\n"
-            f"    return f6({x.result_obj})"
+            f"    return f6({sol.result_obj})"
         )
 
         result = pool_exec_processes(
             eval_code,
             func_name='run_eval',
-            timeout=self.config['timeout'],
-            processes=self.config['processes'],
-            debug=self.config['debug'],
+            timeout=self.config.env.timeout,
+            processes=self.config.env.processes,
+            debug=self.config.env.debug,
         )
         if result[0] == True:
             return 1.0
@@ -595,7 +601,7 @@ class P3Problem(BaseEnvironment[P3Solution]):
             return 0.0
 
     def random(self) -> list[P3Solution]:
-        program_list = [self.construct_prompt() for _ in range(self.config.batch_size)]
+        program_list = [self.construct_prompt() for _ in range(self.config.model.batch_size)]
         new_solutions = self.generate_program(program_list)
         return new_solutions
 
