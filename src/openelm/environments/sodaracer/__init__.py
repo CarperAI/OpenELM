@@ -247,10 +247,6 @@ INSTRUCTIONS = {
     3: "#Combine the ,starting programs above to make a new program.\ndef make_walker():\n",
 }
 
-SQUARE_SEED = {
-    "program_str": IMPORTS + SQUARE_PREREQ + SQUARE,
-}
-
 __all__ = [
     "IESoRWorld",
     "SodaraceSimulator",

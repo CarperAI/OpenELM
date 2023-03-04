@@ -128,12 +128,18 @@ class P3Config(BaseConfig):
     run_name: Optional[str] = None
 
 
-cs = ConfigStore.instance()
-cs.store(group="env", name="sodarace", node=SodaraceEnvConfig)
-cs.store(group="env", name="image_evolution", node=ImageEnvConfig)
-cs.store(group="env", name="p3_problem", node=P3EnvConfig)
-cs.store(group="qd", name="mapelites", node=MAPElitesConfig)
-cs.store(group="model", name="prompt", node=PromptModelConfig)
-cs.store(group="model", name="diff", node=DiffModelConfig)
-cs.store(name="elmconfig", node=ELMConfig)
-cs.store(name="p3config", node=P3Config)
+def register_configstore() -> ConfigStore:
+    """Register configs with Hydra's ConfigStore."""
+    cs = ConfigStore.instance()
+    cs.store(group="env", name="sodarace", node=SodaraceEnvConfig)
+    cs.store(group="env", name="image_evolution", node=ImageEnvConfig)
+    cs.store(group="env", name="p3_problem", node=P3EnvConfig)
+    cs.store(group="qd", name="mapelites", node=MAPElitesConfig)
+    cs.store(group="model", name="prompt", node=PromptModelConfig)
+    cs.store(group="model", name="diff", node=DiffModelConfig)
+    cs.store(name="elmconfig", node=ELMConfig)
+    cs.store(name="p3config", node=P3Config)
+    return cs
+
+
+CONFIGSTORE = register_configstore()

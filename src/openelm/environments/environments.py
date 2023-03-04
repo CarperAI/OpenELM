@@ -297,7 +297,6 @@ class Sodaracer(Genotype):
         """
         self.program_str: str = program_str
         self.result_obj: dict = result_obj
-        # self._fitness: Optional[float] = None
 
         # Check whether the Sodaracer is valid.
         try:
@@ -312,6 +311,9 @@ class Sodaracer(Genotype):
     def evaluate(self, eval_ms: int) -> float:
         self._fitness = self.simulator.evaluate(eval_ms)
         # if self._fitness is None:
+        #     print(self.valid)
+        #     self.simulator = SodaraceSimulator(body=self.result_obj)
+        #     print(self.evaluate(0))
         return self._fitness
 
     def __str__(self) -> str:
@@ -348,10 +350,6 @@ class Sodarace(BaseEnvironment[Sodaracer]):
             config: the environment config.
             mutation_model: the mutation model.
         """
-        # if isinstance(seeds, dict):
-        #     self.seeds: Sodaracer = Sodaracer(**seeds)
-        # elif not isinstance(seeds, Sodaracer):
-        #     raise TypeError
         self.config: SodaraceEnvConfig = config
         self.batch_size = self.config.batch_size
         self.mutation_model: MutationModel = mutation_model
@@ -472,12 +470,12 @@ class Sodarace(BaseEnvironment[Sodaracer]):
         return new_sodaracers
 
     def mutate(self, sodaracer_list: list[Sodaracer]) -> list[Sodaracer]:
-        program_str_list = [sr.program_str for sr in sodaracer_list]
-        new_sodaracers = self.generate_programs(program_str_list)
+        sodaracers = [sr.program_str for sr in sodaracer_list]
+        program_list = list(map(self.construct_prompt, sodaracers))
+        new_sodaracers = self.generate_programs(program_list)
         return new_sodaracers
 
     def fitness(self, x: Sodaracer) -> float:
-        # Call Sodaracers environment to get the fitness.
         if x.valid:
             return x.evaluate(self.config.eval_ms)
         else:

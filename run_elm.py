@@ -15,20 +15,18 @@ from omegaconf import OmegaConf
 from openelm import ELM
 
 
-# Load hydra config from yaml files and command line arguments.
 @hydra.main(
     config_name="elmconfig",
     version_base="1.2",
 )
-def main(cfg):
+def main(config):
     print("----------------- Config ---------------")
-    print(OmegaConf.to_yaml(cfg))
+    print(OmegaConf.to_yaml(config))
     print("-----------------  End -----------------")
-    cfg = OmegaConf.to_object(cfg)
-    print(cfg)
-    elm = ELM(cfg)
-    print("Best Individual: ", elm.run(init_steps=cfg.qd.init_steps,
-                                       total_steps=cfg.qd.total_steps))
+    config = OmegaConf.to_object(config)
+    elm = ELM(config)
+    print("Best Individual: ", elm.run(init_steps=config.qd.init_steps,
+                                       total_steps=config.qd.total_steps))
 
 
 if __name__ == "__main__":
