@@ -1,7 +1,5 @@
 from typing import Any
 
-import numpy as np
-
 from openelm.environments.environments import (
     BaseEnvironment,
     FunctionOptim,
@@ -11,24 +9,6 @@ from openelm.environments.environments import (
     Sodarace,
     P3Problem,
 )
-
-IMAGE_SEED = {
-    "program_str": """import numpy as np
-def draw_blue_rectangle() -> np.ndarray:
-\tpic = np.zeros((32, 32, 3))
-\tfor x in range(2, 30):
-\t\tfor y in range(2, 30):
-\t\t\tpic[x, y] = np.array([0, 0, 255])
-\treturn pic
-""",
-}
-exec(IMAGE_SEED["program_str"], globals())
-IMAGE_SEED["result_obj"] = globals()["draw_blue_rectangle"]()
-target = np.zeros((32, 32, 3))
-for y in range(32):
-    for x in range(32):
-        if (y - 16) ** 2 + (x - 16) ** 2 <= 100:  # a radius-10 circle
-            target[y, x] = np.array([1, 1, 0])
 
 P3_MED_SEED = {
     'program_str': '''from typing import List
@@ -155,9 +135,6 @@ __all__ = [
     "ImageOptim",
     "MatchString",
     "Sodarace",
-    "IMAGE_SEED",
-    "SQUARE_SEED",
-    "image_init_args",
-    "sodarace_init_args",
+    "ENVS_DICT",
     "P3Problem",
 ]
