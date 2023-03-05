@@ -85,3 +85,19 @@ def evaluate_function():
         return bad_request(
             "Failed to execute code", unsafe_execute_error_code=6
         )  # 6: Other errors.
+
+@app.route("/eval_p3_solution", methods=["POST"])
+def evaluate_p3_solution():
+    req_json = request.get_json()
+    try:
+        execution_result = unsafe_execute(
+            req_json["code"], req_json["func_name"], req_json["timeout"]
+        )
+        if isinstance(execution_result, ExecResult):
+            return bad_request(
+                f"failed sandbox_unsafe_execute", unsafe_execute_error_code=execution_result.name
+            )
+        return {"program_str": req_json["code"],
+                "result_obj": execution_result.__repr__()}, 200
+    except:
+        return bad_request(f"failed to execute code", unsafe_execute_error_code=6)  # 6: Other errors.
