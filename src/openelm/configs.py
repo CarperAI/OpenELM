@@ -78,6 +78,8 @@ class SodaraceEnvConfig(EnvConfig):
 @dataclass
 class ImageEnvConfig(EnvConfig):
     env_name: str = "image_evolution"
+    behavior_mode: str = "3-channel"
+    target: str = "circle"
 
 
 defaults = [
