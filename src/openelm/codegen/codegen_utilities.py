@@ -1,10 +1,13 @@
 import os
 import random
 import re
+from typing import Optional
 
 import numpy as np
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
+from openelm.configs import ModelConfig
 
 
 def set_seed(seed=None, deterministic=True) -> int:
@@ -66,37 +69,46 @@ def truncate(completion: str, def_num=1, print_num=0, only_local_scope=False):
         return completion
 
 
-def model_setup(cfg, device=None):
+def model_setup(cfg: ModelConfig, device=None, codegen_tokenizer: bool = True):
     set_seed(cfg.seed, deterministic=True)
     if device is None:
-        device = torch.device("cuda" if cfg.cuda else "cpu")
+        device = torch.device("cuda")
     use_fp16 = True
     if not cfg.fp16 or device.type == "cpu":
         use_fp16 = False
 
-    if cfg.model.startswith("codegen-16B"):
+    if "codegen-16B" in cfg.model_path:
         use_fp16 = True
 
-    tokenizer = AutoTokenizer.from_pretrained(cfg.model)
-    tokenizer.padding_side = "left"
-    tokenizer.pad_token = 50256
+    tokenizer = AutoTokenizer.from_pretrained(cfg.model_path)
+    if codegen_tokenizer:
+        tokenizer.padding_side = "left"
+        tokenizer.pad_token = 50256
 
-    model_path = cfg.model
     if cfg.gpus > 1:
         model = torch.nn.DataParallel(
-            create_model(model_path, fp16=use_fp16), device_ids=list(range(cfg.gpus))
+            create_model(cfg.model_path, fp16=use_fp16),
+            device_ids=list(range(cfg.gpus)),
         ).to(device)
     else:
-        model = create_model(model_path, fp16=use_fp16).to(device)
+        model = create_model(cfg.model_path, fp16=use_fp16).to(device)
     return model, tokenizer, device
 
 
 def sample(
-    batch, cfg, model, tokenizer, decode: bool = True, starting_idx=None, **kwargs
+    batch,
+    cfg: ModelConfig,
+    model,
+    tokenizer,
+    decode: bool = True,
+    starting_idx: Optional[int] = None,
+    num_return_sequences: Optional[int] = None,
+    **kwargs
 ) -> list[str]:
     """Run a model on a batch of contexts for a particular task."""
-    batch_size = kwargs.get("batch_size", cfg.batch_size)
-    device = kwargs.get("device", torch.device("cuda" if cfg.cuda else "cpu"))
+    if num_return_sequences is None:
+        num_return_sequences = cfg.batch_size
+    device = kwargs.get("device", torch.device("cuda"))
     temperature = kwargs.get("temperature", cfg.temp)
     top_p = kwargs.get("top_p", cfg.top_p)
     gen_max_len = kwargs.get("gen_max_len", cfg.gen_max_len)
@@ -111,7 +123,7 @@ def sample(
             tokens = model.module.generate(
                 **batch,
                 do_sample=True,
-                num_return_sequences=batch_size,
+                num_return_sequences=num_return_sequences,
                 temperature=temperature,
                 max_new_tokens=gen_max_len,
                 top_p=top_p,
@@ -122,7 +134,7 @@ def sample(
             tokens = model.generate(
                 **batch,
                 do_sample=True,
-                num_return_sequences=batch_size,
+                num_return_sequences=num_return_sequences,
                 temperature=temperature,
                 max_new_tokens=gen_max_len,
                 top_p=top_p,

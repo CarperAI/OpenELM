@@ -13,6 +13,7 @@ import math
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 from Box2D import Box2D as b2
 
 from openelm.environments.sodaracer.helpers import (
@@ -629,7 +630,7 @@ class SodaraceSimulator:
             )
             return abs(end + self.morphology["offsetX"])
         except Exception as e:
-            # print(e)
+            print(e)
             # print(self.world.bone_list)
             # print(self.world.muscle_list)
-            return None
+            return -np.inf

@@ -86,7 +86,7 @@ class CrossoverBenchmark:
 
         os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-        self.device = torch.device("cuda" if cfg.cuda else "cpu")
+        self.device = torch.device("cuda")
         self.model, self.tokenizer, self.device = model_setup(cfg, self.device)
 
     def construct_prompt(self, seeds):

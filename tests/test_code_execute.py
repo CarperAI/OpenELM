@@ -20,7 +20,7 @@ def parity(b1,b2,b3,b4):
 
     # Completion test
     result = eval_completions(eval_results=[PARITY_PROMPT])
-    assert result == [0]
+    assert result == [ExecResult.VALID]
 
     # Timeout test
     PROMPT = """

@@ -240,6 +240,13 @@ SEEDS_DICT = {
     "runner": RUNNER,
 }
 
+INSTRUCTIONS = {
+    0: "",
+    1: "def make_walker():\n",
+    2: "#Create a new walker by modifying the starting function above.\ndef make_walker():\n",
+    3: "#Combine the ,starting programs above to make a new program.\ndef make_walker():\n",
+}
+
 __all__ = [
     "IESoRWorld",
     "SodaraceSimulator",

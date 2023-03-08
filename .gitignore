@@ -135,6 +135,7 @@ logs/
 archive/
 data/
 *.out
+outputs
 
 # generated dot files and tree graphs
 .gv

@@ -66,9 +66,18 @@ def unsafe_execute(
                 exec(code_str, code_dct)
                 if ground_truth is None:
                     if args is None:
-                        return code_dct[func_name]()
+                        result = code_dct[func_name]()
                     elif args is not None:
-                        return code_dct[func_name](**args)
+                        result = code_dct[func_name](**args)
+
+                    # Multiprocessing.pool.map
+                    # (in utils.code_eval.pool_exec_processes())
+                    # cannot return 'generators'
+                    # (this may not catch all 'invalid' generator uses)
+                    if isinstance(result, range):
+                        result = list(result)
+
+                    return result
                 elif ground_truth is not None:
                     if all(
                         [
@@ -76,7 +85,7 @@ def unsafe_execute(
                             for arguments, res in ground_truth.items()
                         ]
                     ):
-                        return 0
+                        return ExecResult(0)
                     else:
                         return ExecResult(1)
         except Exception as e:
