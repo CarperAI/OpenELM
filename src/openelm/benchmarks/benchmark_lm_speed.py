@@ -8,11 +8,12 @@ from omegaconf import OmegaConf
 from tqdm import trange
 
 from openelm.codegen import model_setup, sample
+from openelm.configs import BaseConfig
 from openelm.environments import SQUARE_SEED
 
 
 @dataclass
-class BenchmarkSpeedConfig:
+class BenchmarkSpeedConfig(BaseConfig):
     hydra: Any = field(
         default_factory=lambda: {
             "run": {"dir": "logs/benchmarks/lm_speed/${now:%Y-%m-%d-%H-%M-%S}"}
