@@ -83,12 +83,14 @@ class ImageEnvConfig(EnvConfig):
     behavior_mode: str = "3-channel"
     target: str = "circle"
 
+
 @dataclass
 class P3EnvConfig(EnvConfig):
     env_name: str = "p3_problem"
     solutions_per_problem: int = 128
-    prompt_size: str = 'long' # med or long
+    prompt_size: str = "long"  # med or long
     timeout: float = 1.0
+
 
 defaults_elm = [
     {"model": "prompt"},
@@ -96,6 +98,8 @@ defaults_elm = [
     {"env": "sodarace"},
     "_self_",
 ]
+
+
 @dataclass
 class ELMConfig(BaseConfig):
     hydra: Any = field(
@@ -109,11 +113,14 @@ class ELMConfig(BaseConfig):
     env: Any = MISSING
     run_name: Optional[str] = None
 
+
 defaults_p3 = [
     {"model": "prompt"},
     {"env": "p3_problem"},
     "_self_",
 ]
+
+
 @dataclass
 class P3Config(BaseConfig):
     hydra: Any = field(
@@ -125,8 +132,11 @@ class P3Config(BaseConfig):
     model: Any = MISSING
     env: Any = MISSING
     save_result_obj: bool = False
-    eval_k: int = -1 # set >0, evaluate pass@k of previous runs using this k, instead of doing a new run
-    eval_timestamp: str = '' # optionally provide timestamp of run to eval pass@k, otherwise eval with latest run of every problem
+    # set >0, evaluate pass@k of previous runs using this k, instead of doing a new run
+    eval_k: int = -1
+    # optionally provide timestamp of run to eval pass@k, otherwise eval with
+    # latest run of every problem
+    eval_timestamp: str = ""
     run_name: Optional[str] = None
 
 

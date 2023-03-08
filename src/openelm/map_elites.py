@@ -4,7 +4,6 @@ from typing import Optional
 import numpy as np
 from tqdm import trange
 
-from openelm.configs import MAPElitesConfig
 from openelm.environments import BaseEnvironment, Genotype
 
 Phenotype = Optional[np.ndarray]
@@ -228,6 +227,9 @@ class MAPElites:
             # TODO: account for the case where multiple new individuals are
             # placed in the same niche, for saving histories.
             for individual in new_individuals:
+                fitness = self.env.fitness(individual)
+                if np.isinf(fitness):
+                    continue
                 map_ix = self.to_mapindex(individual.to_phenotype())
                 # if the return is None, the individual is invalid and is thrown
                 # into the recycle bin.
@@ -241,7 +243,6 @@ class MAPElites:
                     self.history[map_ix].append(individual)
                 self.nonzero[map_ix] = True
 
-                fitness = self.env.fitness(individual)
                 # If new fitness greater than old fitness in niche, replace.
                 if fitness > self.fitnesses[map_ix]:
                     self.fitnesses[map_ix] = fitness

@@ -6,12 +6,12 @@ from openelm.environments.environments import (
     Genotype,
     ImageOptim,
     MatchString,
-    Sodarace,
     P3Problem,
+    Sodarace,
 )
 
 P3_MED_SEED = {
-    'program_str': '''from typing import List
+    "program_str": """from typing import List
 
 def f1(s: str):
     return "Hello " + s == "Hello world"
@@ -52,12 +52,12 @@ def f5(n: int):
 def g5():
     return int(int("123456789" + "0"*9) ** 0.5) + 1
 
-assert f5(g5())''',
+assert f5(g5())""",
     "result_obj": {},
 }
 
 P3_LONG_SEED = {
-    'program_str': '''from typing import List
+    "program_str": '''from typing import List
 
 def f1(s: str):
     return "Hello " + s == "Hello world"
@@ -107,13 +107,6 @@ assert f5(g5())''',
     "result_obj": {},
 }
 
-image_init_args = {
-    "seed": IMAGE_SEED,
-    "target_img": target,
-    "diff_model": None,
-    "behavior_mode": "3-channel",
-}
-
 p3_med_init_args = {
     "seed": P3_MED_SEED,
     "config": "openelm/config/elm_p3_cfg.yaml",
@@ -126,7 +119,11 @@ p3_long_init_args = {
     "diff_model": None,
 }
 
-ENVS_DICT: dict[str, Any] = {"sodarace": Sodarace, "image_evolution": ImageOptim, "p3": P3Problem}
+ENVS_DICT: dict[str, Any] = {
+    "sodarace": Sodarace,
+    "image_evolution": ImageOptim,
+    "p3": P3Problem,
+}
 
 __all__ = [
     "Genotype",

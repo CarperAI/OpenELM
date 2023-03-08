@@ -1,17 +1,15 @@
-import sys
 import json
 import math
 import string
+import sys
 from abc import ABC, abstractmethod
-from typing import Generic, Optional, TypeVar, Union, Type
+from typing import Generic, Optional, Type, TypeVar, Union
 
 import numpy as np
 import requests
 
-
-from openelm.configs import EnvConfig, ImageEnvConfig, SodaraceEnvConfig, P3EnvConfig
+from openelm.configs import EnvConfig, ImageEnvConfig, P3EnvConfig, SodaraceEnvConfig
 from openelm.environments.env_utils import IMAGE_SEED, get_image_target
-
 from openelm.environments.sodaracer import (
     CIRCLE,
     GALLOPER_PREREQ,
@@ -26,9 +24,11 @@ from openelm.environments.sodaracer import (
 from openelm.mutation_model import MutationModel
 from openelm.utils.code_eval import pool_exec_processes, type_check
 
-sys.set_int_max_str_digits(0) # remove length limitation for int->str conversion (model sometimes outputs really long ints)
+sys.set_int_max_str_digits(0)  # remove length limitation for int->str conversion
+# (model sometimes outputs really long ints)
 
 Phenotype = Optional[np.ndarray]
+
 
 def ackley(x: np.ndarray) -> np.ndarray:
     d = x.shape[-1]
@@ -529,7 +529,6 @@ class P3Solution(Genotype):
 
 
 class P3Problem(BaseEnvironment[P3Solution]):
-
     def __init__(
         self,
         seed: dict,
@@ -537,9 +536,11 @@ class P3Problem(BaseEnvironment[P3Solution]):
         mutation_model: MutationModel,
         problem_func: str,
         solution_preamble: str,
-        ans_type: Type
+        ans_type: Type,
     ) -> None:
         """
+        P3 Environment.
+
         Args:
             seed: the seed dict.
             config: the config file path or dict.
@@ -556,33 +557,35 @@ class P3Problem(BaseEnvironment[P3Solution]):
         self.problem_func = problem_func
         self.solution_preamble = solution_preamble
         self.config = config
-        self.import_line = "from typing import List\n" # The only import that's necessary as of P3 v0.2
+        self.batch_size = self.config.batch_size
+        # The only import that's necessary as of P3 v0.2
+        self.import_line = "from typing import List\n"
         self.ans_type = ans_type
 
     def construct_prompt(self) -> dict[str, str]:
         prompt_str = (
-            self.seed['program_str'] +
-            f'\n\n{self.problem_func}' # add this particular problem, f6(), to the prompt
-            f'\n\n{self.solution_preamble}' # add g6() preamble
+            self.seed["program_str"]
+            + f"\n\n{self.problem_func}"  # add f6() to the prompt
+            f"\n\n{self.solution_preamble}"  # add g6() preamble
         )
 
-        template = f'{self.import_line}\n{self.solution_preamble}'
-        return {'prompt': prompt_str, 'template': template}
+        template = f"{self.import_line}\n{self.solution_preamble}"
+        return {"prompt": prompt_str, "template": template}
 
-    def generate_program(self, code_batch: list[str]) -> list[P3Solution]:
+    def generate_program(self, code_batch: list[dict[str, str]]) -> list[P3Solution]:
         """Generate new programs with a mutation model and evaluate them."""
         local_scope_exec = True
         generated_programs = self.mutation_model.generate_programs(
             code_batch, local_scope_exec
         )
 
-        if self.config.env.sandbox:
+        if self.config.sandbox:
             results = []
             for code in generated_programs:
                 resp = requests.post(
-                    f"{self.sandbox_server}/eval_p3_solution",
-                    json={"code": code, "timeout": self.config.env.timeout},
-                    timeout=self.config.env.timeout,
+                    f"{self.config.sandbox_server}/eval_p3_solution",
+                    json={"code": code, "timeout": self.config.timeout},
+                    timeout=self.config.timeout,
                 )
                 if resp.status_code == 200:
                     return_dict = json.loads(resp.text)
@@ -591,22 +594,23 @@ class P3Problem(BaseEnvironment[P3Solution]):
             results = pool_exec_processes(
                 generated_programs,
                 func_name="g6",
-                timeout=self.config.env.timeout,
-                processes=self.config.env.processes,
-                debug=self.config.env.debug,
+                timeout=self.config.timeout,
+                processes=self.config.processes,
+                debug=self.config.debug,
             )
-        results = [{'program_str': gen_prog, 'result_obj': res_obj}
-                    for (gen_prog, res_obj) in zip(generated_programs, results)]
+        results = [
+            {"program_str": gen_prog, "result_obj": res_obj}
+            for (gen_prog, res_obj) in zip(generated_programs, results)
+        ]
         return [P3Solution(**p) for p in results]
 
     def fitness(self, sol: P3Solution) -> float:
-        """
-        If passing the solution to the problem returns True, fitness is 1.0
-            else 0.0
-        """
-        if not type_check(self.ans_type, sol.result_obj): return 0.0
+        # If passing the solution to the problem returns True, fitness is 1.0
+        # else 0.0
+        if not type_check(self.ans_type, sol.result_obj):
+            return 0.0
 
-        eval_code = ( 
+        eval_code = (
             f"{self.import_line}\n"
             f"{self.problem_func}\n"
             f"def run_eval():\n"
@@ -615,23 +619,23 @@ class P3Problem(BaseEnvironment[P3Solution]):
 
         result = pool_exec_processes(
             eval_code,
-            func_name='run_eval',
-            timeout=self.config.env.timeout,
-            processes=self.config.env.processes,
-            debug=self.config.env.debug,
+            func_name="run_eval",
+            timeout=self.config.timeout,
+            processes=self.config.processes,
+            debug=self.config.debug,
         )
-        if result[0] == True:
+        if result[0] is True:
             return 1.0
         else:
             return 0.0
 
     def random(self) -> list[P3Solution]:
-        program_list = [self.construct_prompt() for _ in range(self.config.model.batch_size)]
+        program_list = [self.construct_prompt() for _ in range(self.config.batch_size)]
         new_solutions = self.generate_program(program_list)
         return new_solutions
 
     def mutate(self, x: P3Solution) -> list[P3Solution]:
-        pass
+        raise NotImplementedError
 
     def to_behavior_space(self, x: Sodaracer) -> Optional[Phenotype]:
-        pass
+        raise NotImplementedError
