@@ -13,8 +13,7 @@ from tqdm import tqdm, trange
 
 from openelm.codegen import model_setup, sample, truncate
 from openelm.configs import BaseConfig
-from openelm.utils.code_eval import eval_completions, mutate_code
-from openelm.utils.diff_eval import apply_diff, split_diff
+from openelm.utils import apply_diff, eval_completions, mutate_code, split_diff
 
 
 @dataclass
@@ -54,7 +53,7 @@ class BenchmarkBugs:
 
         os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-        self.device = torch.device("cuda" if cfg.cuda else "cpu")
+        self.device = torch.device("cuda")
         self.model, self.tokenizer, self.device = model_setup(cfg, self.device)
 
     def benchmark_parity(self, n_bugs, **kwargs):

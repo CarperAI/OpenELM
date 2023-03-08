@@ -3,6 +3,8 @@ import itertools
 import multiprocessing as mp
 from typing import Any, Iterable, Optional, Union
 
+import numpy as np
+
 from openelm.sandbox.server.sandbox_codex_execute import ExecResult, unsafe_execute
 
 
@@ -144,3 +146,46 @@ parity_test_data = {
 def quadratic(a, b, c, x):
     """Return quadratic: a,b,c are coefficients and x is the independent variable."""
     return a * x**2 + b * x + c
+
+
+def pass_at_k(n, c, k):
+    """
+    :param n: total number of samples
+    :param c: number of correct samples
+    :param k: k in pass@k
+    """
+    if n - c < k: return 1.0
+    return 1.0 - np.prod(1.0 - k / np.arange(n - c + 1, n + 1))
+
+def type_check(typ, obj):
+    """
+    Checks the object is the correct type. Supports only bool, int, float, str, and (possibly nested) lists of these
+
+    From: https://github.com/microsoft/PythonProgrammingPuzzles/blob/v0.2/puzzle_generator.py
+    """
+    type_s = type_str(typ)  # convert to string if necessary
+
+    nest_depth = type_s.count("List")
+    assert type_s.count("[") == nest_depth, "type_check only supports List for now, no Sets, Dicts, Tuples, ..."
+
+    assert type_s.startswith("List[" * nest_depth) and type_s.endswith("]" * nest_depth)
+    base_type = {"bool": bool, "int": int, "float": float, "str": str}[type_s[5 * nest_depth:len(type_s) - nest_depth]]
+
+    def helper(depth, o):
+        if depth == 0:
+            return type(o) is base_type
+        else:
+            return type(o) is list and all(helper(depth - 1, i) for i in o)
+
+    return helper(nest_depth, obj)
+
+def type_str(ty: type) -> str:
+    """
+    Convert type ty to string.
+    :param ty: str, typing.List[int] , typing.List[typing.List[bool]], etc.
+    :return: string form of type, "str", "List[int]" , "List[List[bool]]", etc.
+
+    From: https://github.com/microsoft/PythonProgrammingPuzzles/blob/v0.2/puzzle_generator.py
+    """
+    type_str = str(ty).replace("typing.", "")
+    return type_str[8:-2] if type_str.startswith("<class '") else type_str

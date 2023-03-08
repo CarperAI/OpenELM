@@ -112,7 +112,7 @@ class MAPElites:
     def __init__(
         self,
         env,
-        n_bins: int,
+        map_grid_size: tuple[int, ...],
         init_map: Optional[Map] = None,
         history_length: int = 1,
         save_history: bool = False,
@@ -125,7 +125,7 @@ class MAPElites:
             should be a subclass of `BaseEnvironment`, and should implement
             methods to generate random solutions, mutate existing solutions,
             and evaluate solutions for their fitness in the environment.
-            n_bins (int): Number of bins to partition the behavior space into.
+            map_grid_size (int): Number of bins to partition the behavior space into.
             init_map (Map, optional): A map to use for the algorithm. If not passed,
             a new map will be created. Defaults to None.
             history_length (int): Length of history to store for each niche (cell)
@@ -137,18 +137,19 @@ class MAPElites:
             Defaults to False.
         """
         self.env: BaseEnvironment = env
-        self.n_bins = n_bins
+        self.map_grid_size = map_grid_size
         self.history_length = history_length
         self.save_history = save_history
         # self.history will be set/reset each time when calling `.search(...)`
         self.history: dict = defaultdict(list)
         # discretization of space
-        self.bins = np.linspace(*env.behavior_space, n_bins + 1)[1:-1].T  # type: ignore
+        # TODO: make this work for any number of dimensions
+        self.bins = np.linspace(*env.behavior_space, map_grid_size[0] + 1)[1:-1].T  # type: ignore
         # TODO: abstract all maps out to a single class.
         # perfomance of niches
         if init_map is None:
             self.fitnesses: Map = Map(
-                dims=(n_bins,) * env.behavior_ndim,
+                dims=map_grid_size * env.behavior_ndim,
                 fill_value=-np.inf,
                 dtype=float,
                 history_length=history_length,
@@ -183,7 +184,7 @@ class MAPElites:
         ix = np.random.choice(np.flatnonzero(self.nonzero.array))
         return np.unravel_index(ix, self.nonzero.dims)
 
-    def search(self, initsteps: int, totalsteps: int, atol: float = 1.0) -> str:
+    def search(self, init_steps: int, total_steps: int, atol: float = 1.0) -> str:
         """
         Run the MAP-Elites search algorithm.
 
@@ -200,16 +201,17 @@ class MAPElites:
                 best performing solution object can be accessed via the
                 `current_max_genome` class attribute.
         """
-        tbar = trange(int(totalsteps))
+        tbar = trange(int(total_steps))
         max_fitness = -np.inf
         max_genome = None
         if self.save_history:
             self.history = defaultdict(list)
 
         for n_steps in tbar:
-            if n_steps < initsteps or self.genomes.empty:
+            if n_steps < init_steps or self.genomes.empty:
                 # Initialise by generating initsteps random solutions.
                 # If map is still empty: force to do generation instead of mutation.
+                # TODO: use a separate sampler, move batch size to qd config.
                 new_individuals: list[Genotype] = self.env.random()
             else:
                 # Randomly select a batch of elites from the map.
@@ -225,6 +227,9 @@ class MAPElites:
             # TODO: account for the case where multiple new individuals are
             # placed in the same niche, for saving histories.
             for individual in new_individuals:
+                fitness = self.env.fitness(individual)
+                if np.isinf(fitness):
+                    continue
                 map_ix = self.to_mapindex(individual.to_phenotype())
                 # if the return is None, the individual is invalid and is thrown
                 # into the recycle bin.
@@ -238,7 +243,6 @@ class MAPElites:
                     self.history[map_ix].append(individual)
                 self.nonzero[map_ix] = True
 
-                fitness = self.env.fitness(individual)
                 # If new fitness greater than old fitness in niche, replace.
                 if fitness > self.fitnesses[map_ix]:
                     self.fitnesses[map_ix] = fitness
