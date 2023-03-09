@@ -8,7 +8,7 @@ def make_circle(wc, cx, cy, radius, num_points):
     tot_ang = 3.14 * 2.0
     for idx in range(num_points):
         ang = tot_ang / (num_points + 1) * idx
-        x = math.cos(ang) * radius + cx
+        x = math.cos(ang) * radius + 0.5
         y = math.sin(ang) * radius + cy
         joints.append(wc.add_joint(x, y))
     return joints
