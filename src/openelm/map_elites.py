@@ -49,7 +49,9 @@ class Map:
         else:
             # Set starting top of buffer to 0 (% operator)
             self.top = np.full(dims, self.history_length - 1, dtype=int)
-            self.array = np.full((history_length,) + dims, fill_value, dtype=dtype)
+            self.array = np.full(
+                (history_length,) + tuple(dims), fill_value, dtype=dtype
+            )
         self.empty = True
 
     def __getitem__(self, map_ix):
