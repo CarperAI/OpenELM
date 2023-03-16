@@ -2,6 +2,7 @@ from collections import defaultdict
 from typing import Optional
 
 import numpy as np
+from sklearn.cluster import KMeans
 from tqdm import trange
 
 from openelm.environments import BaseEnvironment, Genotype
@@ -98,6 +99,46 @@ class Map:
     def niches_filled(self) -> int:
         """Returns the number of niches in the map that have been explored."""
         return np.count_nonzero(np.isfinite(self.array))
+
+
+class GridMap(Map):
+    """Class to represent a map with grid niches (standard MAP-Elites)."""
+
+    def __init__(
+        self,
+        dims: tuple,
+        fill_value: float,
+        dtype: type = np.float32,
+        history_length: int = 1,
+    ):
+        super().__init__(dims, fill_value, dtype, history_length)
+
+
+class CVTMap(Map):
+    """
+    Class to represent a map with centroidal Voronoi tessellation (CVT) niches.
+
+    Each niche is defined by its centroid.
+    """
+
+    def __init__(
+        self,
+        niches: int,
+        feature_dims: tuple,
+        cvt_samples: int,
+        fill_value: float,
+        dtype: type = np.float32,
+        history_length: int = 1,
+    ):
+        super().__init__((niches,), fill_value, dtype, history_length)
+        self.niches: int = niches
+        self.feature_dims: tuple = feature_dims
+
+        # Compute the CVT centroids
+        sampled = np.random.uniform(cvt_samples, feature_dims)
+        k_means = KMeans(init="k-means++", n_clusters=niches)
+        k_means.fit(sampled)
+        self.centroids = k_means.cluster_centers_
 
 
 class MAPElites:
