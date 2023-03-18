@@ -10,7 +10,7 @@ from openelm.environments.environments import (
 from openelm.map_elites import MAPElites
 
 
-@pytest.mark.skip(reason="long runtime")
+@pytest.mark.slow
 def test_string_matching():
     env: BaseEnvironment = MatchString(StringEnvConfig())
     elites = MAPElites(env, map_grid_size=(3,), history_length=10)
