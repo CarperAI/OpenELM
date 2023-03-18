@@ -8,7 +8,13 @@ from typing import Generic, Optional, Type, TypeVar, Union
 import numpy as np
 import requests
 
-from openelm.configs import EnvConfig, ImageEnvConfig, P3EnvConfig, SodaraceEnvConfig
+from openelm.configs import (
+    EnvConfig,
+    ImageEnvConfig,
+    P3EnvConfig,
+    SodaraceEnvConfig,
+    StringEnvConfig,
+)
 from openelm.environments.env_utils import IMAGE_SEED, get_image_target
 from openelm.environments.sodaracer import (
     CIRCLE,
@@ -135,10 +141,12 @@ class StringArrayGenotype(ArrayGenotype):
 class MatchString(BaseEnvironment[StringArrayGenotype]):
     # find a string by mutating one character at a time
 
-    def __init__(self, target: str):
+    def __init__(self, config: StringEnvConfig):
         self.alphabet = string.ascii_letters
 
-        self.target = np.array([self.alphabet.index(ch) for ch in target])
+        self.config: StringEnvConfig = config
+        self.batch_size = self.config.batch_size
+        self.target = np.array([self.alphabet.index(ch) for ch in self.config.target])
         self.genotype_ndim = self.target.shape[0]
         self.genotype_space = np.repeat(
             [[0, len(self.alphabet)]], self.genotype_ndim, axis=0

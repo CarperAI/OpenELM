@@ -85,6 +85,12 @@ class ImageEnvConfig(EnvConfig):
 
 
 @dataclass
+class StringEnvConfig(EnvConfig):
+    env_name: str = "string_evolution"
+    target: str = "MapElites"
+
+
+@dataclass
 class P3EnvConfig(EnvConfig):
     env_name: str = "p3_problem"
     solutions_per_problem: int = 128
@@ -145,6 +151,7 @@ def register_configstore() -> ConfigStore:
     cs = ConfigStore.instance()
     cs.store(group="env", name="sodarace", node=SodaraceEnvConfig)
     cs.store(group="env", name="image_evolution", node=ImageEnvConfig)
+    cs.store(group="env", name="string_evolution", node=StringEnvConfig)
     cs.store(group="env", name="p3_problem", node=P3EnvConfig)
     cs.store(group="qd", name="mapelites", node=MAPElitesConfig)
     cs.store(group="model", name="prompt", node=PromptModelConfig)
