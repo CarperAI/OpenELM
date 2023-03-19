@@ -73,6 +73,14 @@ class Map:
             self.array[(self.top[map_ix], *map_ix)] = value
 
     @property
+    def latest(self) -> np.ndarray:
+        """Returns the latest values in the history buffer."""
+        if self.history_length == 1:
+            return self.array
+        else:
+            return np.choose(self.top, self.array)
+
+    @property
     def shape(self) -> tuple:
         """Wrapper around the shape of the numpy array."""
         return self.array.shape
@@ -140,6 +148,8 @@ class CVTMap(Map):
         k_means.fit(sampled)
         self.centroids = k_means.cluster_centers_
 
+        # TODO: Implement CVT niches
+
 
 class MAPElites:
     """
@@ -185,6 +195,8 @@ class MAPElites:
         self.save_history = save_history
         # self.history will be set/reset each time when calling `.search(...)`
         self.history: dict = defaultdict(list)
+        self.fitness_history: list = []
+
         # discretization of space
         # TODO: make this work for any number of dimensions
         self.bins = np.linspace(*env.behavior_space, map_grid_size[0] + 1)[1:-1].T  # type: ignore
@@ -300,6 +312,8 @@ class MAPElites:
                 if np.isclose(max_fitness, self.env.max_fitness, atol=atol):
                     break
 
+            self.fitness_history.append(max_fitness)
+
         self.current_max_genome = max_genome
         return str(max_genome)
 
@@ -319,3 +333,26 @@ class MAPElites:
         in the map.
         """
         return self.fitnesses.qd_score
+
+    def plot(self):
+        import matplotlib
+        import matplotlib.pyplot as plt
+
+        matplotlib.rcParams["font.family"] = "Futura"
+        matplotlib.rcParams["figure.dpi"] = 100
+        matplotlib.style.use("ggplot")
+
+        ix = tuple(np.zeros(len(self.fitnesses.dims) - 2, int))
+        print(ix)
+        map2d = self.fitnesses[ix]
+        print(f"{map2d.shape=}")
+
+        print([g.__str__() for g in self.genomes[ix].flatten().tolist()])
+
+        plt.figure()
+        plt.plot(self.fitness_history)
+        plt.savefig("logs/elm/MAPElites_fitness_history.png")
+
+        plt.figure()
+        plt.pcolor(map2d, cmap="inferno")
+        plt.savefig("logs/elm/MAPElites_vis.png")
