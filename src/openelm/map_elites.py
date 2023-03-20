@@ -99,9 +99,19 @@ class Map:
         return self.array[np.isfinite(self.array)].sum()
 
     @property
-    def maximum(self) -> float:
+    def max(self) -> float:
         """Returns the maximum value in the map."""
         return self.array.max()
+
+    @property
+    def min(self) -> float:
+        """Returns the minimum value in the map."""
+        return self.latest[np.isfinite(self.latest)].min()
+
+    @property
+    def mean(self) -> np.ndarray:
+        """Returns the mean value in the map."""
+        return np.mean(self.latest[np.isfinite(self.latest)])
 
     @property
     def niches_filled(self) -> int:
@@ -195,7 +205,7 @@ class MAPElites:
         self.save_history = save_history
         # self.history will be set/reset each time when calling `.search(...)`
         self.history: dict = defaultdict(list)
-        self.fitness_history: list = []
+        self.fitness_history: dict = defaultdict(list)
 
         # discretization of space
         # TODO: make this work for any number of dimensions
@@ -312,7 +322,9 @@ class MAPElites:
                 if np.isclose(max_fitness, self.env.max_fitness, atol=atol):
                     break
 
-            self.fitness_history.append(max_fitness)
+            self.fitness_history["max"].append(max_fitness)
+            self.fitness_history["min"].append(self.fitnesses.min)
+            self.fitness_history["mean"].append(self.fitnesses.mean)
 
         self.current_max_genome = max_genome
         return str(max_genome)
@@ -321,9 +333,17 @@ class MAPElites:
         """Get the number of niches that have been explored in the map."""
         return self.fitnesses.niches_filled
 
-    def maximum_fitness(self):
+    def max_fitness(self):
         """Get the maximum fitness value in the map."""
-        return self.fitnesses.maximum
+        return self.fitnesses.max
+
+    def mean_fitness(self):
+        """Get the mean fitness value in the map."""
+        return self.fitnesses.mean
+
+    def min_fitness(self):
+        """Get the minimum fitness value in the map."""
+        return self.fitnesses.min
 
     def qd_score(self):
         """
@@ -338,19 +358,21 @@ class MAPElites:
         import matplotlib
         import matplotlib.pyplot as plt
 
-        matplotlib.rcParams["font.family"] = "Futura"
         matplotlib.rcParams["figure.dpi"] = 100
         matplotlib.style.use("ggplot")
 
         ix = tuple(np.zeros(len(self.fitnesses.dims) - 2, int))
         print(ix)
-        map2d = self.fitnesses[ix]
+        map2d = self.fitnesses.latest[ix]
         print(f"{map2d.shape=}")
 
         print([g.__str__() for g in self.genomes[ix].flatten().tolist()])
 
         plt.figure()
-        plt.plot(self.fitness_history)
+        plt.plot(self.fitness_history["max"], label="max fitness")
+        plt.plot(self.fitness_history["mean"], label="mean fitness")
+        plt.plot(self.fitness_history["min"], label="min fitness")
+        plt.legend()
         plt.savefig("logs/elm/MAPElites_fitness_history.png")
 
         plt.figure()

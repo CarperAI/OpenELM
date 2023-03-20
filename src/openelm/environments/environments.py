@@ -3,6 +3,7 @@ import math
 import string
 import sys
 from abc import ABC, abstractmethod
+from copy import deepcopy
 from typing import Generic, Optional, Type, TypeVar, Union
 
 import numpy as np
@@ -158,14 +159,15 @@ class MatchString(BaseEnvironment[StringArrayGenotype]):
             for _ in range(self.batch_size)
         ]
 
-    def mutate(self, x: list[StringArrayGenotype]) -> list[StringArrayGenotype]:
+    def mutate(self, genomes: list[StringArrayGenotype]) -> list[StringArrayGenotype]:
+        x = deepcopy(genomes)
         for i in range(self.batch_size):
             ix = np.random.randint(self.genotype_ndim)
             x[i][ix] = x[i][ix] + np.random.uniform(-1, 1)
         return x
 
     def fitness(self, x: StringArrayGenotype) -> float:
-        return -np.abs(x - self.target).sum()
+        return -np.abs(x.to_phenotype() - self.target).sum()
 
 
 class ImageGeneration(Genotype):

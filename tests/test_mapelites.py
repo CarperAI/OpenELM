@@ -39,11 +39,11 @@ def test_map():
 
     assert fitnesses.shape == (4, 3, 3)
     assert fitnesses.top.shape == (3, 3)
-    assert fitnesses.top[0, 0] == 1
-    assert fitnesses.top[1, 1] == 0
-    assert fitnesses.top[2, 2] == 0
-    assert fitnesses.top[1, 2] == 3
-    assert fitnesses.top[2, 1] == 3
+    assert fitnesses.top[0, 0] == 1.
+    assert fitnesses.top[1, 1] == 0.
+    assert fitnesses.top[2, 2] == 0.
+    assert fitnesses.top[1, 2] == 3.
+    assert fitnesses.top[2, 1] == 3.
 
     latest = fitnesses.latest
     assert latest.shape == (3, 3)
@@ -53,14 +53,19 @@ def test_map():
     assert latest[1, 2] == -2.
     assert latest[2, 1] == -np.inf
 
+    assert fitnesses.min == -2.
+    assert fitnesses.max == 5.
+    assert fitnesses.mean == (-2. + 5 + 1 - 2) / 4
+
 
 @pytest.mark.slow
 def test_string_matching():
-    env: BaseEnvironment = MatchString(StringEnvConfig())
-    elites = MAPElites(env, map_grid_size=(3,), history_length=10)
-    result = elites.search(init_steps=10_000, total_steps=100_000)
+    target_string = "MAPElites"
+    env: BaseEnvironment = MatchString(StringEnvConfig(target=target_string, batch_size=1))
+    elites = MAPElites(env, map_grid_size=(2,), history_length=10)
+    result = elites.search(init_steps=10, total_steps=10_000)
     elites.plot()
-    assert result == "MAPElites"
+    assert result == target_string
 
 
 @pytest.mark.skip(reason="unimplemented")
