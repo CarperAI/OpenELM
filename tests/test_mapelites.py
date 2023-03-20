@@ -60,10 +60,32 @@ def test_map():
 
 @pytest.mark.slow
 def test_string_matching():
-    target_string = "MAPElites"
+    target_string = "AAA"
     env: BaseEnvironment = MatchString(StringEnvConfig(target=target_string, batch_size=1))
     elites = MAPElites(env, map_grid_size=(2,), history_length=10)
-    result = elites.search(init_steps=10, total_steps=10_000)
+    result = elites.search(init_steps=100, total_steps=3000)
+    elites.plot()
+    assert result == target_string
+
+    # ordering of characters is abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ
+    # the splitting point for the bins is at A (26.0)
+    # we expect all niches to converge around this point
+
+    print('genes', *[g.to_phenotype() for g in elites.genomes.latest.flatten().tolist()])
+    print('bins', elites.bins)
+    genomes = [str(g) for g in elites.genomes.latest.flatten().tolist()]
+    assert len(genomes) == 8
+    for g in genomes:
+        assert g == target_string
+    # print(genomes)
+
+
+@pytest.mark.slow
+def test_string_matching2():
+    target_string = "Evolve"
+    env: BaseEnvironment = MatchString(StringEnvConfig(target=target_string, batch_size=8))
+    elites = MAPElites(env, map_grid_size=(3,), history_length=1)
+    result = elites.search(init_steps=2_000, total_steps=20_000)
     elites.plot()
     assert result == target_string
 

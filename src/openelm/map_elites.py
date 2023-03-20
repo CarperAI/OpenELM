@@ -362,11 +362,11 @@ class MAPElites:
         matplotlib.style.use("ggplot")
 
         ix = tuple(np.zeros(len(self.fitnesses.dims) - 2, int))
-        print(ix)
         map2d = self.fitnesses.latest[ix]
-        print(f"{map2d.shape=}")
-
-        print([g.__str__() for g in self.genomes[ix].flatten().tolist()])
+        print(
+            "plotted genes:",
+            *[str(g) for g in self.genomes.latest[ix].flatten().tolist()],
+        )
 
         plt.figure()
         plt.plot(self.fitness_history["max"], label="max fitness")
