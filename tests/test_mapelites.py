@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from openelm.configs import ImageEnvConfig, StringEnvConfig
+from openelm.configs import ImageEnvConfig, PromptModelConfig, StringEnvConfig
 from openelm.environments.environments import (
     BaseEnvironment,
     FunctionOptim,
@@ -9,6 +9,7 @@ from openelm.environments.environments import (
     MatchString,
 )
 from openelm.map_elites import GridMap, MAPElites
+from openelm.mutation_model import PromptModel
 
 
 def test_map():
@@ -99,9 +100,11 @@ def test_function_optim():
     # elites.plot()
 
 
-@pytest.mark.skip(reason="unimplemented")
+@pytest.mark.slow
 def test_image_optim():
-    env = ImageOptim(ImageEnvConfig())
-    elites = MAPElites(env, n_bins=2, history_length=10)
+    env = ImageOptim(ImageEnvConfig(debug=True), PromptModel(PromptModelConfig()))
+    elites = MAPElites(env, map_grid_size=(2,), history_length=10)
+    result = elites.search(init_steps=5, total_steps=5)
 
-    print("Best image", elites.search(initsteps=5, totalsteps=10))
+    print(f"Best image\n{result}")
+    pass

@@ -48,6 +48,18 @@ def ackley(x: np.ndarray) -> np.ndarray:
     return -(a + math.exp(1) + o1 + o2)
 
 
+def numpy_to_ascii_art(arr):
+    """Convert a numpy array with dimensions (width, height, channels) to ascii art."""
+    art_chars = " .:-=#"
+    im = np.sum(arr, axis=-1)  # we can't do colors
+    idx = np.round(np.interp(im, (im.min(), im.max()), (0, len(art_chars) - 1))).astype(
+        "int"
+    )
+    chars = np.choose(idx, art_chars)
+    ascii_art = "\n".join(["".join(x) for x in chars])
+    return ascii_art
+
+
 class Genotype(ABC):
     def __str__(self) -> str:
         raise NotImplementedError
@@ -180,7 +192,8 @@ class ImageGeneration(Genotype):
 
     def __str__(self) -> str:
         if self.valid:
-            return str(self.result_obj.reshape((-1, 3)).mean(axis=0).astype(int))
+            return numpy_to_ascii_art(self.result_obj)
+            # return str(self.result_obj.reshape((-1, 3)).mean(axis=0).astype(int))
         else:
             return ""
 
