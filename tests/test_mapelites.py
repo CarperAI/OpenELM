@@ -102,9 +102,10 @@ def test_function_optim():
 
 @pytest.mark.slow
 def test_image_optim():
-    env = ImageOptim(ImageEnvConfig(debug=True), PromptModel(PromptModelConfig()))
-    elites = MAPElites(env, map_grid_size=(2,), history_length=10)
-    result = elites.search(init_steps=5, total_steps=5)
+    env = ImageOptim(ImageEnvConfig(debug=False), PromptModel(PromptModelConfig(model_path="Salesforce/codegen-2B-mono", gpus=2)))
+    elites = MAPElites(env, map_grid_size=(2,), history_length=1)
+    result = elites.search(init_steps=5, total_steps=20)
 
+    elites.plot()
     print(f"Best image\n{result}")
     pass
