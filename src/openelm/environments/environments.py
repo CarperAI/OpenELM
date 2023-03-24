@@ -16,7 +16,7 @@ from openelm.configs import (
     SodaraceEnvConfig,
     StringEnvConfig,
 )
-from openelm.environments.env_utils import IMAGE_SEED, get_image_target
+from openelm.environments.env_utils import NULL_SEED, get_image_target
 from openelm.environments.sodaracer import (
     CIRCLE,
     GALLOPER_PREREQ,
@@ -211,6 +211,10 @@ class ImageGeneration(Genotype):
         else:
             return None
 
+    def visualize(self, ax) -> None:
+        if self.valid:
+            ax.imshow(self.result_obj)
+
 
 class ImageOptim(BaseEnvironment[ImageGeneration]):
     """
@@ -235,7 +239,7 @@ class ImageOptim(BaseEnvironment[ImageGeneration]):
         self.config: ImageEnvConfig = config
         self.batch_size = self.config.batch_size
         self.target_img: np.ndarray = get_image_target(self.config.target)
-        self.seed: str = IMAGE_SEED
+        self.seed: str = NULL_SEED
         self.mutation_model: MutationModel = mutation_model
 
         self.behavior_mode: str = self.config.behavior_mode
@@ -245,10 +249,19 @@ class ImageOptim(BaseEnvironment[ImageGeneration]):
     def construct_prompt(
         self, code_batch: Optional[Union[list[str], str]] = None
     ) -> dict[str, str]:
-        prompt_str: str = "import math\nimport numpy as np\n"
+        prompt_str: str = """
+import math
+import numpy as np
+"""
         instruction_str: str = """
+# Fixed version of draw()
 def draw():
-    \"\"\"Draw a yellow circle.\"\"\"
+    \"\"\"
+    Draws a yellow circle with radius 10 in the middle of a 32 by 32 black image.
+
+    Returns:
+        np.ndarray: the image
+    \"\"\"
     pic = np.zeros((32, 32, 3))
 """
         import_str: str = prompt_str
@@ -256,6 +269,11 @@ def draw():
             # Initialization steps
             prompt_str += self.seed
         else:
+            prompt_str += """
+# Old version of draw()
+# TODO: fix bugs in the code below
+
+"""
             # Evolution steps
             if isinstance(code_batch, list):
                 prompt_str += code_batch[0]

@@ -354,7 +354,7 @@ class MAPElites:
         """
         return self.fitnesses.qd_score
 
-    def plot(self):
+    def plot_fitness(self):
         import matplotlib
         import matplotlib.pyplot as plt
 
@@ -378,3 +378,37 @@ class MAPElites:
         plt.figure()
         plt.pcolor(map2d, cmap="inferno")
         plt.savefig("logs/elm/MAPElites_vis.png")
+
+    def visualize_individuals(self):
+        """Visualize the genes of the best performing solution."""
+        import matplotlib.pyplot as plt
+
+        tmp = self.genomes.array.reshape(self.genomes.shape[0], -1)
+
+        # if we're tracking history, rows will be the history dimension
+        # otherwise, just the first dimension of the map
+        plt.figure()
+        _, axs = plt.subplots(nrows=tmp.shape[0], ncols=tmp.shape[1])
+        for genome, ax in zip(tmp.flatten(), axs.flatten()):
+            # keep the border but remove the ticks
+            ax.get_xaxis().set_ticks([])
+            ax.get_yaxis().set_ticks([])
+            try:
+                genome.visualize(ax=ax)
+            except AttributeError:
+                pass
+
+        plt.savefig("logs/elm/MAPElites_individuals.png")
+
+        if self.recycled_count >= 1:
+            plt.figure()
+            _, axs = plt.subplots(nrows=self.recycled_count, ncols=1)
+            for genome, ax in zip(self.recycled, axs.flatten()):
+                # keep the border but remove the ticks
+                ax.get_xaxis().set_ticks([])
+                ax.get_yaxis().set_ticks([])
+                try:
+                    genome.visualize(ax=ax)
+                except AttributeError:
+                    pass
+            plt.savefig("logs/elm/MAPElites_recycled.png")
