@@ -8,7 +8,7 @@ from openelm.environments.environments import (
     ImageOptim,
     MatchString,
 )
-from openelm.map_elites import GridMap, MAPElites
+from openelm.map_elites import CVTMAPElites, Map, MAPElites
 from openelm.mutation_model import PromptModel
 
 
@@ -16,7 +16,7 @@ def test_map():
     behavior_ndim = 2
     map_grid_size = [3]
     history_length = 4
-    fitnesses = GridMap(
+    fitnesses = Map(
         dims=map_grid_size * behavior_ndim,
         fill_value=-np.inf,
         dtype=float,
@@ -60,20 +60,45 @@ def test_map():
 
 
 @pytest.mark.slow
+def test_cvt():
+    target_string = "AA"
+    env: BaseEnvironment = MatchString(StringEnvConfig(target=target_string, batch_size=1))
+    elites = CVTMAPElites(env, map_grid_size=(5,), history_length=100)
+    result = elites.search(init_steps=10, total_steps=3000)
+
+    elites.plot_fitness()
+    elites.plot_behaviour_space()
+    assert result == target_string
+
+    # Since the CVT is random, results may be less consistent than grid
+    # TODO: figure out a test for this
+
+
+@pytest.mark.slow
+def test_cvt2():
+    target_string = "Evolve"
+    env: BaseEnvironment = MatchString(StringEnvConfig(target=target_string, batch_size=10))
+    elites = CVTMAPElites(env, map_grid_size=(10,), history_length=100)
+    result = elites.search(init_steps=20, total_steps=5000)
+
+    elites.plot_fitness()
+    elites.plot_behaviour_space()
+    assert result == target_string
+
+
+@pytest.mark.slow
 def test_string_matching():
     target_string = "AAA"
     env: BaseEnvironment = MatchString(StringEnvConfig(target=target_string, batch_size=1))
     elites = MAPElites(env, map_grid_size=(2,), history_length=10)
     result = elites.search(init_steps=100, total_steps=3000)
-    elites.plot()
+    elites.plot_fitness()
     assert result == target_string
 
     # ordering of characters is abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ
     # the splitting point for the bins is at A (26.0)
     # we expect all niches to converge around this point
 
-    print('genes', *[g.to_phenotype() for g in elites.genomes.latest.flatten().tolist()])
-    print('bins', elites.bins)
     genomes = [str(g) for g in elites.genomes.latest.flatten().tolist()]
     assert len(genomes) == 8
     for g in genomes:
@@ -87,7 +112,7 @@ def test_string_matching2():
     env: BaseEnvironment = MatchString(StringEnvConfig(target=target_string, batch_size=8))
     elites = MAPElites(env, map_grid_size=(3,), history_length=1)
     result = elites.search(init_steps=2_000, total_steps=20_000)
-    elites.plot()
+    elites.plot_fitness()
     assert result == target_string
 
 

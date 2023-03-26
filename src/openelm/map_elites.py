@@ -78,7 +78,10 @@ class Map:
         if self.history_length == 1:
             return self.array
         else:
-            return np.choose(self.top, self.array)
+            # should be equivalent to np.choose(self.top, self.array), but without limit of 32 choices
+            return np.take_along_axis(
+                arr=self.array, indices=self.top[np.newaxis, ...], axis=0
+            ).squeeze(axis=0)
 
     @property
     def shape(self) -> tuple:
@@ -119,49 +122,7 @@ class Map:
         return np.count_nonzero(np.isfinite(self.array))
 
 
-class GridMap(Map):
-    """Class to represent a map with grid niches (standard MAP-Elites)."""
-
-    def __init__(
-        self,
-        dims: tuple,
-        fill_value: float,
-        dtype: type = np.float32,
-        history_length: int = 1,
-    ):
-        super().__init__(dims, fill_value, dtype, history_length)
-
-
-class CVTMap(Map):
-    """
-    Class to represent a map with centroidal Voronoi tessellation (CVT) niches.
-
-    Each niche is defined by its centroid.
-    """
-
-    def __init__(
-        self,
-        niches: int,
-        feature_dims: tuple,
-        cvt_samples: int,
-        fill_value: float,
-        dtype: type = np.float32,
-        history_length: int = 1,
-    ):
-        super().__init__((niches,), fill_value, dtype, history_length)
-        self.niches: int = niches
-        self.feature_dims: tuple = feature_dims
-
-        # Compute the CVT centroids
-        sampled = np.random.uniform(cvt_samples, feature_dims)
-        k_means = KMeans(init="k-means++", n_clusters=niches)
-        k_means.fit(sampled)
-        self.centroids = k_means.cluster_centers_
-
-        # TODO: Implement CVT niches
-
-
-class MAPElites:
+class MAPElitesBase:
     """
     Class implementing MAP-Elites, a quality-diversity algorithm.
 
@@ -207,34 +168,42 @@ class MAPElites:
         self.history: dict = defaultdict(list)
         self.fitness_history: dict = defaultdict(list)
 
-        # discretization of space
-        # TODO: make this work for any number of dimensions
-        self.bins = np.linspace(*env.behavior_space, map_grid_size[0] + 1)[1:-1].T  # type: ignore
-        # TODO: abstract all maps out to a single class.
-        # perfomance of niches
-        if init_map is None:
-            self.fitnesses: Map = Map(
-                dims=map_grid_size * env.behavior_ndim,
-                fill_value=-np.inf,
-                dtype=float,
-                history_length=history_length,
-            )
-        else:
-            self.fitnesses = init_map
-        # niches' sources
-        self.genomes: Map = Map(
-            dims=self.fitnesses.dims,
-            fill_value=0.0,
-            dtype=object,
-            history_length=history_length,
-        )
-        # index over explored niches to select from
-        self.nonzero: Map = Map(dims=self.fitnesses.dims, fill_value=False, dtype=bool)
         # bad mutations that ended up with invalid output.
         self.recycled = [None] * 1000
         self.recycled_count = 0
 
+        self._init_discretization()
+        self._init_maps(init_map)
         print(f"MAP of size: {self.fitnesses.dims} = {self.fitnesses.map_size}")
+
+    def _init_maps(self, init_map: Optional[Map] = None):
+        # TODO: abstract all maps out to a single class.
+        # perfomance of niches
+        if init_map is None:
+            self.map_dims = self._get_map_dimensions()
+            self.fitnesses: Map = Map(
+                dims=self.map_dims,
+                fill_value=-np.inf,
+                dtype=float,
+                history_length=self.history_length,
+            )
+        else:
+            self.map_dims = init_map.dims
+            self.fitnesses = init_map
+
+        # niches' sources
+        self.genomes: Map = Map(
+            dims=self.map_dims,
+            fill_value=0.0,
+            dtype=object,
+            history_length=self.history_length,
+        )
+        # index over explored niches to select from
+        self.nonzero: Map = Map(dims=self.map_dims, fill_value=False, dtype=bool)
+
+    def _get_map_dimensions(self):
+        """Returns the dimensions of the map."""
+        return self.map_grid_size * self.env.behavior_ndim
 
     def to_mapindex(self, b: Phenotype) -> MapIndex:
         """Converts a phenotype (position in behaviour space) to a map index."""
@@ -361,13 +330,6 @@ class MAPElites:
         matplotlib.rcParams["figure.dpi"] = 100
         matplotlib.style.use("ggplot")
 
-        ix = tuple(np.zeros(len(self.fitnesses.dims) - 2, int))
-        map2d = self.fitnesses.latest[ix]
-        print(
-            "plotted genes:",
-            *[str(g) for g in self.genomes.latest[ix].flatten().tolist()],
-        )
-
         plt.figure()
         plt.plot(self.fitness_history["max"], label="max fitness")
         plt.plot(self.fitness_history["mean"], label="mean fitness")
@@ -375,9 +337,17 @@ class MAPElites:
         plt.legend()
         plt.savefig("logs/elm/MAPElites_fitness_history.png")
 
-        plt.figure()
-        plt.pcolor(map2d, cmap="inferno")
-        plt.savefig("logs/elm/MAPElites_vis.png")
+        if len(self.map_dims) > 1:
+            ix = tuple(np.zeros(max(1, len(self.fitnesses.dims) - 2), int))
+            map2d = self.fitnesses.latest[ix]
+            print(
+                "plotted genes:",
+                *[str(g) for g in self.genomes.latest[ix].flatten().tolist()],
+            )
+
+            plt.figure()
+            plt.pcolor(map2d, cmap="inferno")
+            plt.savefig("logs/elm/MAPElites_vis.png")
 
     def visualize_individuals(self):
         """Visualize the genes of the best performing solution."""
@@ -400,15 +370,153 @@ class MAPElites:
 
         plt.savefig("logs/elm/MAPElites_individuals.png")
 
-        if self.recycled_count >= 1:
+
+class MAPElites(MAPElitesBase):
+    """
+    Class implementing MAP-Elites, a quality-diversity algorithm.
+
+    MAP-Elites creates a map of high perfoming solutions at each point in a
+    discretized behavior space. First, the algorithm generates some initial random
+    solutions, and evaluates them in the environment. Then, it  repeatedly mutates
+    the solutions in the map, and places the mutated solutions in the map if they
+    outperform the solutions already in their niche.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def _init_discretization(self):
+        """Set up the discrete behaviour space for the algorithm."""
+        # TODO: make this work for any number of dimensions
+        self.bins = np.linspace(*self.env.behavior_space, self.map_grid_size[0] + 1)[1:-1].T  # type: ignore
+
+    def _get_map_dimensions(self):
+        """Returns the dimensions of the map."""
+        return self.map_grid_size * self.env.behavior_ndim
+
+    def to_mapindex(self, b: Phenotype) -> MapIndex:
+        """Converts a phenotype (position in behaviour space) to a map index."""
+        return (
+            None
+            if b is None
+            else tuple(np.digitize(x, bins) for x, bins in zip(b, self.bins))
+        )
+
+
+class CVTMAPElites(MAPElitesBase):
+    """
+    Class implementing MAP-Elites, a quality-diversity algorithm.
+
+    MAP-Elites creates a map of high perfoming solutions at each point in a
+    discretized behavior space. First, the algorithm generates some initial random
+    solutions, and evaluates them in the environment. Then, it  repeatedly mutates
+    the solutions in the map, and places the mutated solutions in the map if they
+    outperform the solutions already in their niche.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def _init_discretization(self):
+        """Discretize behaviour space using CVT."""
+        n = 10000
+        d = self.env.behavior_ndim
+
+        # lower and upper bounds for each dimension
+        low = self.env.behavior_space[0]
+        high = self.env.behavior_space[1]
+
+        points = np.zeros((n, d))
+        for i in range(d):
+            points[:, i] = np.random.uniform(low[i], high[i], size=n)
+
+        k_means = KMeans(
+            init="k-means++", n_init="auto", n_clusters=self.map_grid_size[0]
+        )
+        k_means.fit(points)
+        self.centroids = k_means.cluster_centers_
+
+        self.plot_centroids(points, k_means)
+
+    def plot_centroids(self, points, k_means):
+        import matplotlib.pyplot as plt
+
+        plt.figure()
+        labels = k_means.labels_
+        for i in range(self.centroids.shape[0]):
+            color = plt.cm.tab10(i % 10)  # choose a color based on the cluster index
+            plt.scatter(
+                self.centroids[i, 0],
+                self.centroids[i, 1],
+                s=150,
+                marker="x",
+                color=color,
+                label=f"Niche {i}",
+            )
+            plt.scatter(
+                points[labels == i, 0],
+                points[labels == i, 1],
+                s=10,
+                marker=".",
+                color=color,
+            )
+
+        plt.savefig("logs/elm/MAPElites_centroids.png")
+
+    def plot_behaviour_space(self):
+        import matplotlib.pyplot as plt
+
+        if self.env.behavior_ndim >= 2:
             plt.figure()
-            _, axs = plt.subplots(nrows=self.recycled_count, ncols=1)
-            for genome, ax in zip(self.recycled, axs.flatten()):
-                # keep the border but remove the ticks
-                ax.get_xaxis().set_ticks([])
-                ax.get_yaxis().set_ticks([])
-                try:
-                    genome.visualize(ax=ax)
-                except AttributeError:
-                    pass
-            plt.savefig("logs/elm/MAPElites_recycled.png")
+            for i in range(self.centroids.shape[0]):
+                color = plt.cm.tab10(i % 10)
+                plt.scatter(
+                    self.centroids[i, 0],
+                    self.centroids[i, 1],
+                    s=150,
+                    marker="x",
+                    color=color,
+                    label=f"Niche {i}",
+                )
+
+                # get the first two dimensions for each behaviour in the history
+                if self.genomes.history_length > 1:
+                    phenotypes = [
+                        g.to_phenotype()[:2]
+                        for g in self.genomes.array[:, i]
+                        if hasattr(g, "to_phenotype")
+                    ]
+                    if phenotypes:
+                        hist = np.stack(phenotypes)
+                        plt.scatter(
+                            hist[:, 0], hist[:, 1], s=10, marker=".", color=color
+                        )
+                else:
+                    g = self.genomes.array[i]
+                    if hasattr(g, "to_phenotype"):
+                        plt.scatter(
+                            g.to_phenotype()[0],
+                            g.to_phenotype()[1],
+                            s=10,
+                            marker=".",
+                            color=color,
+                        )
+
+            plt.xlim([0, self.env.behavior_space[1, 0]])
+            plt.ylim([0, self.env.behavior_space[1, 1]])
+
+            plt.savefig("logs/elm/MAPElites_behaviour_history.png")
+        else:
+            print("Not enough dimensions to plot behaviour space history")
+
+    def _get_map_dimensions(self):
+        """Returns the dimensions of the map."""
+        return self.map_grid_size
+
+    def to_mapindex(self, b: Phenotype) -> MapIndex:
+        """Maps a phenotype (position in behaviour space) to the index of the closest centroid."""
+        return (
+            None
+            if b is None
+            else (np.argmin(np.linalg.norm(b - self.centroids, axis=1)),)
+        )
