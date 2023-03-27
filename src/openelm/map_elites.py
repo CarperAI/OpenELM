@@ -324,11 +324,7 @@ class MAPElitesBase:
         return self.fitnesses.qd_score
 
     def plot_fitness(self):
-        import matplotlib
         import matplotlib.pyplot as plt
-
-        matplotlib.rcParams["figure.dpi"] = 100
-        matplotlib.style.use("ggplot")
 
         plt.figure()
         plt.plot(self.fitness_history["max"], label="max fitness")

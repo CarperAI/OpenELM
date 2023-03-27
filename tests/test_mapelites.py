@@ -134,4 +134,3 @@ def test_image_optim():
     elites.plot_fitness()
     elites.visualize_individuals()
     print(f"Best image\n{result}")
-    pass
