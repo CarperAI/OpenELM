@@ -9,6 +9,7 @@ from openelm.environments.environments import (
     P3Problem,
     Sodarace,
 )
+from openelm.map_elites import CVTMAPElites, MAPElites
 
 P3_MED_SEED = {
     "program_str": """from typing import List
@@ -125,6 +126,11 @@ ENVS_DICT: dict[str, Any] = {
     "p3": P3Problem,
 }
 
+QD_DICT: dict[str, Any] = {
+    "mapelites": MAPElites,
+    "cvtmapelites": CVTMAPElites,
+}
+
 __all__ = [
     "Genotype",
     "BaseEnvironment",
@@ -133,5 +139,6 @@ __all__ = [
     "MatchString",
     "Sodarace",
     "ENVS_DICT",
+    "QD_DICT",
     "P3Problem",
 ]

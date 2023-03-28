@@ -38,15 +38,25 @@ class DiffModelConfig(ModelConfig):
 
 @dataclass
 class QDConfig(BaseConfig):
-    init_steps: int = 2
-    total_steps: int = 5
+    init_steps: int = 10  # 2
+    total_steps: int = 50  # 5
 
 
 @dataclass
 class MAPElitesConfig(QDConfig):
+    qd_name: str = "mapelites"
     history_length: int = 1
     save_history: bool = False
     map_grid_size: tuple[int, ...] = field(default_factory=lambda: (12,))
+
+
+@dataclass
+class CVTMAPElitesConfig(QDConfig):
+    qd_name: str = "cvtmapelites"
+    history_length: int = 1
+    save_history: bool = False
+    map_grid_size: tuple[int, ...] = field(default_factory=lambda: (4,))
+    cvt_samples: int = 10000
 
 
 @dataclass
@@ -100,7 +110,7 @@ class P3EnvConfig(EnvConfig):
 
 defaults_elm = [
     {"model": "prompt"},
-    {"qd": "mapelites"},
+    {"qd": "cvtmapelites"},
     {"env": "sodarace"},
     "_self_",
 ]
@@ -154,6 +164,7 @@ def register_configstore() -> ConfigStore:
     cs.store(group="env", name="string_evolution", node=StringEnvConfig)
     cs.store(group="env", name="p3_problem", node=P3EnvConfig)
     cs.store(group="qd", name="mapelites", node=MAPElitesConfig)
+    cs.store(group="qd", name="cvtmapelites", node=CVTMAPElitesConfig)
     cs.store(group="model", name="prompt", node=PromptModelConfig)
     cs.store(group="model", name="diff", node=DiffModelConfig)
     cs.store(name="elmconfig", node=ELMConfig)

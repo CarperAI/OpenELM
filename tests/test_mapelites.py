@@ -1,7 +1,13 @@
 import numpy as np
 import pytest
 
-from openelm.configs import ImageEnvConfig, PromptModelConfig, StringEnvConfig
+from openelm.configs import (
+    CVTMAPElitesConfig,
+    ImageEnvConfig,
+    MAPElitesConfig,
+    PromptModelConfig,
+    StringEnvConfig,
+)
 from openelm.environments.environments import (
     BaseEnvironment,
     FunctionOptim,
@@ -61,13 +67,11 @@ def test_map():
 
 @pytest.mark.slow
 def test_cvt():
-    target_string = "AA"
+    target_string = "AAA"
     env: BaseEnvironment = MatchString(StringEnvConfig(target=target_string, batch_size=1))
-    elites = CVTMAPElites(env, map_grid_size=(5,), history_length=100)
+    elites = CVTMAPElites(env, CVTMAPElitesConfig(map_grid_size=(5,), history_length=100))
     result = elites.search(init_steps=10, total_steps=3000)
 
-    elites.plot_fitness()
-    elites.plot_behaviour_space()
     assert result == target_string
 
     # Since the CVT is random, results may be less consistent than grid
@@ -78,7 +82,7 @@ def test_cvt():
 def test_cvt2():
     target_string = "Evolve"
     env: BaseEnvironment = MatchString(StringEnvConfig(target=target_string, batch_size=10))
-    elites = CVTMAPElites(env, map_grid_size=(10,), history_length=100)
+    elites = CVTMAPElites(env, CVTMAPElitesConfig(map_grid_size=(10,), history_length=100))
     result = elites.search(init_steps=20, total_steps=5000)
 
     elites.plot_fitness()
@@ -90,7 +94,7 @@ def test_cvt2():
 def test_string_matching():
     target_string = "AAA"
     env: BaseEnvironment = MatchString(StringEnvConfig(target=target_string, batch_size=1))
-    elites = MAPElites(env, map_grid_size=(2,), history_length=10)
+    elites = MAPElites(env, MAPElitesConfig(map_grid_size=(2,), history_length=10))
     result = elites.search(init_steps=100, total_steps=3000)
     elites.plot_fitness()
     assert result == target_string
@@ -110,7 +114,7 @@ def test_string_matching():
 def test_string_matching2():
     target_string = "Evolve"
     env: BaseEnvironment = MatchString(StringEnvConfig(target=target_string, batch_size=8))
-    elites = MAPElites(env, map_grid_size=(3,), history_length=1)
+    elites = MAPElites(env, MAPElitesConfig(map_grid_size=(3,), history_length=1))
     result = elites.search(init_steps=2_000, total_steps=20_000)
     elites.plot_fitness()
     assert result == target_string
@@ -119,7 +123,7 @@ def test_string_matching2():
 @pytest.mark.skip(reason="unimplemented")
 def test_function_optim():
     env: BaseEnvironment = FunctionOptim(ndim=2)
-    elites = MAPElites(env, map_grid_size=(128,), history_length=10)
+    elites = MAPElites(env, MAPElitesConfig(map_grid_size=(128,), history_length=10))
     assert elites.search(init_steps=5_000, total_steps=50_000, atol=0) == 1.0
 
     # elites.plot()
@@ -128,7 +132,7 @@ def test_function_optim():
 @pytest.mark.slow
 def test_image_optim():
     env = ImageOptim(ImageEnvConfig(debug=False), PromptModel(PromptModelConfig(model_path="Salesforce/codegen-2B-mono", gpus=2)))
-    elites = MAPElites(env, map_grid_size=(2,), history_length=10, save_history=True)
+    elites = MAPElites(env, MAPElitesConfig(map_grid_size=(2,), history_length=10, save_history=True))
     result = elites.search(init_steps=10, total_steps=50)
 
     elites.plot_fitness()
