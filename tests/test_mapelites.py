@@ -69,7 +69,7 @@ def test_map():
 def test_cvt():
     target_string = "AAA"
     env: BaseEnvironment = MatchString(StringEnvConfig(target=target_string, batch_size=1))
-    elites = CVTMAPElites(env, CVTMAPElitesConfig(map_grid_size=(5,), history_length=100))
+    elites = CVTMAPElites(env, CVTMAPElitesConfig(n_niches=5, history_length=100))
     result = elites.search(init_steps=10, total_steps=3000)
 
     assert result == target_string
@@ -82,7 +82,7 @@ def test_cvt():
 def test_cvt2():
     target_string = "Evolve"
     env: BaseEnvironment = MatchString(StringEnvConfig(target=target_string, batch_size=10))
-    elites = CVTMAPElites(env, CVTMAPElitesConfig(map_grid_size=(10,), history_length=100))
+    elites = CVTMAPElites(env, CVTMAPElitesConfig(n_niches=10, history_length=100))
     result = elites.search(init_steps=20, total_steps=5000)
 
     elites.plot_fitness()

@@ -15,7 +15,7 @@ from omegaconf import OmegaConf
 from tqdm import trange
 
 from openelm.codegen import model_setup, sample, truncate
-from openelm.configs import BaseConfig
+from openelm.configs import BaseConfig, MAPElitesConfig
 from openelm.environments import SQUARE_SEED
 from openelm.environments.environments import Sodarace, Sodaracer
 from openelm.environments.sodaracer import (
@@ -131,7 +131,9 @@ class CrossoverBenchmark:
             diff_model=self.model,
             eval_ms=self.cfg.eval_ms,
         )
-        map_elites = MAPElites(env=sodarace_env, n_bins=12)
+        map_elites = MAPElites(
+            env=sodarace_env, config=MAPElitesConfig(map_grid_size=(12,))
+        )
 
         results: list[int] = []
         valid_fitnesses: list[float] = []

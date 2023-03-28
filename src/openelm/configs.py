@@ -38,8 +38,8 @@ class DiffModelConfig(ModelConfig):
 
 @dataclass
 class QDConfig(BaseConfig):
-    init_steps: int = 10  # 2
-    total_steps: int = 50  # 5
+    init_steps: int = 2
+    total_steps: int = 5
 
 
 @dataclass
@@ -55,7 +55,7 @@ class CVTMAPElitesConfig(QDConfig):
     qd_name: str = "cvtmapelites"
     history_length: int = 1
     save_history: bool = False
-    map_grid_size: tuple[int, ...] = field(default_factory=lambda: (4,))
+    n_niches: int = 12
     cvt_samples: int = 10000
 
 
@@ -110,7 +110,7 @@ class P3EnvConfig(EnvConfig):
 
 defaults_elm = [
     {"model": "prompt"},
-    {"qd": "cvtmapelites"},
+    {"qd": "mapelites"},
     {"env": "sodarace"},
     "_self_",
 ]

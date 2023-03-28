@@ -148,13 +148,12 @@ class MAPElitesBase:
             should be a subclass of `BaseEnvironment`, and should implement
             methods to generate random solutions, mutate existing solutions,
             and evaluate solutions for their fitness in the environment.
-            config (MAPElitesConfig): The configuration for the algorithm.
+            config (QDConfig): The configuration for the algorithm.
             init_map (Map, optional): A map to use for the algorithm. If not passed,
             a new map will be created. Defaults to None.
         """
         self.env: BaseEnvironment = env
         self.config: QDConfig = config
-        self.map_grid_size = self.config.map_grid_size
         self.history_length = self.config.history_length
         self.save_history = self.config.save_history
         # self.history will be set/reset each time when calling `.search(...)`
@@ -393,6 +392,7 @@ class MAPElites(MAPElitesBase):
             and evaluate solutions for their fitness in the environment.
             config (MAPElitesConfig): The configuration for the algorithm.
         """
+        self.map_grid_size = config.map_grid_size
         super().__init__(env=env, config=config, *args, **kwargs)
 
     def _init_discretization(self):
@@ -442,7 +442,8 @@ class CVTMAPElites(MAPElitesBase):
             and evaluate solutions for their fitness in the environment.
             config (CVTMAPElitesConfig): The configuration for the algorithm.
         """
-        self.cvt_samples = config.cvt_samples
+        self.cvt_samples: int = config.cvt_samples
+        self.n_niches: int = config.n_niches
         super().__init__(env=env, config=config, *args, **kwargs)
 
     def _init_discretization(self):
@@ -455,9 +456,7 @@ class CVTMAPElites(MAPElitesBase):
         for i in range(self.env.behavior_ndim):
             points[:, i] = np.random.uniform(low[i], high[i], size=self.cvt_samples)
 
-        k_means = KMeans(
-            init="k-means++", n_init="auto", n_clusters=self.map_grid_size[0]
-        )
+        k_means = KMeans(init="k-means++", n_init="auto", n_clusters=self.n_niches)
         k_means.fit(points)
         self.centroids = k_means.cluster_centers_
 
@@ -465,7 +464,7 @@ class CVTMAPElites(MAPElitesBase):
 
     def _get_map_dimensions(self):
         """Returns the dimensions of the map."""
-        return self.map_grid_size
+        return (self.n_niches,)
 
     def to_mapindex(self, b: Phenotype) -> MapIndex:
         """Maps a phenotype (position in behaviour space) to the index of the closest centroid."""
