@@ -1,8 +1,7 @@
 from typing import Optional
 
 from openelm.configs import DiffModelConfig, ELMConfig, PromptModelConfig
-from openelm.environments import ENVS_DICT
-from openelm.map_elites import MAPElites
+from openelm.environments import ENVS_DICT, QD_DICT
 from openelm.mutation_model import DiffModel, MutationModel, PromptModel
 
 
@@ -19,6 +18,7 @@ class ELM:
         """
         self.config: ELMConfig = config
         env_name: str = self.config.env.env_name
+        qd_name: str = self.config.qd.qd_name
         if isinstance(self.config.model, PromptModelConfig):
             self.mutation_model: MutationModel = PromptModel(self.config.model)
         elif isinstance(self.config.model, DiffModelConfig):
@@ -28,11 +28,9 @@ class ELM:
             config=self.config.env,
             mutation_model=self.mutation_model,
         )
-        self.qd_algorithm = MAPElites(
-            self.environment,
-            map_grid_size=self.config.qd.map_grid_size,
-            history_length=self.config.qd.history_length,
-            save_history=self.config.qd.save_history,
+        self.qd_algorithm = QD_DICT[qd_name](
+            env=self.environment,
+            config=self.config.qd,
         )
 
     def run(

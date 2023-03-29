@@ -3,13 +3,20 @@ import math
 import string
 import sys
 from abc import ABC, abstractmethod
+from copy import deepcopy
 from typing import Generic, Optional, Type, TypeVar, Union
 
 import numpy as np
 import requests
 
-from openelm.configs import EnvConfig, ImageEnvConfig, P3EnvConfig, SodaraceEnvConfig
-from openelm.environments.env_utils import IMAGE_SEED, get_image_target
+from openelm.configs import (
+    EnvConfig,
+    ImageEnvConfig,
+    P3EnvConfig,
+    SodaraceEnvConfig,
+    StringEnvConfig,
+)
+from openelm.environments.env_utils import NULL_SEED, get_image_target
 from openelm.environments.sodaracer import (
     CIRCLE,
     GALLOPER_PREREQ,
@@ -39,6 +46,18 @@ def ackley(x: np.ndarray) -> np.ndarray:
     o2 = -np.exp(np.sum(np.cos(math.tau * x) / d, axis=1))
 
     return -(a + math.exp(1) + o1 + o2)
+
+
+def numpy_to_ascii_art(arr):
+    """Convert a numpy array with dimensions (width, height, channels) to ascii art."""
+    art_chars = " .:-=#"
+    im = np.sum(arr, axis=-1)  # we can't do colors
+    idx = np.round(np.interp(im, (im.min(), im.max()), (0, len(art_chars) - 1))).astype(
+        "int"
+    )
+    chars = np.choose(idx, art_chars)
+    ascii_art = "\n".join(["".join(x) for x in chars])
+    return ascii_art
 
 
 class Genotype(ABC):
@@ -135,10 +154,12 @@ class StringArrayGenotype(ArrayGenotype):
 class MatchString(BaseEnvironment[StringArrayGenotype]):
     # find a string by mutating one character at a time
 
-    def __init__(self, target: str):
+    def __init__(self, config: StringEnvConfig):
         self.alphabet = string.ascii_letters
 
-        self.target = np.array([self.alphabet.index(ch) for ch in target])
+        self.config: StringEnvConfig = config
+        self.batch_size = self.config.batch_size
+        self.target = np.array([self.alphabet.index(ch) for ch in self.config.target])
         self.genotype_ndim = self.target.shape[0]
         self.genotype_space = np.repeat(
             [[0, len(self.alphabet)]], self.genotype_ndim, axis=0
@@ -150,14 +171,15 @@ class MatchString(BaseEnvironment[StringArrayGenotype]):
             for _ in range(self.batch_size)
         ]
 
-    def mutate(self, x: list[StringArrayGenotype]) -> list[StringArrayGenotype]:
+    def mutate(self, genomes: list[StringArrayGenotype]) -> list[StringArrayGenotype]:
+        x = deepcopy(genomes)
         for i in range(self.batch_size):
             ix = np.random.randint(self.genotype_ndim)
             x[i][ix] = x[i][ix] + np.random.uniform(-1, 1)
         return x
 
     def fitness(self, x: StringArrayGenotype) -> float:
-        return -np.abs(x - self.target).sum()
+        return -np.abs(x.to_phenotype() - self.target).sum()
 
 
 class ImageGeneration(Genotype):
@@ -170,7 +192,8 @@ class ImageGeneration(Genotype):
 
     def __str__(self) -> str:
         if self.valid:
-            return str(self.result_obj.reshape((-1, 3)).mean(axis=0).astype(int))
+            return numpy_to_ascii_art(self.result_obj)
+            # return str(self.result_obj.reshape((-1, 3)).mean(axis=0).astype(int))
         else:
             return ""
 
@@ -187,6 +210,10 @@ class ImageGeneration(Genotype):
             return np.average(self.result_obj.reshape((-1, 3)), axis=0)
         else:
             return None
+
+    def visualize(self, ax) -> None:
+        if self.valid:
+            ax.imshow(self.result_obj)
 
 
 class ImageOptim(BaseEnvironment[ImageGeneration]):
@@ -212,7 +239,7 @@ class ImageOptim(BaseEnvironment[ImageGeneration]):
         self.config: ImageEnvConfig = config
         self.batch_size = self.config.batch_size
         self.target_img: np.ndarray = get_image_target(self.config.target)
-        self.seed: str = IMAGE_SEED
+        self.seed: str = NULL_SEED
         self.mutation_model: MutationModel = mutation_model
 
         self.behavior_mode: str = self.config.behavior_mode
@@ -222,10 +249,19 @@ class ImageOptim(BaseEnvironment[ImageGeneration]):
     def construct_prompt(
         self, code_batch: Optional[Union[list[str], str]] = None
     ) -> dict[str, str]:
-        prompt_str: str = "import math\nimport numpy as np\n"
+        prompt_str: str = """
+import math
+import numpy as np
+"""
         instruction_str: str = """
+# Fixed version of draw()
 def draw():
-    \"\"\"Draw a yellow circle.\"\"\"
+    \"\"\"
+    Draws a yellow circle with radius 10 in the middle of a 32 by 32 black image.
+
+    Returns:
+        np.ndarray: the image
+    \"\"\"
     pic = np.zeros((32, 32, 3))
 """
         import_str: str = prompt_str
@@ -233,6 +269,11 @@ def draw():
             # Initialization steps
             prompt_str += self.seed
         else:
+            prompt_str += """
+# Old version of draw()
+# TODO: fix bugs in the code below
+
+"""
             # Evolution steps
             if isinstance(code_batch, list):
                 prompt_str += code_batch[0]

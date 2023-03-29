@@ -44,9 +44,19 @@ class QDConfig(BaseConfig):
 
 @dataclass
 class MAPElitesConfig(QDConfig):
+    qd_name: str = "mapelites"
     history_length: int = 1
     save_history: bool = False
     map_grid_size: tuple[int, ...] = field(default_factory=lambda: (12,))
+
+
+@dataclass
+class CVTMAPElitesConfig(QDConfig):
+    qd_name: str = "cvtmapelites"
+    history_length: int = 1
+    save_history: bool = False
+    n_niches: int = 12
+    cvt_samples: int = 10000
 
 
 @dataclass
@@ -82,6 +92,12 @@ class ImageEnvConfig(EnvConfig):
     env_name: str = "image_evolution"
     behavior_mode: str = "3-channel"
     target: str = "circle"
+
+
+@dataclass
+class StringEnvConfig(EnvConfig):
+    env_name: str = "string_evolution"
+    target: str = "MapElites"
 
 
 @dataclass
@@ -145,8 +161,10 @@ def register_configstore() -> ConfigStore:
     cs = ConfigStore.instance()
     cs.store(group="env", name="sodarace", node=SodaraceEnvConfig)
     cs.store(group="env", name="image_evolution", node=ImageEnvConfig)
+    cs.store(group="env", name="string_evolution", node=StringEnvConfig)
     cs.store(group="env", name="p3_problem", node=P3EnvConfig)
     cs.store(group="qd", name="mapelites", node=MAPElitesConfig)
+    cs.store(group="qd", name="cvtmapelites", node=CVTMAPElitesConfig)
     cs.store(group="model", name="prompt", node=PromptModelConfig)
     cs.store(group="model", name="diff", node=DiffModelConfig)
     cs.store(name="elmconfig", node=ELMConfig)
