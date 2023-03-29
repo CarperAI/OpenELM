@@ -88,7 +88,4 @@ trlx = [
 triton = [
     "tritonclient[all]",
 ]
-sklearn = [
-    "scikit-learn",
-]
 notebook = ["ipython"]
