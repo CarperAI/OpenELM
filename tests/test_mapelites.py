@@ -43,6 +43,7 @@ def test_map():
     fitnesses[1, 2] = -1.
     fitnesses[1, 2] = 2.
     fitnesses[1, 2] = -2.
+    fitnesses[0, 2] = np.inf
 
     assert fitnesses.shape == (4, 3, 3)
     assert fitnesses.top.shape == (3, 3)
@@ -51,6 +52,7 @@ def test_map():
     assert fitnesses.top[2, 2] == 0.
     assert fitnesses.top[1, 2] == 3.
     assert fitnesses.top[2, 1] == 3.
+    assert fitnesses.top[0, 2] == 0.
 
     latest = fitnesses.latest
     assert latest.shape == (3, 3)
@@ -59,10 +61,41 @@ def test_map():
     assert latest[2, 2] == 1.
     assert latest[1, 2] == -2.
     assert latest[2, 1] == -np.inf
+    assert latest[0, 2] == np.inf
 
-    assert fitnesses.min == -2.
-    assert fitnesses.max == 5.
+    assert fitnesses.min == -np.inf
+    assert fitnesses.min_finite == -2.
+    assert fitnesses.max == np.inf
+    assert fitnesses.max_finite == 5.
     assert fitnesses.mean == (-2. + 5 + 1 - 2) / 4
+
+
+def test_empty_map():
+    behavior_ndim = 2
+    map_grid_size = [3]
+    history_length = 4
+    fitnesses = Map(
+        dims=map_grid_size * behavior_ndim,
+        fill_value=-np.inf,
+        dtype=float,
+        history_length=history_length,
+    )
+
+    assert fitnesses.min == -np.inf
+    assert np.isnan(fitnesses.min_finite)
+    assert fitnesses.max == -np.inf
+    assert np.isnan(fitnesses.max_finite)
+
+
+def test_empty_mapelites():
+    target_string = "AAA"
+    env: BaseEnvironment = MatchString(StringEnvConfig(target=target_string, batch_size=1))
+    elites = MAPElites(env, MAPElitesConfig(map_grid_size=(2,), history_length=10))
+    assert elites.fitnesses.min == -np.inf
+    assert np.isnan(elites.fitnesses.min_finite)
+    assert elites.fitnesses.max == -np.inf
+    assert np.isnan(elites.fitnesses.max_finite)
+    # elites.plot_fitness()
 
 
 @pytest.mark.slow

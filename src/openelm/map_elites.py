@@ -104,17 +104,33 @@ class Map:
 
     @property
     def max(self) -> float:
-        """Returns the maximum value in the map."""
-        return self.array.max()
+        """Returns the maximum value in the map, not including history."""
+        return self.latest.max()
 
     @property
     def min(self) -> float:
-        """Returns the minimum value in the map."""
-        return self.latest[np.isfinite(self.latest)].min()
+        """Returns the minimum value in the map, not including history."""
+        return self.latest.min()
+
+    @property
+    def max_finite(self) -> float:
+        """Returns the maximum finite value in the map, not including history."""
+        if not np.isfinite(self.latest).any():
+            return np.NaN
+        else:
+            return self.latest[np.isfinite(self.latest)].max()
+
+    @property
+    def min_finite(self) -> float:
+        """Returns the minimum finite value in the map, not including history."""
+        if not np.isfinite(self.latest).any():
+            return np.NaN
+        else:
+            return self.latest[np.isfinite(self.latest)].min()
 
     @property
     def mean(self) -> np.ndarray:
-        """Returns the mean value in the map."""
+        """Returns the mean finite value in the map."""
         return np.mean(self.latest[np.isfinite(self.latest)])
 
     @property
@@ -301,7 +317,7 @@ class MAPElitesBase:
 
     def max_fitness(self):
         """Get the maximum fitness value in the map."""
-        return self.fitnesses.max
+        return self.fitnesses.max_finite
 
     def mean_fitness(self):
         """Get the mean fitness value in the map."""
@@ -309,7 +325,7 @@ class MAPElitesBase:
 
     def min_fitness(self):
         """Get the minimum fitness value in the map."""
-        return self.fitnesses.min
+        return self.fitnesses.min_finite
 
     def qd_score(self):
         """
