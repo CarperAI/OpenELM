@@ -110,10 +110,11 @@ class StringEnvConfig(EnvConfig):
 
 @dataclass
 class P3EnvConfig(EnvConfig):
-    env_name: str = "p3_problem"
-    solutions_per_problem: int = 128
-    prompt_size: str = "long"  # med or long
-    timeout: float = 1.0
+    env_name: str = "p3"
+    iterations_per_puzzle: int = 128
+    prompt_size: str = 'long' # med or long
+    timeout: float = 1.0 # timeout for running a solution
+    starting_seed: int = field(default_factory=lambda: 3) # index of p3 dataset to use as puzzle to mutate
 
 
 @dataclass
@@ -148,7 +149,7 @@ class ELMConfig(BaseConfig):
 
 defaults_p3 = [
     {"model": "prompt"},
-    {"env": "p3_problem"},
+    {"env": "p3"},
     "_self_",
 ]
 
@@ -165,13 +166,13 @@ class P3Config(BaseConfig):
     defaults: list[Any] = field(default_factory=lambda: defaults_p3)
     model: Any = MISSING
     env: Any = MISSING
-    save_result_obj: bool = False
-    # set >0, evaluate pass@k of previous runs using this k, instead of doing a new run
-    eval_k: int = -1
-    # optionally provide timestamp of run to eval pass@k, otherwise eval with
-    # latest run of every problem
-    eval_timestamp: str = ""
+    starting_seeds: list[int] = field(default_factory=lambda: [3]) # indices of selection of puzzles to evaluate with
     run_name: Optional[str] = None
+    save_results: bool = True
+    save_result_obj: bool = False # if saving results, include the whole output text from model for each iteration (which can get long)
+    probsol: bool = False # generate new (problem, solution) pairs from given problems instead of just solutions to given problems
+    eval_k: int = -1 # set >0 to evaluate pass@k of previous runs using this k, instead of doing a new run
+    eval_timestamp: str = '' # optionally provide timestamp of run to eval pass@k, otherwise eval with latest run of every problem
 
 
 def register_configstore() -> ConfigStore:
@@ -180,7 +181,7 @@ def register_configstore() -> ConfigStore:
     cs.store(group="env", name="sodarace", node=SodaraceEnvConfig)
     cs.store(group="env", name="image_evolution", node=ImageEnvConfig)
     cs.store(group="env", name="string_evolution", node=StringEnvConfig)
-    cs.store(group="env", name="p3_problem", node=P3EnvConfig)
+    cs.store(group="env", name="p3", node=P3EnvConfig)
     cs.store(group="env", name="prompt_evolution", node=PromptEnvConfig)
     cs.store(group="qd", name="mapelites", node=MAPElitesConfig)
     cs.store(group="qd", name="cvtmapelites", node=CVTMAPElitesConfig)

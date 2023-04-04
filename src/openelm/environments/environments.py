@@ -11,6 +11,7 @@ import numpy as np
 import requests
 from langchain import PromptTemplate
 from langchain.chains import LLMChain
+from transformers import pipeline
 
 from openelm.configs import (
     EnvConfig,
@@ -31,6 +32,12 @@ from openelm.environments.sodaracer import (
     SQUARE_PREREQ,
     SodaraceSimulator,
     Walker,
+)
+from openelm.environments.p3 import (
+    P3_PROBLEM_MED_SEED,
+    P3_PROBLEM_LONG_SEED,
+    P3_PROBSOL_LONG_SEED,
+    P3_IMPORTS,
 )
 from openelm.mutation_model import MutationModel
 from openelm.utils.code_eval import pool_exec_processes, type_check
@@ -575,7 +582,6 @@ class Sodarace(BaseEnvironment[Sodaracer]):
         Sodarace environment.
 
         Args:
-            seeds: the seed dict.
             config: the environment config.
             mutation_model: the mutation model.
         """
@@ -785,7 +791,6 @@ class P3Solution(Genotype):
     def __init__(self, program_str: str, result_obj: dict):
         """
         Genotype for a programming puzzle solution.
-
         Args:
             program_str: the solution program string (the g6() function).
             result_obj: dict.
@@ -801,38 +806,33 @@ class P3Solution(Genotype):
 
 
 class P3Problem(BaseEnvironment[P3Solution]):
+
     def __init__(
         self,
-        seed: dict,
         config: P3EnvConfig,
         mutation_model: MutationModel,
-        problem_func: str,
-        solution_preamble: str,
-        ans_type: Type,
     ) -> None:
         """
-        P3 Environment.
-
+        The objective is to generate solutions to a given programming puzzle problem.
         Args:
             seed: the seed dict.
             config: the config file path or dict.
             mutation_model: the diff model (or alternatives).
-            problem_func: the f6(<params>) function containing the programming problem
-            solution_preamble: the g6(<params>) function definition (must be passed in in order to include params)
-            ans_type: answer type
         """
-        if isinstance(seed, dict):
-            self.seed = seed
-        else:
-            raise TypeError
         self.mutation_model = mutation_model
-        self.problem_func = problem_func
-        self.solution_preamble = solution_preamble
         self.config = config
-        self.batch_size = self.config.batch_size
-        # The only import that's necessary as of P3 v0.2
-        self.import_line = "from typing import List\n"
-        self.ans_type = ans_type
+        self.seed_index = self.config.starting_seed
+
+        # Get info for the puzzle that will be solved
+        # This puzzle is at the index of the puzzles array specified by self.seed_index
+        puzzles = requests.get("https://raw.githubusercontent.com/microsoft/PythonProgrammingPuzzles/v0.2/puzzles/puzzles.json").json()
+        puzzle = puzzles[self.seed_index]
+
+        self.problem_func = puzzle['sat'].replace('def sat(', 'def f6(') # prompt form is f6()
+        self.solution_preamble = puzzle['sol_header'].replace('def sol(', 'def g6(') # solution form is g6()
+        if self.config.prompt_size == 'long':
+            self.solution_preamble += '\n' + puzzle['sol_docstring'] # add in the docstring
+        self.ans_type = puzzle['ans_type']
         self.rng = None
 
     def get_rng_state(self) -> Optional[np.random._generator.Generator]:
@@ -844,16 +844,23 @@ class P3Problem(BaseEnvironment[P3Solution]):
         pass
 
     def construct_prompt(self) -> dict[str, str]:
-        prompt_str = (
-            self.seed["program_str"]
-            + f"\n\n{self.problem_func}"  # add f6() to the prompt
-            f"\n\n{self.solution_preamble}"  # add g6() preamble
+        prompt_str = ""
+        if self.config.prompt_size == 'long':
+            prompt_str += P3_PROBLEM_LONG_SEED
+        elif self.config.prompt_size == 'med':
+            prompt_str += P3_PROBLEM_MED_SEED
+        else:
+            raise ValueError('No seed string found')
+
+        prompt_str += (
+            f'\n\n{self.problem_func}' # add this particular problem, f6(), to the prompt
+            f'\n\n{self.solution_preamble}' # add g6() preamble to the prompt
         )
 
-        template = f"{self.import_line}\n{self.solution_preamble}"
-        return {"prompt": prompt_str, "template": template}
+        template = f'{P3_IMPORTS}\n{self.solution_preamble}'
+        return {'prompt': prompt_str, 'template': template}
 
-    def generate_program(self, code_batch: list[dict[str, str]]) -> list[P3Solution]:
+    def generate_program(self, code_batch: list[str]) -> list[P3Solution]:
         """Generate new programs with a mutation model and evaluate them."""
         local_scope_exec = True
         generated_programs = self.mutation_model.generate_programs(
@@ -864,7 +871,7 @@ class P3Problem(BaseEnvironment[P3Solution]):
             results = []
             for code in generated_programs:
                 resp = requests.post(
-                    f"{self.config.sandbox_server}/eval_p3_solution",
+                    f"{self.sandbox_server}/eval_p3_solution",
                     json={"code": code, "timeout": self.config.timeout},
                     timeout=self.config.timeout,
                 )
@@ -879,20 +886,19 @@ class P3Problem(BaseEnvironment[P3Solution]):
                 processes=self.config.processes,
                 debug=self.config.debug,
             )
-        results = [
-            {"program_str": gen_prog, "result_obj": res_obj}
-            for (gen_prog, res_obj) in zip(generated_programs, results)
-        ]
+        results = [{'program_str': gen_prog, 'result_obj': res_obj}
+                    for (gen_prog, res_obj) in zip(generated_programs, results)]
         return [P3Solution(**p) for p in results]
 
     def fitness(self, sol: P3Solution) -> float:
-        # If passing the solution to the problem returns True, fitness is 1.0
-        # else 0.0
-        if not type_check(self.ans_type, sol.result_obj):
-            return 0.0
+        """
+        If passing the solution to the problem returns True, fitness is 1.0
+            else 0.0
+        """
+        if not type_check(self.ans_type, sol.result_obj): return 0.0
 
-        eval_code = (
-            f"{self.import_line}\n"
+        eval_code = ( 
+            f"{P3_IMPORTS}\n"
             f"{self.problem_func}\n"
             f"def run_eval():\n"
             f"    return f6({sol.result_obj})"
@@ -900,12 +906,12 @@ class P3Problem(BaseEnvironment[P3Solution]):
 
         result = pool_exec_processes(
             eval_code,
-            func_name="run_eval",
+            func_name='run_eval',
             timeout=self.config.timeout,
             processes=self.config.processes,
             debug=self.config.debug,
         )
-        if result[0] is True:
+        if result[0] == True:
             return 1.0
         else:
             return 0.0
@@ -915,8 +921,151 @@ class P3Problem(BaseEnvironment[P3Solution]):
         new_solutions = self.generate_program(program_list)
         return new_solutions
 
-    def mutate(self, x: list[P3Solution]) -> list[P3Solution]:
+    def mutate(self, sols: list[P3Solution]) -> list[P3Solution]:
         raise NotImplementedError
 
-    def to_behavior_space(self, x: Sodaracer) -> Optional[Phenotype]:
-        raise NotImplementedError
+class P3ProbSolResult(Genotype):
+    def __init__(self, program_str: str, result_obj: dict, model: str):
+        """
+        Genotype for a programming puzzle (problem, solution) pair.
+        Args:
+            program_str: the code for the pair.
+            result_obj: the result of the solution.
+            model: the model whose embeddings will create the phenotype
+        """
+        self.program_str = program_str
+        self.result_obj = result_obj
+        self.model = model
+
+    def __str__(self) -> str:
+        return self.program_str
+
+    def to_phenotype(self) -> Optional[Phenotype]:
+        pl = pipeline('feature-extraction', model=self.model)
+        features = np.array(pl(self.program_str))
+        return features.mean(axis=1)
+
+class P3ProbSol(BaseEnvironment[P3ProbSolResult]):
+
+    def __init__(
+        self,
+        config: P3EnvConfig,
+        mutation_model: MutationModel,
+    ) -> None:
+        """
+        The objective is to generate (problem, solution) pairs.
+        Args:
+            config: the config file path or dict.
+            mutation_model: the diff model (or alternatives).
+            ans_type: answer type
+        """
+        self.mutation_model = mutation_model
+        self.config = config
+        self.seed_index = self.config.starting_seed
+
+        # Get info for the puzzle that will be mutated
+        # This puzzle is at the index of the puzzles array specified by self.seed_index
+        puzzles = requests.get("https://raw.githubusercontent.com/microsoft/PythonProgrammingPuzzles/v0.2/puzzles/puzzles.json").json()
+        puzzle = puzzles[self.seed_index]
+        if len(puzzle['sol_bodies']) == 0:
+            raise ValueError(f'No sample solution is provided for the puzzle at index {self.seed_index}')
+
+        f6_1 = puzzle['sat'].replace('def sat(', 'def f6_1(') # problem form is f6_1()
+        g6_1 = puzzle['sol_header'].replace('def sol(', 'def g6_1(') # solution form is g6_1()
+        if self.config.prompt_size == 'long':
+            g6_1 += '\n' + puzzle['sol_docstring'] # add in the docstring
+        g6_1 += '\n' + puzzle['sol_bodies'][0] # include the first example solution function body
+
+        self.original_probsol = f6_1 + '\n\n' + g6_1 + '\n\n' + "assert f6_1(g6_1())" 
+        self.new_probsol_preamble = 'def f6_2(' 
+
+    def construct_prompt(self) -> dict[str, str]:
+        prompt_str = ""
+        if self.config.prompt_size == 'long':
+            prompt_str += P3_PROBSOL_LONG_SEED
+        else:
+            raise ValueError('No seed string found')
+
+
+        prompt_str += (
+            f'\n\n{self.original_probsol}' # add this particular probsol, f6_1() and g6_1(), to the prompt
+            f'\n\n{self.new_probsol_preamble}' # add f6_2() preamble to the prompt
+        )
+
+        template = f'{P3_IMPORTS}\n{self.new_probsol_preamble}'
+        return {'prompt': prompt_str, 'template': template}
+
+    def generate_program(self, code_batch: list[str]) -> list[P3ProbSolResult]:
+        """Generate new programs with a mutation model and evaluate them."""
+        local_scope_exec = False
+        generated_programs = self.mutation_model.generate_programs(
+            code_batch, local_scope_exec
+        )
+
+        # Remove assert statement (last line) from the generated program
+        # since, during evaluation, it causes an exception if the solution
+        # is incorrect, but we want to know that it was incorrect (False; as opposed to not runnable)
+        for i, gp in enumerate(generated_programs):
+            lines = gp.strip().split('\n')[:-1]
+            gp = '\n'.join(lines)
+            generated_programs[i] = gp
+
+        if self.config.sandbox:
+            results = []
+            for code in generated_programs:
+                resp = requests.post(
+                    f"{self.sandbox_server}/eval_p3_solution",
+                    json={"code": code, "timeout": self.config.timeout},
+                    timeout=self.config.timeout,
+                )
+                if resp.status_code == 200:
+                    return_dict = json.loads(resp.text)
+                    results.append(return_dict)
+        else:
+            results = pool_exec_processes(
+                generated_programs,
+                func_name="g6_2",
+                timeout=self.config.timeout,
+                processes=self.config.processes,
+                debug=self.config.debug,
+            )
+
+        results = [{'program_str': gen_prog, 'result_obj': res_obj, 'model': self.mutation_model.config.model_path}
+                    for (gen_prog, res_obj) in zip(generated_programs, results)]
+        return [P3ProbSolResult(**p) for p in results]
+
+    def fitness(self, sol: P3ProbSolResult) -> float:
+        """
+        If passing the solution to the problem returns True, fitness is 1.0
+            else 0.0
+        """
+        
+        # TODO: check type expected by f6_2 if any?
+        # check for triviality of f6_2 requirements s.t. trivial == bad fitness?
+
+        eval_code = ( 
+            f"{P3_IMPORTS}\n"
+            f"{sol.program_str}\n"
+            f"def run_eval():\n"
+            f"    return f6_2({sol.result_obj})"
+        )
+
+        result = pool_exec_processes(
+            eval_code,
+            func_name='run_eval',
+            timeout=self.config.timeout,
+            processes=self.config.processes,
+            debug=self.config.debug,
+        )
+        if result[0] == True:
+            return 1.0
+        else:
+            return 0.0
+
+    def random(self) -> list[P3ProbSolResult]:
+        program_list = [self.construct_prompt() for _ in range(self.config.batch_size)]
+        new_solutions = self.generate_program(program_list)
+        return new_solutions
+
+    def mutate(self, sols: list[P3ProbSolResult]) -> list[P3ProbSolResult]:
+        pass

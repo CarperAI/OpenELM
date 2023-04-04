@@ -150,6 +150,8 @@ def quadratic(a, b, c, x):
 
 def pass_at_k(n, c, k):
     """
+    From "Evaluating Large Language Models Trained on Code" (https://arxiv.org/abs/2107.03374)
+
     :param n: total number of samples
     :param c: number of correct samples
     :param k: k in pass@k
