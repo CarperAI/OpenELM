@@ -1,7 +1,9 @@
+import pickle
 from collections import defaultdict
 from typing import Optional
 
 import numpy as np
+from hydra.core.hydra_config import HydraConfig
 from sklearn.cluster import KMeans
 from tqdm import trange
 
@@ -129,9 +131,9 @@ class Map:
             return self.latest[np.isfinite(self.latest)].min()
 
     @property
-    def mean(self) -> np.ndarray:
+    def mean(self) -> float:
         """Returns the mean finite value in the map."""
-        return np.mean(self.latest[np.isfinite(self.latest)])
+        return self.latest[np.isfinite(self.latest)].mean()
 
     @property
     def niches_filled(self) -> int:
@@ -170,6 +172,7 @@ class MAPElitesBase:
         """
         self.env: BaseEnvironment = env
         self.config: QDConfig = config
+        self.config.output_dir = HydraConfig.get().runtime.output_dir
         self.history_length = self.config.history_length
         self.save_history = self.config.save_history
         # self.history will be set/reset each time when calling `.search(...)`
@@ -308,6 +311,7 @@ class MAPElitesBase:
             self.fitness_history["mean"].append(self.fitnesses.mean)
 
         self.current_max_genome = max_genome
+        self.save_results()
         self.visualize()
         return str(max_genome)
 
@@ -336,15 +340,32 @@ class MAPElitesBase:
         """
         return self.fitnesses.qd_score
 
+    def save_results(self):
+        output_folder = self.config.output_dir
+
+        np.savez_compressed(
+            f"{output_folder}/maps.npz",
+            fitnesses=self.fitnesses.array,
+            genomes=self.genomes.array,
+            nonzero=self.nonzero.array,
+        )
+        if self.save_history:
+            with open(f"{output_folder}/history.pkl", "wb") as f:
+                pickle.dump(self.history, f)
+
+        with open(f"{output_folder}/fitness_history.pkl", "wb") as f:
+            pickle.dump(self.fitness_history, f)
+
     def plot_fitness(self):
         import matplotlib.pyplot as plt
 
+        save_path: str = self.config.output_dir
         plt.figure()
         plt.plot(self.fitness_history["max"], label="max fitness")
         plt.plot(self.fitness_history["mean"], label="mean fitness")
         plt.plot(self.fitness_history["min"], label="min fitness")
         plt.legend()
-        plt.savefig("logs/elm/MAPElites_fitness_history.png")
+        plt.savefig(f"{save_path}/MAPElites_fitness_history.png")
 
         if len(self.map_dims) > 1:
             ix = tuple(np.zeros(max(1, len(self.fitnesses.dims) - 2), int))
@@ -356,7 +377,7 @@ class MAPElitesBase:
 
             plt.figure()
             plt.pcolor(map2d, cmap="inferno")
-            plt.savefig("logs/elm/MAPElites_vis.png")
+            plt.savefig(f"{save_path}/MAPElites_vis.png")
 
     def visualize_individuals(self):
         """Visualize the genes of the best performing solution."""
@@ -376,8 +397,8 @@ class MAPElitesBase:
                 genome.visualize(ax=ax)
             except AttributeError:
                 pass
-
-        plt.savefig("logs/elm/MAPElites_individuals.png")
+        save_path: str = self.config.output_dir
+        plt.savefig(f"{save_path}/MAPElites_individuals.png")
 
 
 class MAPElites(MAPElitesBase):
@@ -554,8 +575,8 @@ class CVTMAPElites(MAPElitesBase):
         else:
             print("Not enough dimensions to plot centroids")
             return
-
-        plt.savefig("logs/elm/MAPElites_centroids.png")
+        save_path: str = self.config.output_dir
+        plt.savefig(f"{save_path}/MAPElites_centroids.png")
 
     def plot_behaviour_space(self):
         """Plot the first two dimensions (or three if available) of the behaviour space, along with the CVT centroids."""
@@ -652,5 +673,5 @@ class CVTMAPElites(MAPElitesBase):
         else:
             print("Not enough dimensions to plot behaviour space history")
             return
-
-        plt.savefig("logs/elm/MAPElites_behaviour_history.png")
+        save_path: str = self.config.output_dir
+        plt.savefig(f"{save_path}/MAPElites_behaviour_history.png")

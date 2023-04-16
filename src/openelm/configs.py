@@ -7,7 +7,7 @@ from omegaconf import MISSING
 
 @dataclass
 class BaseConfig:
-    pass
+    output_dir: str = "logs/"
 
 
 @dataclass
@@ -40,21 +40,19 @@ class DiffModelConfig(ModelConfig):
 class QDConfig(BaseConfig):
     init_steps: int = 2
     total_steps: int = 5
+    history_length: int = 1
+    save_history: bool = False
 
 
 @dataclass
 class MAPElitesConfig(QDConfig):
     qd_name: str = "mapelites"
-    history_length: int = 1
-    save_history: bool = False
     map_grid_size: tuple[int, ...] = field(default_factory=lambda: (12,))
 
 
 @dataclass
 class CVTMAPElitesConfig(QDConfig):
     qd_name: str = "cvtmapelites"
-    history_length: int = 1
-    save_history: bool = False
     n_niches: int = 12
     cvt_samples: int = 10000
 
@@ -120,7 +118,9 @@ defaults_elm = [
 class ELMConfig(BaseConfig):
     hydra: Any = field(
         default_factory=lambda: {
-            "run": {"dir": "logs/elm/${hydra.job.override_dirname}"}
+            "run": {
+                "dir": "logs/elm/${hydra.job.override_dirname}/${now:%y-%m-%d_%H:%M}"
+            }
         }
     )
     defaults: list[Any] = field(default_factory=lambda: defaults_elm)
@@ -141,7 +141,9 @@ defaults_p3 = [
 class P3Config(BaseConfig):
     hydra: Any = field(
         default_factory=lambda: {
-            "run": {"dir": "logs/p3/${hydra.job.override_dirname}"}
+            "run": {
+                "dir": "logs/p3/${hydra.job.override_dirname}/${now:%y-%m-%d_%H:%M}"
+            }
         }
     )
     defaults: list[Any] = field(default_factory=lambda: defaults_p3)
