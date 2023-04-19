@@ -1,5 +1,7 @@
 from typing import Optional
 
+from hydra.core.hydra_config import HydraConfig
+
 from openelm.configs import DiffModelConfig, ELMConfig, PromptModelConfig
 from openelm.environments import ENVS_DICT, QD_DICT
 from openelm.mutation_model import DiffModel, MutationModel, PromptModel
@@ -17,6 +19,7 @@ class ELM:
             config: The config containing the diff model, environment, and QD algorithm.
         """
         self.config: ELMConfig = config
+        self.config.qd.output_dir = HydraConfig.get().runtime.output_dir
         env_name: str = self.config.env.env_name
         qd_name: str = self.config.qd.qd_name
         if isinstance(self.config.model, PromptModelConfig):

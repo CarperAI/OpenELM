@@ -3,7 +3,6 @@ from collections import defaultdict
 from typing import Optional
 
 import numpy as np
-from hydra.core.hydra_config import HydraConfig
 from sklearn.cluster import KMeans
 from tqdm import trange
 
@@ -172,7 +171,6 @@ class MAPElitesBase:
         """
         self.env: BaseEnvironment = env
         self.config: QDConfig = config
-        self.config.output_dir = HydraConfig.get().runtime.output_dir
         self.history_length = self.config.history_length
         self.save_history = self.config.save_history
         # self.history will be set/reset each time when calling `.search(...)`
