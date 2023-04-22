@@ -338,7 +338,7 @@ class MAPElitesBase:
         The quality-diversity score is the sum of the performance of all solutions
         in the map.
         """
-        return self.fitnesses.qd_score
+        return self.fitnesses.latest.qd_score
 
     def save_results(self):
         output_folder = self.config.output_dir
