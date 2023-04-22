@@ -304,9 +304,9 @@ class MAPElitesBase:
                 if np.isclose(max_fitness, self.env.max_fitness, atol=atol):
                     break
 
-            self.fitness_history["max"].append(max_fitness)
-            self.fitness_history["min"].append(self.fitnesses.min)
-            self.fitness_history["mean"].append(self.fitnesses.mean)
+            self.fitness_history["max"].append(self.max_fitness())
+            self.fitness_history["min"].append(self.min_fitness())
+            self.fitness_history["mean"].append(self.mean_fitness())
 
         self.current_max_genome = max_genome
         self.save_results()
@@ -336,7 +336,7 @@ class MAPElitesBase:
         The quality-diversity score is the sum of the performance of all solutions
         in the map.
         """
-        return self.fitnesses.qd_score
+        return self.fitnesses.latest.qd_score
 
     def save_results(self):
         output_folder = self.config.output_dir
