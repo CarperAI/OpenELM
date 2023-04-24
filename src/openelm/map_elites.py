@@ -101,7 +101,7 @@ class Map:
     @property
     def qd_score(self) -> float:
         """Returns the quality-diversity score of the map."""
-        return self.array[np.isfinite(self.array)].sum()
+        return self.latest[np.isfinite(self.latest)].sum()
 
     @property
     def max(self) -> float:
@@ -336,7 +336,7 @@ class MAPElitesBase:
         The quality-diversity score is the sum of the performance of all solutions
         in the map.
         """
-        return self.fitnesses.latest.qd_score
+        return self.fitnesses.qd_score
 
     def save_results(self):
         output_folder = self.config.output_dir
