@@ -15,8 +15,8 @@ from typing import Any
 
 import numpy as np
 from Box2D import Box2D as b2
-from openelm.environments.sodaracer.box2d_examples.framework import Framework, main
 
+from openelm.environments.sodaracer.box2d_examples.framework import Framework, main
 from openelm.environments.sodaracer.helpers import (
     Bone,
     DistanceAccessor,
@@ -205,7 +205,10 @@ class IESoRWorld(Framework):
                 # Fetch the original length of the distance joint, and add some
                 # fraction of that amount to the length, depending on the current
                 # location in the muscle cycle
-                length_calc = muscle.original_length + (muscle.amplitude * math.cos(self.radians + muscle.phase * 2 * math.pi))
+                length_calc = muscle.original_length + (
+                    muscle.amplitude
+                    * math.cos(self.radians + muscle.phase * 2 * math.pi)
+                )
                 # Set our length as the calculate value for this joint
                 DistanceAccessor.setLength(distance_joint, length_calc)
             # Frame rate, velocity iterations, position iterations

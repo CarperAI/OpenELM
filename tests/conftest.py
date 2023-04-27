@@ -26,7 +26,7 @@ def pytest_collection_modifyitems(config, items):
 
 @pytest.fixture
 def square_walker_dict():
-    file = Path(Path.cwd() / 'tests' / 'test_data' / 'square.json')
+    file = Path(Path.cwd() / "tests" / "test_data" / "square.json")
     with file.open() as f:
         contents = json.load(f)
     return contents
@@ -34,7 +34,7 @@ def square_walker_dict():
 
 @pytest.fixture
 def cppn_fixed_walker_dict():
-    file = Path(Path.cwd() / 'tests' / 'test_data' / 'cppn_fixed.json')
+    file = Path(Path.cwd() / "tests" / "test_data" / "cppn_fixed.json")
     with file.open() as f:
         contents = json.load(f)
     return contents

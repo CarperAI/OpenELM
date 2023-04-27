@@ -1,6 +1,8 @@
 import functools
 import json
 import os
+
+os.environ["TRANSFORMERS_CACHE"] = "/fsx/hyperion/hf_cache"
 import time
 from dataclasses import asdict, dataclass, field
 from itertools import permutations

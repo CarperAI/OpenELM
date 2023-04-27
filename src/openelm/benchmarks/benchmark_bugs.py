@@ -13,7 +13,10 @@ from tqdm import tqdm, trange
 
 from openelm.codegen import model_setup, sample, truncate
 from openelm.configs import BaseConfig
+from openelm.sandbox.server.sandbox_codex_execute import ExecResult
 from openelm.utils import apply_diff, eval_completions, mutate_code, split_diff
+
+os.environ["TRANSFORMERS_CACHE"] = "/fsx/hyperion/hf_cache"
 
 
 @dataclass
@@ -23,9 +26,9 @@ class BenchmarkBugsConfig(BaseConfig):
             "run": {"dir": "logs/benchmarks/bugs/${hydra.job.override_dirname}"}
         }
     )
-    model: str = "Salesforce/codegen-2B-mono"
+    model_path: str = "/fsx/diff_models/diff_16b_prelim"
     bugs_data_path: str = "/fsx/shared/diff_benchmark.json"
-    mode: str = "prompt"
+    mode: str = "diff"
     seed: Optional[int] = None
     deterministic: bool = False
     fp16: bool = True
@@ -35,15 +38,15 @@ class BenchmarkBugsConfig(BaseConfig):
     processes: int = 12
     temp: float = 0.8
     top_p: float = 0.95
-    gen_max_len: int = 512
+    gen_max_len: int = 256
     batch_size: int = 32
     n_trials: int = 3200
     n_bugs_trials: int = 100
     timeout: float = 5.0
     verbose: bool = True
-    tasks: list[str] = field(default_factory=lambda: ["parity"])
+    tasks: list[str] = field(default_factory=lambda: ["bugs"])
     n_bugs: list[int] = field(default_factory=lambda: [1, 2, 3, 4, 5])
-    temp_samples: list[float] = field(default_factory=lambda: [0.7, 0.8, 0.9])
+    temp_samples: list[float] = field(default_factory=lambda: [0.8])
     sweep: bool = False
 
 
@@ -55,11 +58,13 @@ class BenchmarkBugs:
 
         self.device = torch.device("cuda")
         self.model, self.tokenizer, self.device = model_setup(cfg, self.device)
+        print("Number of parameters:", self.model.num_parameters())
 
     def benchmark_parity(self, n_bugs, **kwargs):
         mutated_str, function_str = mutate_code(
             n_bugs=n_bugs, task="parity", mutate_method=self.cfg.mode
         )
+        print(mutated_str)
         encoding = self.tokenizer(
             [mutated_str],
             truncation=True,
@@ -67,7 +72,7 @@ class BenchmarkBugs:
             return_tensors="pt",
         ).to(self.device)
         token_len: int = encoding.input_ids.shape[1]
-        sample_idx: int = token_len - 1 if self.cfg.mode == "prompt" else 0
+        sample_idx: int = token_len - 16 if self.cfg.mode == "prompt" else 0
         num_batches: int = self.cfg.n_trials // self.cfg.batch_size
         results: list = []
         end_of_diff = re.compile("\n[^ +-@]+")
@@ -82,6 +87,7 @@ class BenchmarkBugs:
                 self.model,
                 self.tokenizer,
                 starting_idx=sample_idx,
+                num_return_sequences=1,
                 **kwargs,
             )
             if self.cfg.mode == "prompt":
@@ -114,7 +120,7 @@ class BenchmarkBugs:
                     debug=self.cfg.debug,
                 )
             )
-        corr_cnt = results.count(0)
+        corr_cnt = results.count(ExecResult.VALID)
         if self.cfg.verbose:
             print(f"Number of bugs: {n_bugs}\n")
             print(f"Mutated code to be fixed:\n{function_str}\n")
@@ -139,7 +145,8 @@ class BenchmarkBugs:
             desc=f"Running {self.cfg.batch_size} trials for each bug",
             disable=not self.cfg.verbose,
         ):
-            if i == 4:
+            if len(bugs[i]["prompt"][:-6]) > 1000:
+                i += 1
                 continue
             encoding = self.tokenizer(
                 [bugs[i]["prompt"][:-6]],
@@ -147,8 +154,15 @@ class BenchmarkBugs:
                 padding=True,
                 return_tensors="pt",
             ).to(self.device)
+            print(bugs[i]["prompt"][:-6])
             completions: list[str] = sample(
-                encoding, self.cfg, self.model, self.tokenizer, starting_idx=0, **kwargs
+                encoding,
+                self.cfg,
+                self.model,
+                self.tokenizer,
+                starting_idx=0,
+                num_return_sequences=1,
+                **kwargs,
             )
             for _, text in enumerate(completions):
                 # split the diff text according to <NME>, <BEF>, <MSG>, <DFF>.
@@ -163,12 +177,14 @@ class BenchmarkBugs:
                     if nme_idx != -1:
                         diff_hunk = diff_hunk[:nme_idx]
                     res: str = apply_diff(bugs[i]["prompt_code"], diff_hunk)
+                    print(res)
                     if res == bugs[i]["correct_code"]:
                         results.append(0)
                     else:
                         results.append(1)
                     num_evaluated_bugs += 1
             i += 1
+            print(i)
             if i == self.cfg.n_bugs_trials:
                 i = 500
 
