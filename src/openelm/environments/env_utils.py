@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+
 import numpy as np
 
 
@@ -23,3 +25,37 @@ def draw():
 """
 
 NULL_SEED: str = ""
+
+
+@dataclass
+class ToyPromptTask:
+    base_template = "{few_shot_examples}\n{instruction_str} the word {target} {n_repetitions} times:"
+    input_variables = [
+        "few_shot_examples",
+        "target",
+        "instruction_str",
+        "n_repetitions",
+    ]
+
+    target = "hello"
+    instruction_str = "Repeat"
+
+    mutation_instruction = """Q: What is a synonym for happy?
+A: Cheerful
+
+Q: What is a synonym for sad?
+A: Melancholy
+
+Q: What is a synonym for alter?
+A: Adjust
+
+Q: What is a synonym for finish?
+A: End
+
+Q: What is a synonym for {instruction_str}?
+A:"""
+
+    def create_few_shot_examples(self, instruction_str):
+        return f"""{instruction_str} the word {self.target} 2 times: {self.target} {self.target}
+{instruction_str} the word {self.target} 3 times: {self.target} {self.target} {self.target}
+{instruction_str} the word {self.target} 4 times: {self.target} {self.target} {self.target} {self.target}"""

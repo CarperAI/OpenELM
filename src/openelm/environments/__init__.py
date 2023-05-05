@@ -7,6 +7,7 @@ from openelm.environments.environments import (
     ImageOptim,
     MatchString,
     P3Problem,
+    PromptEvolution,
     Sodarace,
 )
 from openelm.map_elites import CVTMAPElites, MAPElites
@@ -124,6 +125,7 @@ ENVS_DICT: dict[str, Any] = {
     "sodarace": Sodarace,
     "image_evolution": ImageOptim,
     "p3": P3Problem,
+    "prompt_evolution": PromptEvolution,
 }
 
 QD_DICT: dict[str, Any] = {
