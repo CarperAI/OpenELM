@@ -2,11 +2,14 @@ import functools
 import os
 import re
 from abc import ABC, abstractmethod
+from typing import Any, Optional
 
 import numpy as np
+from langchain.llms.base import LLM
+from langchain.schema import Generation, LLMResult
 
 from openelm.codegen import model_setup, sample, set_seed, truncate
-from openelm.configs import ModelConfig
+from openelm.configs import LangChainModelConfig, ModelConfig
 from openelm.utils.diff_eval import apply_diff, split_diff
 
 
@@ -115,3 +118,56 @@ class DiffModel(PromptModel):
                     diff_hunk = diff_hunk[:nme_idx]
                 outputs.append(apply_diff(prompts[i], diff_hunk))
         return outputs
+
+
+class LangChainPromptModel(LLM):
+    config: LangChainModelConfig
+    model: Any
+    tokenizer: Any
+    device: Any
+
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        os.environ["TOKENIZERS_PARALLELISM"] = "false"
+        self.model, self.tokenizer, self.device = model_setup(self.config)
+
+    def _call(self, prompt: str, stop: Optional[list[str]] = None) -> str:
+        """Run the LLM on the given prompt and input."""
+        raise NotImplementedError
+
+    @property
+    def _llm_type(self) -> str:
+        """Return type of llm."""
+        return "huggingface"
+
+    def _generate(
+        self, prompts: list[str], stop: Optional[list[str]] = None
+    ) -> LLMResult:
+        """Run the LLM on the given prompt and input."""
+        generations = []
+        batch_size = self.config.batch_size
+        # Get the total number of batches
+        total_batches = (len(prompts) + batch_size - 1) // batch_size
+        # print("Total batches: ", total_batches)
+        # TODO: encode before loop, Use num_return sequences for this
+        for i in range(total_batches):
+            start_index = i * batch_size
+            end_index = min((i + 1) * batch_size, len(prompts))
+            batched_prompts = prompts[start_index:end_index]
+            encodings = self.tokenizer(
+                batched_prompts,
+                truncation=True,
+                padding=True,
+                return_tensors="pt",
+            )
+            texts = sample(
+                encodings,
+                cfg=self.config,
+                model=self.model,
+                tokenizer=self.tokenizer,
+                num_return_sequences=1,
+            )
+            # results: list[str] = list(map(truncate, texts))
+            generations.append([Generation(text=text) for text in texts])
+        # TODO: return logprobs
+        return LLMResult(generations=generations)

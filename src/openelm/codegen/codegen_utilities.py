@@ -5,7 +5,12 @@ from typing import Optional
 
 import numpy as np
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import (
+    AutoConfig,
+    AutoModelForCausalLM,
+    AutoModelForSeq2SeqLM,
+    AutoTokenizer,
+)
 
 from openelm.configs import ModelConfig
 
@@ -25,12 +30,31 @@ def set_seed(seed=None, deterministic=True) -> int:
 
 
 def create_model(path=None, fp16=True):
-    if fp16:
-        return AutoModelForCausalLM.from_pretrained(
-            path, torch_dtype=torch.float16, low_cpu_mem_usage=True
-        )
+    config = AutoConfig.from_pretrained(path)
+    if config.model_type == "codegen" or config.model_type == "gpt_neox":
+        # causal models: codegen, diff, Pythia
+        if fp16:
+            return AutoModelForCausalLM.from_pretrained(
+                path, torch_dtype=torch.float16, low_cpu_mem_usage=True
+            )
+        else:
+            return AutoModelForCausalLM.from_pretrained(path)
+    elif config.model_type == "t5":
+        # FLAN-T5
+        if fp16:
+            return AutoModelForSeq2SeqLM.from_pretrained(
+                path, torch_dtype=torch.float16, low_cpu_mem_usage=True
+            )
+        else:
+            return AutoModelForSeq2SeqLM.from_pretrained(path)
     else:
-        return AutoModelForCausalLM.from_pretrained(path)
+        # assume causal
+        if fp16:
+            return AutoModelForCausalLM.from_pretrained(
+                path, torch_dtype=torch.float16, low_cpu_mem_usage=True
+            )
+        else:
+            return AutoModelForCausalLM.from_pretrained(path)
 
 
 def truncate(completion: str, def_num=1, print_num=0, only_local_scope=False):
@@ -81,9 +105,14 @@ def model_setup(cfg: ModelConfig, device=None, codegen_tokenizer: bool = True):
         use_fp16 = True
 
     tokenizer = AutoTokenizer.from_pretrained(cfg.model_path)
-    if codegen_tokenizer:
-        tokenizer.padding_side = "left"
-        tokenizer.pad_token = 50256
+    # TODO: may need to check model type to determine padding
+    tokenizer.padding_side = "left"
+    tokenizer.pad_token = tokenizer.eos_token
+    if tokenizer.model_max_length > 32768:
+        tokenizer.model_max_length = 2048
+
+    # if codegen_tokenizer:
+    #     tokenizer.pad_token = 50256
 
     if cfg.gpus > 1:
         model = torch.nn.DataParallel(

@@ -37,6 +37,13 @@ class DiffModelConfig(ModelConfig):
 
 
 @dataclass
+class LangChainModelConfig(ModelConfig):
+    model_name: str = "langchain"
+    # model_path: str = "google/flan-t5-xl"
+    model_path: str = "EleutherAI/pythia-1.4b-deduped"
+
+
+@dataclass
 class QDConfig(BaseConfig):
     init_steps: int = 2
     total_steps: int = 5
@@ -106,6 +113,12 @@ class P3EnvConfig(EnvConfig):
     timeout: float = 1.0
 
 
+@dataclass
+class PromptEnvConfig(EnvConfig):
+    env_name: str = "prompt_evolution"
+    evals_per_prompt: int = 1  # TODO
+
+
 defaults_elm = [
     {"model": "prompt"},
     {"qd": "mapelites"},
@@ -165,10 +178,12 @@ def register_configstore() -> ConfigStore:
     cs.store(group="env", name="image_evolution", node=ImageEnvConfig)
     cs.store(group="env", name="string_evolution", node=StringEnvConfig)
     cs.store(group="env", name="p3_problem", node=P3EnvConfig)
+    cs.store(group="env", name="prompt_evolution", node=PromptEnvConfig)
     cs.store(group="qd", name="mapelites", node=MAPElitesConfig)
     cs.store(group="qd", name="cvtmapelites", node=CVTMAPElitesConfig)
     cs.store(group="model", name="prompt", node=PromptModelConfig)
     cs.store(group="model", name="diff", node=DiffModelConfig)
+    cs.store(group="model", name="langchain", node=LangChainModelConfig)
     cs.store(name="elmconfig", node=ELMConfig)
     cs.store(name="p3config", node=P3Config)
     return cs
