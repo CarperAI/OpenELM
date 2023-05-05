@@ -287,8 +287,6 @@ class PromptEvolution(BaseEnvironment[PromptGenotype]):
             "target": self.task.target,
         }
         result = x.evaluate(model=self.fitness_model, inputs=inputs)
-        # chain = LLMChain(llm=self.fitness_model, prompt=x.prompt)
-        # result = chain({"target":self.task.target})
 
         # fitness is number of times it generated the target word in a row
         count = 0
