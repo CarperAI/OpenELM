@@ -42,7 +42,7 @@ def test_seed_walkers():
 
     # Test full dictionary
     correct_square_dict: dict = {
-        "joints": [(0, 0), (0, 10), (10, 10), (10, 0), (5, 5)],
+        "joints": [(0.0, 0.0), (0.0, -2.2), (2.2, -2.2), (2.2, 0.0), (1.1, -1.1)],
         "muscles": [
             [0, 1, {"type": "distance", "amplitude": 0.0, "phase": 0.0}],
             [1, 2, {"type": "distance", "amplitude": 0.0, "phase": 0.0}],

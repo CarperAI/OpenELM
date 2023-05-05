@@ -26,7 +26,8 @@ class Walker:
         """
         max_muscles_per_joint: int = 10
         max_muscle_strength: int = 10
-        min_joint_distance: float = 0.1
+        # Original min_joint_distance = 0.1
+        min_joint_distance: float = 0.003
         # Check that walker is not empty.
         if len(self.joints) == 0 and len(self.muscles) == 0:
             return False
@@ -52,8 +53,11 @@ class Walker:
                 return False
         return True
 
+
 # scaling quick fix to make seed programs slightly smaller in scale, potentially making the evolved programs more dynamic
 SCALE = 0.22
+
+
 class walker_creator:
     """Walker Creator Referenced in ELM Paper - https://arxiv.org/abs/2206.08896 (pg.16)."""
 
@@ -64,7 +68,7 @@ class walker_creator:
     def add_joint(self, x: float, y: float) -> tuple[float, float]:
         """Add a spring/joint to the sodaracer."""
         # flipped sign to make galloper move more closely to expected, without functional impact on ELM experiments
-        j: tuple[float, float] = (x*SCALE, -y*SCALE)
+        j: tuple[float, float] = (x * SCALE, -y * SCALE)
         self.joints.append(j)
         return j
 
