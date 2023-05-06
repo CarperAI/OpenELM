@@ -433,19 +433,19 @@ class Sodarace(BaseEnvironment[Sodaracer]):
         Constructs a prompt for generating Sodaracers.
 
         Parameters:
-            code_batch (Optional[Union[list[str], str]], optional): A 
+            code_batch (Optional[Union[list[str], str]], optional): A
             list of program strings or a single program string. Defaults to None.
 
         Returns:
-            dict[str, str]: A dictionary containing two keys: "prompt" and 
-            "template". The "prompt" key maps to a string containing the 
+            dict[str, str]: A dictionary containing two keys: "prompt" and
+            "template". The "prompt" key maps to a string containing the
             full prompt for generating a Sodaracer program. The "template"
-            key maps to a string containing the required imports and 
+            key maps to a string containing the required imports and
             instruction for generating a Sodaracer program.
 
         The method constructs a prompt for generating Sodaracer programs
-        based on the seeds and configuration settings specified in self.seed_strs 
-        and self.config. 
+        based on the seeds and configuration settings specified in self.seed_strs
+        and self.config.
         """
 
         prompt_str: str = IMPORTS
@@ -571,8 +571,8 @@ class Sodarace(BaseEnvironment[Sodaracer]):
 
     def mutate(self, sodaracer_list: list[Sodaracer]) -> list[Sodaracer]:
         """
-        Given a list of Sodaracer programs, constructs a prompt for each program, 
-        generate a list of new programs by mutating the prompts, and returns a 
+        Given a list of Sodaracer programs, constructs a prompt for each program,
+        generate a list of new programs by mutating the prompts, and returns a
         list of new Sodaracer programs.
 
         Args:
@@ -597,8 +597,8 @@ class Sodarace(BaseEnvironment[Sodaracer]):
         Returns:
             float: fitness of the Sodaracer.
 
-        The method first checks whether the Sodaracer program is valid or not using 
-        the `.evaluate()` method of the Sodaracer. If the program is invalid, 
+        The method first checks whether the Sodaracer program is valid or not using
+        the `.evaluate()` method of the Sodaracer. If the program is invalid,
         the method returns -np.inf to indicate that the program is not fit.
         """
 
@@ -733,7 +733,7 @@ class P3Problem(BaseEnvironment[P3Solution]):
         new_solutions = self.generate_program(program_list)
         return new_solutions
 
-    def mutate(self, x: P3Solution) -> list[P3Solution]:
+    def mutate(self, x: list[P3Solution]) -> list[P3Solution]:
         raise NotImplementedError
 
     def to_behavior_space(self, x: Sodaracer) -> Optional[Phenotype]:

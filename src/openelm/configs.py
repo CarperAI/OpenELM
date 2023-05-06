@@ -21,6 +21,7 @@ class ModelConfig(BaseConfig):
     temp: float = 0.85
     gen_max_len: int = 768
     batch_size: int = 32
+    model_type: str = "hf"  # Can be "hf", "openai", etc
     model_path: str = MISSING  # Can be HF model name or path to local model
 
 
