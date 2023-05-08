@@ -208,6 +208,129 @@ class MatchString(BaseEnvironment[StringArrayGenotype]):
         return -np.abs(x.to_phenotype() - self.target).sum()
 
 
+class PromptGenotype(Genotype):
+    """
+    Genotype wrapper for a LangChain template.
+    This consists of a base format for all individuals, as well as individual-specific fields which will be evolved.
+    Remaining fields will be filled in at evaluation time.
+    Args:
+        prompt (PromptTemplate): The base template for all individuals.
+        fixed_inputs (dict[str, str], optional): Individual-specific fields to fill in. Defaults to None.
+    """
+
+    def __init__(self, prompt: PromptTemplate, fixed_inputs: dict[str, str] = None):
+        self.fixed_inputs = fixed_inputs
+        if fixed_inputs:
+            self.prompt = prompt.partial(**fixed_inputs)
+        else:
+            self.prompt = prompt
+        self.result_obj = None
+        self.rng = np.random.default_rng(self.config.seed)
+
+    def get_rng_state(self) -> Optional[np.random._generator.Generator]:
+        return self.rng
+    
+    def set_rng_state(self, rng_state: Optional[np.random._generator.Generator]):
+        self.rng = rng_state
+
+    def __str__(self) -> str:
+        return self.prompt.template
+
+    def format(self, **kwargs) -> str:
+        return self.prompt.format(**kwargs)
+
+    def evaluate(self, model, inputs):
+        chain = LLMChain(llm=model, prompt=self.prompt)
+        self.result_obj = {
+            "prompt": self.format(**inputs),
+            "output": chain(inputs),
+        }
+        return self.result_obj["output"]
+
+    def to_phenotype(self) -> str:
+        return (0.0,)
+
+
+class PromptEvolution(BaseEnvironment[PromptGenotype]):
+    """Evolves a LangChain prompt."""
+
+    def __init__(
+        self,
+        config: PromptEnvConfig,
+        mutation_model: MutationModel,
+        fitness_model=None,
+    ):
+        self.config: PromptEnvConfig = config
+        self.batch_size = self.config.batch_size
+        self.genotype_ndim = 1
+        self.genotype_space = np.array([[0], [1]])
+        self.mutation_model = mutation_model
+        if fitness_model is None:
+            self.fitness_model = mutation_model
+        self.task = ToyPromptTask()
+        self.base_prompt = PromptTemplate(
+            template=self.task.base_template, input_variables=self.task.input_variables
+        )
+
+    def random(self) -> list[PromptGenotype]:
+        return [self.random_prompt() for _ in range(self.batch_size)]
+
+    def random_prompt(self):
+        inputs = {
+            "n_repetitions": str(self.rng.integers(10)),
+            "instruction_str": self.task.instruction_str,
+            "few_shot_examples": self.task.create_few_shot_examples(
+                self.task.instruction_str
+            ),
+        }
+        return PromptGenotype(prompt=self.base_prompt, fixed_inputs=inputs)
+
+    def mutate(self, genomes: list[PromptGenotype]) -> list[PromptGenotype]:
+        prompts = [self.mutate_prompt(prompt) for prompt in genomes]
+        return prompts
+
+    def mutate_prompt(self, prompt):
+        # mutate the instruction string; note that we also need to change the few shot examples to match
+        old_instruction_str = prompt.fixed_inputs["instruction_str"]
+        mutation_prompt = PromptTemplate(
+            input_variables=["instruction_str"],
+            template=self.task.mutation_instruction,
+        )
+        mutation_chain = LLMChain(llm=self.fitness_model, prompt=mutation_prompt)
+        result = mutation_chain({"instruction_str": old_instruction_str})
+        new_instruction_str = result["text"].strip().split()[0]
+
+        inputs = {
+            "n_repetitions": str(np.random.randint(10)),
+            "instruction_str": new_instruction_str,
+            "few_shot_examples": self.task.create_few_shot_examples(
+                new_instruction_str
+            ),
+        }
+
+        return PromptGenotype(prompt=self.base_prompt, fixed_inputs=inputs)
+
+    def fitness(self, x: PromptGenotype) -> float:
+        inputs = {
+            "target": self.task.target,
+        }
+        result = x.evaluate(model=self.fitness_model, inputs=inputs)
+
+        # fitness is number of times it generated the target word in a row
+        count = 0
+        for word in result["text"].strip().split():
+            if word.lower() == self.task.target:
+                count += 1
+            else:
+                break
+
+        fitness = count
+        if self.config.debug:
+            print(f"-- Prompt --\n{x.result_obj['prompt']}\n-- Fitness: {fitness} --")
+
+        return fitness
+
+
 class ImageGeneration(Genotype):
     """Genotype for generated images."""
 
@@ -476,20 +599,20 @@ class Sodarace(BaseEnvironment[Sodaracer]):
         """
         Constructs a prompt for generating Sodaracers.
 
-        Parameters:
-            code_batch (Optional[Union[list[str], str]], optional): A 
+        Args:
+            code_batch (Optional[Union[list[str], str]], optional): A
             list of program strings or a single program string. Defaults to None.
 
         Returns:
-            dict[str, str]: A dictionary containing two keys: "prompt" and 
-            "template". The "prompt" key maps to a string containing the 
+            dict[str, str]: A dictionary containing two keys: "prompt" and
+            "template". The "prompt" key maps to a string containing the
             full prompt for generating a Sodaracer program. The "template"
-            key maps to a string containing the required imports and 
+            key maps to a string containing the required imports and
             instruction for generating a Sodaracer program.
 
         The method constructs a prompt for generating Sodaracer programs
-        based on the seeds and configuration settings specified in self.seed_strs 
-        and self.config. 
+        based on the seeds and configuration settings specified in self.seed_strs
+        and self.config.
         """
 
         prompt_str: str = IMPORTS
@@ -553,8 +676,10 @@ class Sodarace(BaseEnvironment[Sodaracer]):
     def generate_programs(self, code_batch: list[dict[str, str]]) -> list[Sodaracer]:
         """
         Generate new programs with a mutation model and evaluate them.
+
         Args:
             code_batch (list[dict[str, str]): a list of program strings.
+
         Returns:
             list[Sodaracer]: A list of Sodaracer objects.
         """
@@ -615,8 +740,10 @@ class Sodarace(BaseEnvironment[Sodaracer]):
 
     def mutate(self, sodaracer_list: list[Sodaracer]) -> list[Sodaracer]:
         """
-        Given a list of Sodaracer programs, constructs a prompt for each program, 
-        generate a list of new programs by mutating the prompts, and returns a 
+        Mutates a list of Sodaracer programs.
+
+        Given a list of Sodaracer programs, constructs a prompt for each program,
+        generate a list of new programs by mutating the prompts, and returns a
         list of new Sodaracer programs.
 
         Args:
