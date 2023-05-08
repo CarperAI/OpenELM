@@ -5,6 +5,7 @@ import sys
 from abc import ABC, abstractmethod
 from copy import deepcopy
 from typing import Generic, Optional, Type, TypeVar, Union
+import warnings
 
 import numpy as np
 import requests
@@ -73,6 +74,7 @@ class Genotype(ABC):
 
 
 GenoType = TypeVar("GenoType", bound=Genotype)
+
 
 class BaseEnvironment(ABC, Generic[GenoType]):
     def __init__(self) -> None:
@@ -272,9 +274,11 @@ class ImageOptim(BaseEnvironment[ImageGeneration]):
         self.rng = None
 
     def get_rng_state(self) -> Optional[np.random._generator.Generator]:
+        warnings.warn("WARNING: rng state not used in this environment")
         return None
     
     def set_rng_state(self, rng_state: Optional[np.random._generator.Generator]):
+        warnings.warn("WARNING: rng state not used in this environment")
         pass
     
     def construct_prompt(
@@ -459,9 +463,11 @@ class Sodarace(BaseEnvironment[Sodaracer]):
         self.rng = None
 
     def get_rng_state(self) -> Optional[np.random._generator.Generator]:
+        warnings.warn("WARNING: rng state not used in this environment")
         return None
     
     def set_rng_state(self, rng_state: Optional[np.random._generator.Generator]):
+        warnings.warn("WARNING: rng state not used in this environment")
         pass
     
     def construct_prompt(
@@ -701,9 +707,11 @@ class P3Problem(BaseEnvironment[P3Solution]):
         self.rng = None
 
     def get_rng_state(self) -> Optional[np.random._generator.Generator]:
+        warnings.warn("WARNING: rng state not used in this environment")
         return None
     
     def set_rng_state(self, rng_state: Optional[np.random._generator.Generator]):
+        warnings.warn("WARNING: rng state not used in this environment")
         pass
     
     def construct_prompt(self) -> dict[str, str]:
