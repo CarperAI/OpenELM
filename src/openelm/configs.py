@@ -78,6 +78,7 @@ class EnvConfig(BaseConfig):
     batch_size: int = 32  # Batch size of MAP-Elites
     env_name: str = MISSING
     debug: bool = False
+    seed: Optional[int] = 42
 
 
 @dataclass
