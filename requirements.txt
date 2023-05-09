@@ -10,3 +10,4 @@ requests
 Flask
 scikit-learn
 matplotlib
+langchain
