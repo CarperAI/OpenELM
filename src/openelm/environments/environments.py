@@ -729,7 +729,9 @@ class Sodarace(BaseEnvironment[Sodaracer]):
     def random(self) -> list[Sodaracer]:
         """
         Generates a batch of Sodaracer programs with the specified batch size.
+
         Returns a list of new Sodaracer programs.
+        
         Returns:
             list[Sodaracer]: A list of random Sodaracer programs.
         """
