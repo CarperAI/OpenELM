@@ -5,6 +5,7 @@ import sys
 from abc import ABC, abstractmethod
 from copy import deepcopy
 from typing import Generic, Optional, Type, TypeVar, Union
+import warnings
 
 import numpy as np
 import requests
@@ -82,6 +83,14 @@ class BaseEnvironment(ABC, Generic[GenoType]):
         self.config: EnvConfig
 
     @abstractmethod
+    def get_rng_state(self) -> Optional[np.random._generator.Generator]:
+        raise NotImplementedError
+    
+    @abstractmethod
+    def set_rng_state(self, rng_state: Optional[np.random._generator.Generator]):
+        raise NotImplementedError
+    
+    @abstractmethod
     def random(self) -> list[GenoType]:
         raise NotImplementedError
 
@@ -121,21 +130,28 @@ class ArrayGenotype(Genotype, np.ndarray):
 
 # find all local maxima of a multimodal function
 class FunctionOptim(BaseEnvironment[ArrayGenotype]):
-    def __init__(self, ndim=2):
+    def __init__(self, ndim=2, seed=None):
         self.genotype_ndim = ndim
         self.genotype_space = np.repeat([[-4, 4]], self.genotype_ndim, axis=0).T
         self.batch_size: int = 1
+        self.rng = np.random.default_rng(seed)
 
+    def get_rng_state(self) -> Optional[np.random._generator.Generator]:
+        return self.rng
+    
+    def set_rng_state(self, rng_state: Optional[np.random._generator.Generator]):
+        self.rng = rng_state
+    
     def random(self) -> list[ArrayGenotype]:
         return [
-            ArrayGenotype(np.random.uniform(*self.genotype_space))
+            ArrayGenotype(self.rng.uniform(*self.genotype_space))
             for _ in range(self.batch_size)
         ]
 
     def mutate(self, x: list[ArrayGenotype]) -> list[ArrayGenotype]:
         for i in range(self.batch_size):
-            ix = np.random.randint(self.genotype_ndim)
-            x[i][ix] = x[i][ix] + np.random.uniform(-1, 1)
+            ix = self.rng.integers(self.genotype_ndim)
+            x[i][ix] = x[i][ix] + self.rng.uniform(-1, 1)
         return x
 
     def fitness(self, x: ArrayGenotype) -> float:
@@ -167,18 +183,25 @@ class MatchString(BaseEnvironment[StringArrayGenotype]):
         self.genotype_space = np.repeat(
             [[0, len(self.alphabet)]], self.genotype_ndim, axis=0
         ).T
+        self.rng = np.random.default_rng(self.config.seed)
+
+    def get_rng_state(self) -> Optional[np.random._generator.Generator]:
+        return self.rng
+    
+    def set_rng_state(self, rng_state: Optional[np.random._generator.Generator]):
+        self.rng = rng_state
 
     def random(self) -> list[StringArrayGenotype]:
         return [
-            StringArrayGenotype(np.random.uniform(*self.genotype_space))
+            StringArrayGenotype(self.rng.uniform(*self.genotype_space))
             for _ in range(self.batch_size)
         ]
 
     def mutate(self, genomes: list[StringArrayGenotype]) -> list[StringArrayGenotype]:
         x = deepcopy(genomes)
         for i in range(self.batch_size):
-            ix = np.random.randint(self.genotype_ndim)
-            x[i][ix] = x[i][ix] + np.random.uniform(-1, 1)
+            ix = self.rng.integers(self.genotype_ndim)
+            x[i][ix] = x[i][ix] + self.rng.uniform(-1, 1)
         return x
 
     def fitness(self, x: StringArrayGenotype) -> float:
@@ -188,10 +211,8 @@ class MatchString(BaseEnvironment[StringArrayGenotype]):
 class PromptGenotype(Genotype):
     """
     Genotype wrapper for a LangChain template.
-
     This consists of a base format for all individuals, as well as individual-specific fields which will be evolved.
     Remaining fields will be filled in at evaluation time.
-
     Args:
         prompt (PromptTemplate): The base template for all individuals.
         fixed_inputs (dict[str, str], optional): Individual-specific fields to fill in. Defaults to None.
@@ -204,6 +225,13 @@ class PromptGenotype(Genotype):
         else:
             self.prompt = prompt
         self.result_obj = None
+        self.rng = np.random.default_rng(self.config.seed)
+
+    def get_rng_state(self) -> Optional[np.random._generator.Generator]:
+        return self.rng
+    
+    def set_rng_state(self, rng_state: Optional[np.random._generator.Generator]):
+        self.rng = rng_state
 
     def __str__(self) -> str:
         return self.prompt.template
@@ -249,7 +277,7 @@ class PromptEvolution(BaseEnvironment[PromptGenotype]):
 
     def random_prompt(self):
         inputs = {
-            "n_repetitions": str(np.random.randint(10)),
+            "n_repetitions": str(self.rng.integers(10)),
             "instruction_str": self.task.instruction_str,
             "few_shot_examples": self.task.create_few_shot_examples(
                 self.task.instruction_str
@@ -366,7 +394,16 @@ class ImageOptim(BaseEnvironment[ImageGeneration]):
         self.behavior_mode: str = self.config.behavior_mode
         self.genotype_ndim: int = self.behavior_ndims[self.behavior_mode]
         self.genotype_space = np.repeat([[0, 255]], self.genotype_ndim, axis=0).T
+        self.rng = None
 
+    def get_rng_state(self) -> Optional[np.random._generator.Generator]:
+        warnings.warn("WARNING: rng state not used in this environment")
+        return None
+    
+    def set_rng_state(self, rng_state: Optional[np.random._generator.Generator]):
+        warnings.warn("WARNING: rng state not used in this environment")
+        pass
+    
     def construct_prompt(
         self, code_batch: Optional[Union[list[str], str]] = None
     ) -> dict[str, str]:
@@ -546,7 +583,16 @@ class Sodarace(BaseEnvironment[Sodaracer]):
         self.genotype_ndim = self.genotype_space.shape[1]
 
         self.seed_strs: list[str] = self.config.starting_seeds
+        self.rng = None
 
+    def get_rng_state(self) -> Optional[np.random._generator.Generator]:
+        warnings.warn("WARNING: rng state not used in this environment")
+        return None
+    
+    def set_rng_state(self, rng_state: Optional[np.random._generator.Generator]):
+        warnings.warn("WARNING: rng state not used in this environment")
+        pass
+    
     def construct_prompt(
         self, code_batch: Optional[Union[list[str], str]] = None
     ) -> dict[str, str]:
@@ -568,6 +614,7 @@ class Sodarace(BaseEnvironment[Sodaracer]):
         based on the seeds and configuration settings specified in self.seed_strs
         and self.config.
         """
+
         prompt_str: str = IMPORTS
         if "square" in self.seed_strs:
             prompt_str += SQUARE_PREREQ
@@ -684,10 +731,11 @@ class Sodarace(BaseEnvironment[Sodaracer]):
         Generates a batch of Sodaracer programs with the specified batch size.
 
         Returns a list of new Sodaracer programs.
-
+        
         Returns:
             list[Sodaracer]: A list of random Sodaracer programs.
         """
+
         program_list = [self.construct_prompt() for _ in range(self.config.batch_size)]
         new_sodaracers = self.generate_programs(program_list)
         return new_sodaracers
@@ -706,6 +754,7 @@ class Sodarace(BaseEnvironment[Sodaracer]):
         Returns:
             list[Sodaracer]: A list of new Sodaracer programs generated by mutating the prompts.
         """
+
         sodaracers = [sr.program_str for sr in sodaracer_list]
         program_list = list(map(self.construct_prompt, sodaracers))
         new_sodaracers = self.generate_programs(program_list)
@@ -721,10 +770,11 @@ class Sodarace(BaseEnvironment[Sodaracer]):
         Returns:
             float: fitness of the Sodaracer.
 
-        The method first checks whether the Sodaracer program is valid or not using
-        the `.evaluate()` method of the Sodaracer. If the program is invalid,
+        The method first checks whether the Sodaracer program is valid or not using 
+        the `.evaluate()` method of the Sodaracer. If the program is invalid, 
         the method returns -np.inf to indicate that the program is not fit.
         """
+
         if x.valid:
             return x.evaluate(self.config.eval_ms)
         else:
@@ -783,7 +833,16 @@ class P3Problem(BaseEnvironment[P3Solution]):
         # The only import that's necessary as of P3 v0.2
         self.import_line = "from typing import List\n"
         self.ans_type = ans_type
+        self.rng = None
 
+    def get_rng_state(self) -> Optional[np.random._generator.Generator]:
+        warnings.warn("WARNING: rng state not used in this environment")
+        return None
+    
+    def set_rng_state(self, rng_state: Optional[np.random._generator.Generator]):
+        warnings.warn("WARNING: rng state not used in this environment")
+        pass
+    
     def construct_prompt(self) -> dict[str, str]:
         prompt_str = (
             self.seed["program_str"]

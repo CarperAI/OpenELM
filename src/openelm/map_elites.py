@@ -1,6 +1,9 @@
 import pickle
 from collections import defaultdict
 from typing import Optional
+import os
+from pathlib import Path
+import json
 
 import numpy as np
 from sklearn.cluster import KMeans
@@ -173,6 +176,13 @@ class MAPElitesBase:
         self.config: QDConfig = config
         self.history_length = self.config.history_length
         self.save_history = self.config.save_history
+        self.save_snapshot_interval = self.config.save_snapshot_interval
+        self.start_step = 0
+        self.save_np_rng_state = self.config.save_np_rng_state
+        self.load_np_rng_state = self.config.load_np_rng_state
+        self.rng = np.random.default_rng(self.config.seed)
+        self.rng_generators = None
+
         # self.history will be set/reset each time when calling `.search(...)`
         self.history: dict = defaultdict(list)
         self.fitness_history: dict = defaultdict(list)
@@ -182,7 +192,7 @@ class MAPElitesBase:
         self.recycled_count = 0
 
         self._init_discretization()
-        self._init_maps(init_map)
+        self._init_maps(init_map, self.config.log_snapshot_dir)
         print(f"MAP of size: {self.fitnesses.dims} = {self.fitnesses.map_size}")
 
     def _init_discretization(self):
@@ -201,7 +211,7 @@ class MAPElitesBase:
         """Visualizes the map."""
         pass
 
-    def _init_maps(self, init_map: Optional[Map] = None):
+    def _init_maps(self, init_map: Optional[Map] = None, log_snapshot_dir: Optional[str] = None):
         # TODO: abstract all maps out to a single class.
         # perfomance of niches
         if init_map is None:
@@ -226,9 +236,62 @@ class MAPElitesBase:
         # index over explored niches to select from
         self.nonzero: Map = Map(dims=self.map_dims, fill_value=False, dtype=bool)
 
+        if os.path.isdir(log_snapshot_dir):
+            log_path = Path(log_snapshot_dir)
+            stem_dir = log_path.stem
+
+            assert "step_" in stem_dir, f"loading directory ({stem_dir}) doesn't contain 'step_' in name"
+            self.start_step = int(stem_dir.replace("step_", "")) + 1 # add 1 to correct the iteration steps to run
+            
+            with open(log_path / "config.json") as f:
+                old_config = json.load(f)
+
+            snapshot_path = log_path / "maps.npz"
+            assert os.path.isfile(snapshot_path), f"{log_path} does not contain map snapshot \"maps.npz\""
+            # first, load arrays and set them in Maps
+            npz_file = np.load(snapshot_path, allow_pickle=True) # (history_len, num_bins_1, num_bins_2, ...)
+            assert self.genomes.array.shape == npz_file["genomes"].shape, f"expected shape of map doesn't match init config settings, got {self.genomes.array.shape} and {npz_file['genomes'].shape}"
+
+            self.genomes.array = npz_file["genomes"]
+            self.fitnesses.array = npz_file["fitnesses"]
+            self.nonzero.array = npz_file["nonzero"]
+            # check if one of the solutions in the snapshot contains the expected genotype type for the run
+            assert not np.all(self.nonzero.array == False), "snapshot to load contains empty map"
+
+            assert self.env.config.env_name == old_config["env_name"], f'unmatching environments, got {self.env.config.env_name} and {old_config["env_name"]}'
+
+            # compute top indices
+            if hasattr(self.genomes, "top"):
+                num_bins = self.genomes.shape[1]
+                top_array = np.array(self.genomes.top)
+                for i in range(num_bins):
+                    nonzero_1d = np.nonzero(self.genomes.array[:, i])
+                    if len(nonzero_1d[0]) > 0:
+                        top_array[i] = nonzero_1d[0][-1]
+                # correct stats
+                self.genomes.top = top_array
+                self.fitnesses.top = top_array
+            self.genomes.empty = False
+            self.fitnesses.empty = False
+
+            history_path = log_snapshot_dir / "history.pkl"
+            if self.save_history and os.path.isfile(history_path):
+                with open(history_path, "rb") as f:
+                    self.history = pickle.load(f)
+            with open((log_snapshot_dir / "fitness_history.pkl"), "rb") as f:
+                self.fitness_history = pickle.load(f)
+
+            if self.load_np_rng_state:
+                with open((log_snapshot_dir / "np_rng_state.pkl"), "rb") as f:
+                    self.rng_generators = pickle.load(f)
+                    self.rng = self.rng_generators["qd_rng"]
+                    self.env.set_rng_state(self.rng_generators["env_rng"])
+
+            print("Loading finished")
+
     def random_selection(self) -> MapIndex:
         """Randomly select a niche (cell) in the map that has been explored."""
-        ix = np.random.choice(np.flatnonzero(self.nonzero.array))
+        ix = self.rng.choice(np.flatnonzero(self.nonzero.array))
         return np.unravel_index(ix, self.nonzero.dims)
 
     def search(self, init_steps: int, total_steps: int, atol: float = 1.0) -> str:
@@ -248,7 +311,9 @@ class MAPElitesBase:
                 best performing solution object can be accessed via the
                 `current_max_genome` class attribute.
         """
-        tbar = trange(int(total_steps))
+        start_step = int(self.start_step)
+        total_steps = int(total_steps)
+        tbar = trange(start_step, total_steps, initial=start_step, total=total_steps)
         max_fitness = -np.inf
         max_genome = None
         if self.save_history:
@@ -308,8 +373,11 @@ class MAPElitesBase:
             self.fitness_history["min"].append(self.min_fitness())
             self.fitness_history["mean"].append(self.mean_fitness())
 
+            if n_steps != 0 and n_steps % self.save_snapshot_interval == 0:
+                self.save_results(step=n_steps)
+
         self.current_max_genome = max_genome
-        self.save_results()
+        self.save_results(step=n_steps)
         self.visualize()
         return str(max_genome)
 
@@ -338,21 +406,40 @@ class MAPElitesBase:
         """
         return self.fitnesses.qd_score
 
-    def save_results(self):
-        output_folder = self.config.output_dir
+    def save_results(self, step: int):
+        # create folder for dumping results and metadata
+        output_folder = Path(self.config.output_dir) / f"step_{step}"
+        os.makedirs(output_folder, exist_ok=True)
 
         np.savez_compressed(
-            f"{output_folder}/maps.npz",
+            (output_folder / "maps.npz"),
             fitnesses=self.fitnesses.array,
             genomes=self.genomes.array,
             nonzero=self.nonzero.array,
         )
         if self.save_history:
-            with open(f"{output_folder}/history.pkl", "wb") as f:
+            with open((output_folder / "history.pkl"), "wb") as f:
                 pickle.dump(self.history, f)
 
-        with open(f"{output_folder}/fitness_history.pkl", "wb") as f:
+        with open((output_folder / "fitness_history.pkl"), "wb") as f:
             pickle.dump(self.fitness_history, f)
+
+        # save numpy rng state to load if resuming from deterministic snapshot
+        if self.save_np_rng_state:
+            rng_generators = {
+                "env_rng": self.env.get_rng_state(),
+                "qd_rng": self.rng,
+            }
+            with open((output_folder / "np_rng_state.pkl"), "wb") as f:
+                pickle.dump(rng_generators, f)
+        
+        # save env_name to check later, for verifying correctness of environment to run with snapshot load
+        tmp_config = dict()
+        tmp_config["env_name"] = self.env.config.env_name
+
+        with open((output_folder / "config.json"), "w") as f:
+            json.dump(tmp_config, f)
+        f.close()
 
     def plot_fitness(self):
         import matplotlib.pyplot as plt
@@ -489,7 +576,7 @@ class CVTMAPElites(MAPElitesBase):
 
         points = np.zeros((self.cvt_samples, self.env.behavior_ndim))
         for i in range(self.env.behavior_ndim):
-            points[:, i] = np.random.uniform(low[i], high[i], size=self.cvt_samples)
+            points[:, i] = self.rng.uniform(low[i], high[i], size=self.cvt_samples)
 
         k_means = KMeans(init="k-means++", n_init="auto", n_clusters=self.n_niches)
         k_means.fit(points)
