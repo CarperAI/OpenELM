@@ -218,7 +218,9 @@ class PromptGenotype(Genotype):
         fixed_inputs (dict[str, str], optional): Individual-specific fields to fill in. Defaults to None.
     """
 
-    def __init__(self, prompt: PromptTemplate, fixed_inputs: dict[str, str] = None):
+    def __init__(
+        self, prompt: PromptTemplate, fixed_inputs: Optional[dict[str, str]] = None
+    ):
         self.fixed_inputs = fixed_inputs
         if fixed_inputs:
             self.prompt = prompt.partial(**fixed_inputs)
@@ -915,7 +917,7 @@ class P3Problem(BaseEnvironment[P3Solution]):
         new_solutions = self.generate_program(program_list)
         return new_solutions
 
-    def mutate(self, x: P3Solution) -> list[P3Solution]:
+    def mutate(self, x: list[P3Solution]) -> list[P3Solution]:
         raise NotImplementedError
 
     def to_behavior_space(self, x: Sodaracer) -> Optional[Phenotype]:

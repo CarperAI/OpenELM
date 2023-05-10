@@ -49,68 +49,63 @@ def test_sodaracer_eval():
 
     square_dict = square_world.load_body_into_world(square_walker.to_dict())
     assert square_dict == {
-        "width": 413.2231404958677,
-        "height": 240.0,
+        "width": 68.18181818181817,
+        "height": 70.4,
         "startX": 0.0,
-        "offsetX": -106.61157024793386,
-        "startY": -216.0,
-        "offsetY": 171.0,
-        "mass": 1136.0864722563908,
+        "startY": 32.0,
+        "offsetX": 40.909090909090914,
+        "offsetY": 32.8,
+        "mass": 241.58651363350822,
     }
 
     square_start, square_end = run_world(square_world, square_dict)
-    assert (square_start, square_end) == (0.0, 7.27755535535573)
+    assert (square_start, square_end) == (0.0, 81.81081667813388)
 
     radial_dict = radial_world.load_body_into_world(radial_walker.to_dict())
-
     assert radial_dict == {
-        "width": 413.2228784561031,
-        "height": 239.99961951834635,
-        "startX": 0.0002620397645793254,
-        "offsetX": -106.61170126781613,
-        "startY": -215.99996195182018,
-        "offsetY": 171.00015219264702,
-        "mass": 1182.4111517904973,
+        "width": 64.83262907589534,
+        "height": 68.62412927885356,
+        "startX": 3.349189105922829,
+        "startY": 32.90044749507858,
+        "offsetX": 39.2344963561295,
+        "offsetY": 32.78748786549464,
+        "mass": 252.54982123779916,
     }
 
     radial_start, radial_end = run_world(radial_world, radial_dict)
-    assert (radial_start, radial_end) == (0.0002620397645793254, 95.02245400562137)
+    assert (radial_start, radial_end) == (3.349189105922829, 87.38454747307286)
 
     cppn_fixed_dict = cppn_fixed_world.load_body_into_world(cppn_fixed_walker.to_dict())
-
     assert cppn_fixed_dict == {
-        "width": 433.8842975206611,
-        "height": 72.0,
+        "width": 71.59090909090908,
+        "height": 21.120000000000005,
         "startX": 0.0,
-        "offsetX": -116.94214876033055,
-        "startY": -48.0,
-        "offsetY": 87.0,
-        "mass": 2796.6059242043043,
+        "startY": 32.0,
+        "offsetX": 39.20454545454546,
+        "offsetY": 57.44,
+        "mass": 572.6414986337938,
     }
 
     cppn_fixed_start, cppn_fixed_end = run_world(cppn_fixed_world, cppn_fixed_dict)
-
-    assert (cppn_fixed_start, cppn_fixed_end) == (0.0, 37.73778779841649)
+    assert (cppn_fixed_start, cppn_fixed_end) == (0.0, 88.8606581254439)
 
     cppn_mutable_dict = cppn_mutable_world.load_body_into_world(
         cppn_mutable_walker.to_dict()
     )
-
     assert cppn_mutable_dict == {
-        "width": 433.8842975206611,
-        "height": 72.0,
+        "width": 71.59090909090908,
+        "height": 21.120000000000005,
         "startX": 0.0,
-        "offsetX": -116.94214876033055,
-        "startY": -48.0,
-        "offsetY": 87.0,
-        "mass": 2796.6059242043043,
+        "startY": 32.0,
+        "offsetX": 39.20454545454546,
+        "offsetY": 57.44,
+        "mass": 572.6414986337938,
     }
 
     cppn_mutable_start, cppn_mutable_end = run_world(
         cppn_mutable_world, cppn_mutable_dict
     )
-
-    assert (cppn_mutable_start, cppn_mutable_end) == (0.0, 29.67882020808446)
+    assert (cppn_mutable_start, cppn_mutable_end) == (0.0, 458.53709550337356)
 
 
 def test_square_draw_list(square_walker_dict):
@@ -120,15 +115,16 @@ def test_square_draw_list(square_walker_dict):
 
     _, _ = run_world(square_world, square_dict)
     square_draw_list_dict = ast.literal_eval(square_world.get_world_json())
+
     assert square_draw_list_dict == square_walker_dict
 
-# TODO: Remake cppn json
-# def test_cppn_fixed_draw_list(cppn_fixed_walker_dict):
-#     cppn_fixed_walker: Walker = make_walker_cppn_fixed()
-#     cppn_fixed_world = IESoRWorld()
-#     cppn_fixed_dict = cppn_fixed_world.load_body_into_world(cppn_fixed_walker.to_dict())
 
-#     _, _ = run_world(cppn_fixed_world, cppn_fixed_dict)
-#     cppn_draw_list_dict = ast.literal_eval(cppn_fixed_world.get_world_json())
+def test_cppn_fixed_draw_list(cppn_fixed_walker_dict):
+    cppn_fixed_walker: Walker = make_walker_cppn_fixed()
+    cppn_fixed_world = IESoRWorld()
+    cppn_fixed_dict = cppn_fixed_world.load_body_into_world(cppn_fixed_walker.to_dict())
 
-#     assert cppn_draw_list_dict == cppn_fixed_walker_dict
+    _, _ = run_world(cppn_fixed_world, cppn_fixed_dict)
+    cppn_draw_list_dict = ast.literal_eval(cppn_fixed_world.get_world_json())
+
+    assert cppn_draw_list_dict == cppn_fixed_walker_dict

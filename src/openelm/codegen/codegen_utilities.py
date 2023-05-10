@@ -15,7 +15,7 @@ from transformers import (
 from openelm.configs import ModelConfig
 
 
-def set_seed(seed=None, deterministic=True) -> int:
+def set_seed(seed=None, deterministic=False) -> int:
     if seed is None:
         seed = np.random.default_rng().integers(2**32 - 1)
     random.seed(seed)
@@ -27,34 +27,6 @@ def set_seed(seed=None, deterministic=True) -> int:
         torch.backends.cudnn.benchmark = not deterministic
         # torch.use_deterministic_algorithms(deterministic)
     return seed
-
-
-def create_model(path=None, fp16=True):
-    config = AutoConfig.from_pretrained(path)
-    if config.model_type == "codegen" or config.model_type == "gpt_neox":
-        # causal models: codegen, diff, Pythia
-        if fp16:
-            return AutoModelForCausalLM.from_pretrained(
-                path, torch_dtype=torch.float16, low_cpu_mem_usage=True
-            )
-        else:
-            return AutoModelForCausalLM.from_pretrained(path)
-    elif config.model_type == "t5":
-        # FLAN-T5
-        if fp16:
-            return AutoModelForSeq2SeqLM.from_pretrained(
-                path, torch_dtype=torch.float16, low_cpu_mem_usage=True
-            )
-        else:
-            return AutoModelForSeq2SeqLM.from_pretrained(path)
-    else:
-        # assume causal
-        if fp16:
-            return AutoModelForCausalLM.from_pretrained(
-                path, torch_dtype=torch.float16, low_cpu_mem_usage=True
-            )
-        else:
-            return AutoModelForCausalLM.from_pretrained(path)
 
 
 def truncate(completion: str, def_num=1, print_num=0, only_local_scope=False):
@@ -94,15 +66,9 @@ def truncate(completion: str, def_num=1, print_num=0, only_local_scope=False):
 
 
 def model_setup(cfg: ModelConfig, device=None, codegen_tokenizer: bool = True):
-    set_seed(cfg.seed, deterministic=True)
+    set_seed(cfg.seed)
     if device is None:
         device = torch.device("cuda")
-    use_fp16 = True
-    if not cfg.fp16 or device.type == "cpu":
-        use_fp16 = False
-
-    if "codegen-16B" in cfg.model_path:
-        use_fp16 = True
 
     tokenizer = AutoTokenizer.from_pretrained(cfg.model_path)
     # TODO: may need to check model type to determine padding
@@ -111,16 +77,20 @@ def model_setup(cfg: ModelConfig, device=None, codegen_tokenizer: bool = True):
     if tokenizer.model_max_length > 32768:
         tokenizer.model_max_length = 2048
 
-    # if codegen_tokenizer:
-    #     tokenizer.pad_token = 50256
+    tokenizer.pad_token = tokenizer.eos_token
 
-    if cfg.gpus > 1:
-        model = torch.nn.DataParallel(
-            create_model(cfg.model_path, fp16=use_fp16),
-            device_ids=list(range(cfg.gpus)),
-        ).to(device)
+    autoconfig = AutoConfig.from_pretrained(cfg.model_path)
+
+    if autoconfig.model_type == "t5":
+        model_cls = AutoModelForSeq2SeqLM
     else:
-        model = create_model(cfg.model_path, fp16=use_fp16).to(device)
+        model_cls = AutoModelForCausalLM
+    model = model_cls.from_pretrained(
+        cfg.model_path,
+        torch_dtype=torch.float16 if cfg.fp16 else None,
+        low_cpu_mem_usage=cfg.fp16,
+    ).to(device)
+
     return model, tokenizer, device
 
 
@@ -132,7 +102,7 @@ def sample(
     decode: bool = True,
     starting_idx: Optional[int] = None,
     num_return_sequences: Optional[int] = None,
-    **kwargs
+    **kwargs,
 ) -> list[str]:
     """Run a model on a batch of contexts for a particular task."""
     if num_return_sequences is None:
@@ -147,29 +117,16 @@ def sample(
         starting_idx = input_ids_len
     with torch.inference_mode():
         batch = batch.to(device)
-        # TODO: num_gpus > 1
-        if cfg.gpus > 1:
-            tokens = model.module.generate(
-                **batch,
-                do_sample=True,
-                num_return_sequences=num_return_sequences,
-                temperature=temperature,
-                max_new_tokens=gen_max_len,
-                top_p=top_p,
-                pad_token_id=tokenizer.pad_token_id,
-                use_cache=True,
-            )
-        else:
-            tokens = model.generate(
-                **batch,
-                do_sample=True,
-                num_return_sequences=num_return_sequences,
-                temperature=temperature,
-                max_new_tokens=gen_max_len,
-                top_p=top_p,
-                pad_token_id=tokenizer.pad_token_id,
-                use_cache=True,
-            )
+        tokens = model.generate(
+            **batch,
+            do_sample=True,
+            num_return_sequences=num_return_sequences,
+            temperature=temperature,
+            max_new_tokens=gen_max_len,
+            top_p=top_p,
+            pad_token_id=tokenizer.pad_token_id,
+            use_cache=True,
+        )
         if decode:
             text: list[str] = tokenizer.batch_decode(tokens[:, starting_idx:, ...])
             return text

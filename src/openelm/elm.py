@@ -2,19 +2,9 @@ from typing import Optional
 
 from hydra.core.hydra_config import HydraConfig
 
-from openelm.configs import (
-    DiffModelConfig,
-    ELMConfig,
-    LangChainModelConfig,
-    PromptModelConfig,
-)
+from openelm.configs import DiffModelConfig, ELMConfig, PromptModelConfig
 from openelm.environments import ENVS_DICT, QD_DICT
-from openelm.mutation_model import (
-    DiffModel,
-    LangChainPromptModel,
-    MutationModel,
-    PromptModel,
-)
+from openelm.mutation_model import DiffModel, MutationModel, PromptModel
 
 
 class ELM:
@@ -35,11 +25,7 @@ class ELM:
         if isinstance(self.config.model, PromptModelConfig):
             self.mutation_model: MutationModel = PromptModel(self.config.model)
         elif isinstance(self.config.model, DiffModelConfig):
-            self.mutation_model: MutationModel = DiffModel(self.config.model)
-        elif isinstance(self.config.model, LangChainModelConfig):
-            self.mutation_model: MutationModel = LangChainPromptModel(
-                config=self.config.model
-            )
+            self.mutation_model = DiffModel(self.config.model)
 
         self.environment = ENVS_DICT[env_name](
             config=self.config.env,

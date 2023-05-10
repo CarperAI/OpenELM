@@ -21,7 +21,11 @@ class ModelConfig(BaseConfig):
     temp: float = 0.85
     gen_max_len: int = 768
     batch_size: int = 32
+    model_type: str = "hf"  # Can be "hf", "openai", etc
     model_path: str = MISSING  # Can be HF model name or path to local model
+    logits_only: bool = False
+    do_sample: bool = True
+    num_return_sequences: int = 1
 
 
 @dataclass
@@ -34,13 +38,6 @@ class PromptModelConfig(ModelConfig):
 class DiffModelConfig(ModelConfig):
     model_name: str = "diff"
     model_path: str = "CarperAI/diff-codegen-350m-v2"
-
-
-@dataclass
-class LangChainModelConfig(ModelConfig):
-    model_name: str = "langchain"
-    # model_path: str = "google/flan-t5-xl"
-    model_path: str = "EleutherAI/pythia-1.4b-deduped"
 
 
 @dataclass
@@ -189,7 +186,6 @@ def register_configstore() -> ConfigStore:
     cs.store(group="qd", name="cvtmapelites", node=CVTMAPElitesConfig)
     cs.store(group="model", name="prompt", node=PromptModelConfig)
     cs.store(group="model", name="diff", node=DiffModelConfig)
-    cs.store(group="model", name="langchain", node=LangChainModelConfig)
     cs.store(name="elmconfig", node=ELMConfig)
     cs.store(name="p3config", node=P3Config)
     return cs
