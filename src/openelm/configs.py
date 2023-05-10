@@ -46,6 +46,11 @@ class QDConfig(BaseConfig):
     total_steps: int = 5
     history_length: int = 1
     save_history: bool = False
+    save_snapshot_interval: int = 1000
+    log_snapshot_dir: str = ""
+    seed: Optional[int] = 42
+    save_np_rng_state: bool = False
+    load_np_rng_state: bool = False
 
 
 @dataclass
@@ -70,6 +75,7 @@ class EnvConfig(BaseConfig):
     batch_size: int = 32  # Batch size of MAP-Elites
     env_name: str = MISSING
     debug: bool = False
+    seed: Optional[int] = 42
 
 
 @dataclass
