@@ -23,6 +23,9 @@ class ModelConfig(BaseConfig):
     batch_size: int = 32
     model_type: str = "hf"  # Can be "hf", "openai", etc
     model_path: str = MISSING  # Can be HF model name or path to local model
+    logits_only: bool = False
+    do_sample: bool = True
+    num_return_sequences: int = 1
 
 
 @dataclass
@@ -107,6 +110,12 @@ class P3EnvConfig(EnvConfig):
     timeout: float = 1.0
 
 
+@dataclass
+class PromptEnvConfig(EnvConfig):
+    env_name: str = "prompt_evolution"
+    evals_per_prompt: int = 1  # TODO
+
+
 defaults_elm = [
     {"model": "prompt"},
     {"qd": "mapelites"},
@@ -166,6 +175,7 @@ def register_configstore() -> ConfigStore:
     cs.store(group="env", name="image_evolution", node=ImageEnvConfig)
     cs.store(group="env", name="string_evolution", node=StringEnvConfig)
     cs.store(group="env", name="p3_problem", node=P3EnvConfig)
+    cs.store(group="env", name="prompt_evolution", node=PromptEnvConfig)
     cs.store(group="qd", name="mapelites", node=MAPElitesConfig)
     cs.store(group="qd", name="cvtmapelites", node=CVTMAPElitesConfig)
     cs.store(group="model", name="prompt", node=PromptModelConfig)

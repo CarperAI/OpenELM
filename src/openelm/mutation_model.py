@@ -2,80 +2,38 @@ import functools
 import os
 import re
 from abc import ABC, abstractmethod
+from collections import defaultdict
 from typing import Any, Optional
 
 import numpy as np
-import openai
+import torch
+from langchain.llms import OpenAI
+from langchain.llms.base import LLM
+from langchain.schema import Generation, LLMResult
+from pydantic import Extra, root_validator
+from transformers import BatchEncoding
 
-from openelm.codegen import model_setup, sample, set_seed, truncate
+from openelm.codegen import model_setup, set_seed, truncate
 from openelm.configs import ModelConfig
 from openelm.utils.diff_eval import apply_diff, split_diff
 
 
-def get_model(config: ModelConfig) -> tuple[Any, Optional[Any], Optional[Any]]:
+def get_model(config: ModelConfig):
     if config.model_type == "hf":
-        os.environ["TOKENIZERS_PARALLELISM"] = "false"
-        model, tokenizer, device = model_setup(config)
-        return model, tokenizer, device
-    else:
-        return model, None, None
-
-
-def sample_openai(batch: list[str], config, *args, **kwargs) -> list[str]:
-    completions: list[str] = []
-    responses = openai.Completion.create(
-        model=config.model_name,
-        prompt=batch,
-        max_tokens=config.gen_max_len,
-        n=1,
-        stop=None,
-        temperature=config.temp,
-        top_p=config.top_p,
-    )
-    for response in responses:
-        completions.append(response.choices[0].text.strip())
-    return completions
-
-
-def sample_openai_chat(batch: list[str], config, *args, **kwargs) -> list[str]:
-    completions: list[str] = []
-    # TODO: async calls
-    for prompt in batch:
-        messages = [
-            {"role": "system", "content": "You are an AI that can generate code."},
-            {"role": "user", "content": prompt},
-        ]
-
-        response = openai.ChatCompletion.create(
-            model=config.model_name,
-            messages=messages,
-            max_tokens=config.gen_max_len,
-            n=1,
-            stop=None,
-            temperature=config.temp,
-            top_p=config.top_p,
-        )
-
-        completions.append(response.choices[0].text.strip())
-    return completions
-
-
-def generate(batch, config: ModelConfig, *args, **kwargs):
-    if config.model_type == "hf":
-        tokenizer = kwargs.get("tokenizer", None)
-        if tokenizer is None:
-            raise ValueError("No tokenizer found in args.")
-        encodings = tokenizer(
-            batch,
-            truncation=True,
-            padding=True,
-            return_tensors="pt",
-        )
-        # TODO: batching within sample
-        return sample(encodings, config, *args, **kwargs)
+        return HuggingFaceLLM(config=config)
     elif config.model_type == "oai":
-        # TODO: query model name and divide into chat and non-chat
-        return sample_openai_chat(batch, config, *args, **kwargs)
+        # Adapt config here
+        cfg: dict = {
+            "max_tokens": config.gen_max_len,
+            "temperature": config.temp,
+            "top_p": config.top_p,
+            "batch_size": config.batch_size,
+            # TODO: rename config option?
+            "model_name": config.model_path,
+        }
+        return OpenAI(**cfg)
+    else:
+        raise NotImplementedError
 
 
 class MutationModel(ABC):
@@ -97,7 +55,7 @@ class PromptModel(MutationModel):
         seed: int = set_seed(self.config.seed)
         # Use RNG to rotate random seeds during inference.
         self.rng = np.random.default_rng(seed=seed)
-        self.model, self.tokenizer, self.device = get_model(self.config)
+        self.model: LLM = get_model(self.config)
 
     def generate_programs(
         self, prompt_dicts: list[dict[str, str]], local_scope_truncate: bool, **kwargs
@@ -119,14 +77,11 @@ class PromptModel(MutationModel):
         """
         prompts = [prompt_dict["prompt"] for prompt_dict in prompt_dicts]
         templates = [prompt_dict["template"] for prompt_dict in prompt_dicts]
-        completions: list[str] = generate(
-            batch=prompts,
-            config=self.config,
-            model=self.model,
-            tokenizer=self.tokenizer,
-            device=self.device,
-            num_return_sequences=1,
-        )
+        results: LLMResult = self.model.generate(prompts=prompts)
+        # Flatten nested list of generations
+        completions: list[str] = [
+            gen.text for sublist in results.generations for gen in sublist
+        ]
 
         trunc = functools.partial(truncate, only_local_scope=local_scope_truncate)
         truncations: list[str] = [
@@ -144,14 +99,11 @@ class DiffModel(PromptModel):
     ) -> list[str]:
         prompts = [prompt_dict["prompt"] for prompt_dict in prompt_dicts]
         templates = [prompt_dict["template"] for prompt_dict in prompt_dicts]
-        completions: list[str] = generate(
-            batch=prompts,
-            config=self.config,
-            model=self.model,
-            tokenizer=self.tokenizer,
-            device=self.device,
-            num_return_sequences=1,
-        )
+        results: LLMResult = self.model.generate(prompts=prompts)
+        # Flatten nested list of generations
+        completions: list[str] = [
+            gen.text for sublist in results.generations for gen in sublist
+        ]
 
         end_of_diff = re.compile("\n[^ +-@]+")
         trunc = functools.partial(truncate, only_local_scope=local_scope_truncate)
@@ -173,3 +125,100 @@ class DiffModel(PromptModel):
                     diff_hunk = diff_hunk[:nme_idx]
                 outputs.append(apply_diff(prompts[i], diff_hunk))
         return outputs
+
+
+class HuggingFaceLLM(LLM):
+    config: ModelConfig
+    model: Any = None
+    tokenizer: Any = None
+    device: Any = None
+
+    class Config:
+        """Configuration for this pydantic object."""
+
+        extra = Extra.allow
+
+    @root_validator
+    def setup(cls, values: dict[str, Any]) -> dict[str, Any]:
+        """Validate the config."""
+        os.environ["TOKENIZERS_PARALLELISM"] = "false"
+        if values["config"] is None:
+            raise ValueError("Config must be provided.")
+        if (
+            values["model"] is None
+            and values["tokenizer"] is None
+            and values["device"] is None
+        ):
+            values["model"], values["tokenizer"], values["device"] = model_setup(
+                values["config"]
+            )
+        return values
+
+    @property
+    def _llm_type(self) -> str:
+        """Return type of llm."""
+        return "huggingface"
+
+    def _call(self, prompt: str, stop: Optional[list[str]] = None) -> str:
+        """Run the LLM on the given prompt and input."""
+        raise NotImplementedError
+
+    def _generate(
+        self, prompts: list[str], stop: Optional[list[str]] = None
+    ) -> LLMResult:
+        """Run the LLM on the given prompt and input."""
+        batch_size = self.config.batch_size
+        total_batches = (len(prompts) + batch_size - 1) // batch_size
+
+        encodings = self.tokenizer(
+            prompts,
+            truncation=True,
+            padding=True,
+            return_tensors="pt",
+        ).to(self.device)
+
+        generations_dict: dict[str, list[Generation]] = defaultdict(list)
+
+        for i in range(total_batches):
+            start_index = i * batch_size
+            end_index = min((i + 1) * batch_size, len(prompts))
+            batched_prompts = BatchEncoding(
+                {
+                    "input_ids": encodings["input_ids"][start_index:end_index],
+                    "attention_mask": encodings["attention_mask"][
+                        start_index:end_index
+                    ],
+                }
+            ).to(self.device)
+            if self.config.logits_only:
+                with torch.inference_mode():
+                    outputs = self.model(**batched_prompts)
+                    if i == 0:
+                        logits = outputs.logits
+                    else:
+                        logits = torch.cat((logits, outputs.logits), dim=0)
+                generations: list[Generation] = [
+                    Generation(text="", generation_info={"logits": logits})
+                    for logits in logits
+                ]
+            else:
+                input_ids_len: int = batched_prompts["input_ids"].shape[1]
+                with torch.inference_mode():
+                    tokens = self.model.generate(
+                        **batched_prompts,
+                        do_sample=self.config.do_sample,
+                        num_return_sequences=self.config.num_return_sequences,
+                        temperature=self.config.temp,
+                        max_new_tokens=self.config.gen_max_len,
+                        top_p=self.config.top_p,
+                        pad_token_id=self.tokenizer.pad_token_id,
+                    )
+                    texts: list[str] = self.tokenizer.batch_decode(
+                        tokens[:, input_ids_len:, ...]
+                    )
+                generations = [Generation(text=text) for text in texts]
+            # Index generations by prompt
+            for prompt, generation in zip(prompts[start_index:end_index], generations):
+                generations_dict[prompt].append(generation)
+
+        return LLMResult(generations=list(generations_dict.values()))

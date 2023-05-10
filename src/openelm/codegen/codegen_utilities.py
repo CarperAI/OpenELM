@@ -5,7 +5,12 @@ from typing import Optional
 
 import numpy as np
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import (
+    AutoConfig,
+    AutoModelForCausalLM,
+    AutoModelForSeq2SeqLM,
+    AutoTokenizer,
+)
 
 from openelm.configs import ModelConfig
 
@@ -66,10 +71,21 @@ def model_setup(cfg: ModelConfig, device=None, codegen_tokenizer: bool = True):
         device = torch.device("cuda")
 
     tokenizer = AutoTokenizer.from_pretrained(cfg.model_path)
+    # TODO: may need to check model type to determine padding
     tokenizer.padding_side = "left"
     tokenizer.pad_token = tokenizer.eos_token
+    if tokenizer.model_max_length > 32768:
+        tokenizer.model_max_length = 2048
 
-    model = AutoModelForCausalLM.from_pretrained(
+    tokenizer.pad_token = tokenizer.eos_token
+
+    autoconfig = AutoConfig.from_pretrained(cfg.model_path)
+
+    if autoconfig.model_type == "t5":
+        model_cls = AutoModelForSeq2SeqLM
+    else:
+        model_cls = AutoModelForCausalLM
+    model = model_cls.from_pretrained(
         cfg.model_path,
         torch_dtype=torch.float16 if cfg.fp16 else None,
         low_cpu_mem_usage=cfg.fp16,
