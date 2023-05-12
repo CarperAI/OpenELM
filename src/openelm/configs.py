@@ -166,11 +166,12 @@ class P3Config(BaseConfig):
     defaults: list[Any] = field(default_factory=lambda: defaults_p3)
     model: Any = MISSING
     env: Any = MISSING
-    starting_seeds: list[int] = field(default_factory=lambda: [3]) # indices of selection of puzzles to evaluate with
     run_name: Optional[str] = None
+    # --- The below are for run_p3.py
+    starting_seeds: list[int] = field(default_factory=lambda: [3]) # indices of selection of puzzles to evaluate with
     save_results: bool = True
     save_result_obj: bool = False # if saving results, include the whole output text from model for each iteration (which can get long)
-    probsol: bool = False # generate new (problem, solution) pairs from given problems instead of just solutions to given problems
+    probsol: bool = True # generate new problem+solution pairs from given problems instead of just solutions to given problems
     eval_k: int = -1 # set >0 to evaluate pass@k of previous runs using this k, instead of doing a new run
     eval_timestamp: str = '' # optionally provide timestamp of run to eval pass@k, otherwise eval with latest run of every problem
 

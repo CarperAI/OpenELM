@@ -26,7 +26,7 @@ See P3.run() for more info.
 Usage: python run_p3.py
 This defaults to solving puzzle problems.
 
-Example usage with mutating (problem, solution) pairs a.k.a "probsol", along with other config changes:
+Example usage with mutating problem+solution pairs a.k.a "probsol", along with other config changes:
 python run_p3.py probsol=True model.model_path=Salesforce/codegen-2B-mono env.batch_size=8 env.iterations_per_puzzle=16
 """
 
@@ -50,7 +50,7 @@ class P3:
         """
         Query PromptModel to generate
             self.config.probsol=False: solutions to given programming puzzle problems
-            self.config.probsol=True:  new (problem, solution) pairs
+            self.config.probsol=True:  new problem+solution pairs
         """
         puzzles = requests.get("https://raw.githubusercontent.com/microsoft/PythonProgrammingPuzzles/v0.2/puzzles/puzzles.json").json()
         run_start_time = time.time()
@@ -90,16 +90,17 @@ class P3:
             solved = False
             for sol in solutions:
                 res_sol_dict = {'program_str': sol.program_str}
-                if isinstance(sol.result_obj, ExecResult):
-                    if self.config.save_result_obj: res_sol_dict['result_obj'] = sol.result_obj.name
-                    fitness = 0.0
-                else:
-                    if self.config.save_result_obj: res_sol_dict['result_obj'] = sol.result_obj
-                    fitness = env.fitness(sol)
+                if self.config.save_result_obj is not None:
+                    if isinstance(sol.result_obj, ExecResult):
+                        res_sol_dict['result_obj'] = sol.result_obj.name
+                    else:
+                        res_sol_dict['result_obj'] = sol.result_obj
+
+                fitness = env.fitness(sol)
 
                 res_sol_dict["fitness"] = fitness
                 res_sols_list.append(res_sol_dict)
-                if not solved and fitness == 1.0:
+                if fitness == 1.0:
                     solved = True # just want to save if the current problem is solved by any attempt
 
             puzzle_dict['config'] = OmegaConf.to_container(self.config)

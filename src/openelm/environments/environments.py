@@ -41,6 +41,7 @@ from openelm.environments.p3 import (
 )
 from openelm.mutation_model import MutationModel
 from openelm.utils.code_eval import pool_exec_processes, type_check
+from openelm.sandbox.server.sandbox_codex_execute import ExecResult
 
 sys.set_int_max_str_digits(0)  # remove length limitation for int->str conversion
 # (model sometimes outputs really long ints)
@@ -842,8 +843,8 @@ class P3Problem(BaseEnvironment[P3Solution]):
     def set_rng_state(self, rng_state: Optional[np.random._generator.Generator]):
         warnings.warn("WARNING: rng state not used in this environment")
         pass
-
-    def construct_prompt(self) -> dict[str, str]:
+    
+    def construct_prompt(self, code_batch: Optional[Union[list[str], str]] = None) -> dict[str, str]:
         prompt_str = ""
         if self.config.prompt_size == 'long':
             prompt_str += P3_PROBLEM_LONG_SEED
@@ -860,7 +861,7 @@ class P3Problem(BaseEnvironment[P3Solution]):
         template = f'{P3_IMPORTS}\n{self.solution_preamble}'
         return {'prompt': prompt_str, 'template': template}
 
-    def generate_program(self, code_batch: list[str]) -> list[P3Solution]:
+    def generate_programs(self, code_batch: list[str]) -> list[P3Solution]:
         """Generate new programs with a mutation model and evaluate them."""
         local_scope_exec = True
         generated_programs = self.mutation_model.generate_programs(
@@ -893,7 +894,7 @@ class P3Problem(BaseEnvironment[P3Solution]):
     def fitness(self, sol: P3Solution) -> float:
         """
         If passing the solution to the problem returns True, fitness is 1.0
-            else 0.0
+            else -np.inf
         """
         if not type_check(self.ans_type, sol.result_obj): return 0.0
 
@@ -914,11 +915,11 @@ class P3Problem(BaseEnvironment[P3Solution]):
         if result[0] == True:
             return 1.0
         else:
-            return 0.0
+            return -np.inf
 
     def random(self) -> list[P3Solution]:
         program_list = [self.construct_prompt() for _ in range(self.config.batch_size)]
-        new_solutions = self.generate_program(program_list)
+        new_solutions = self.generate_programs(program_list)
         return new_solutions
 
     def mutate(self, sols: list[P3Solution]) -> list[P3Solution]:
@@ -927,7 +928,7 @@ class P3Problem(BaseEnvironment[P3Solution]):
 class P3ProbSolResult(Genotype):
     def __init__(self, program_str: str, result_obj: dict, model: str):
         """
-        Genotype for a programming puzzle (problem, solution) pair.
+        Genotype for a programming puzzle problem+solution pair.
         Args:
             program_str: the code for the pair.
             result_obj: the result of the solution.
@@ -943,7 +944,8 @@ class P3ProbSolResult(Genotype):
     def to_phenotype(self) -> Optional[Phenotype]:
         pl = pipeline('feature-extraction', model=self.model)
         features = np.array(pl(self.program_str))
-        return features.mean(axis=1)
+        maxes = features.max(axis=1).flatten()
+        return (maxes-np.min(maxes))/(np.max(maxes)-np.min(maxes)) # normalize
 
 class P3ProbSol(BaseEnvironment[P3ProbSolResult]):
 
@@ -953,7 +955,7 @@ class P3ProbSol(BaseEnvironment[P3ProbSolResult]):
         mutation_model: MutationModel,
     ) -> None:
         """
-        The objective is to generate (problem, solution) pairs.
+        The objective is to generate problem+solution pairs.
         Args:
             config: the config file path or dict.
             mutation_model: the diff model (or alternatives).
@@ -961,7 +963,13 @@ class P3ProbSol(BaseEnvironment[P3ProbSolResult]):
         """
         self.mutation_model = mutation_model
         self.config = config
+        self.batch_size = self.config.batch_size
         self.seed_index = self.config.starting_seed
+
+        dummy_pl = pipeline('feature-extraction', model=self.mutation_model.config.model_path)
+        dummy_features = np.array(dummy_pl('dummy'))
+        self.genotype_ndim: int = dummy_features.shape[-1]
+        self.genotype_space = np.repeat([[0, 1]], self.genotype_ndim, axis=0).T
 
         # Get info for the puzzle that will be mutated
         # This puzzle is at the index of the puzzles array specified by self.seed_index
@@ -979,23 +987,29 @@ class P3ProbSol(BaseEnvironment[P3ProbSolResult]):
         self.original_probsol = f6_1 + '\n\n' + g6_1 + '\n\n' + "assert f6_1(g6_1())" 
         self.new_probsol_preamble = 'def f6_2(' 
 
-    def construct_prompt(self) -> dict[str, str]:
+    def construct_prompt(self, code_batch: Optional[Union[list[str], str]] = None) -> dict[str, str]:
         prompt_str = ""
         if self.config.prompt_size == 'long':
             prompt_str += P3_PROBSOL_LONG_SEED
         else:
             raise ValueError('No seed string found')
 
-
-        prompt_str += (
-            f'\n\n{self.original_probsol}' # add this particular probsol, f6_1() and g6_1(), to the prompt
-            f'\n\n{self.new_probsol_preamble}' # add f6_2() preamble to the prompt
-        )
+        if code_batch is None:
+            prompt_str += (
+                f'\n\n{self.original_probsol}' # add this particular probsol, f6_1() and g6_1(), to the prompt
+                f'\n\n{self.new_probsol_preamble}' # add f6_2() preamble to the prompt
+            )
+        else:
+            if isinstance(code_batch, list):
+                # TODO: get nearby genotypes
+                prompt_str += code_batch[0]
+            elif isinstance(code_batch, str):
+                prompt_str += code_batch
 
         template = f'{P3_IMPORTS}\n{self.new_probsol_preamble}'
         return {'prompt': prompt_str, 'template': template}
 
-    def generate_program(self, code_batch: list[str]) -> list[P3ProbSolResult]:
+    def generate_programs(self, code_batch: list[str]) -> list[P3ProbSolResult]:
         """Generate new programs with a mutation model and evaluate them."""
         local_scope_exec = False
         generated_programs = self.mutation_model.generate_programs(
@@ -1003,8 +1017,9 @@ class P3ProbSol(BaseEnvironment[P3ProbSolResult]):
         )
 
         # Remove assert statement (last line) from the generated program
-        # since, during evaluation, it causes an exception if the solution
-        # is incorrect, but we want to know that it was incorrect (False; as opposed to not runnable)
+        # since during evaluation it causes an exception if the solution
+        # is incorrect, but we want to return that it was an incorrect
+        # solution as opposed to an un-runnable program
         for i, gp in enumerate(generated_programs):
             lines = gp.strip().split('\n')[:-1]
             gp = '\n'.join(lines)
@@ -1037,11 +1052,13 @@ class P3ProbSol(BaseEnvironment[P3ProbSolResult]):
     def fitness(self, sol: P3ProbSolResult) -> float:
         """
         If passing the solution to the problem returns True, fitness is 1.0
-            else 0.0
+            else -np.inf
         """
+        if isinstance(sol.result_obj, ExecResult):
+            return -np.inf
         
         # TODO: check type expected by f6_2 if any?
-        # check for triviality of f6_2 requirements s.t. trivial == bad fitness?
+        # TODO: check for triviality of f6_2 requirements s.t. trivial == bad fitness?
 
         eval_code = ( 
             f"{P3_IMPORTS}\n"
@@ -1057,15 +1074,19 @@ class P3ProbSol(BaseEnvironment[P3ProbSolResult]):
             processes=self.config.processes,
             debug=self.config.debug,
         )
+        # TODO: consider how to have a larger spectrum than binary fitness
         if result[0] == True:
             return 1.0
         else:
-            return 0.0
+            return -np.inf
 
     def random(self) -> list[P3ProbSolResult]:
         program_list = [self.construct_prompt() for _ in range(self.config.batch_size)]
-        new_solutions = self.generate_program(program_list)
-        return new_solutions
+        new_probsols = self.generate_programs(program_list)
+        return new_probsols
 
-    def mutate(self, sols: list[P3ProbSolResult]) -> list[P3ProbSolResult]:
-        pass
+    def mutate(self, probsol_list: list[P3ProbSolResult]) -> list[P3ProbSolResult]:
+        probsols = [pb.program_str for pb in probsol_list]
+        program_list = list(map(self.construct_prompt, probsols))
+        new_probsols = self.generate_programs(program_list)
+        return new_probsols 
