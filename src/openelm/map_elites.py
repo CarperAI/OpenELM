@@ -239,7 +239,7 @@ class MAPElitesBase:
         self.nonzero: Map = Map(dims=self.map_dims, fill_value=False, dtype=bool)
 
         log_path = Path(log_snapshot_dir)
-        if os.path.isdir(log_path):
+        if log_snapshot_dir and os.path.isdir(log_path):
             stem_dir = log_path.stem
 
             assert (
