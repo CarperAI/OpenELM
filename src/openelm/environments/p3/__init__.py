@@ -101,12 +101,12 @@ def g1_1():
 assert f1_1(g1_1())
 
 def f1_2(s: str):
-    """Changes from f1_1: 'world' to 'worlds'."""
-    return "Hello " + s == "Hello worlds"
+    """Changes from f1_1: 'to the world' instead of 'world'."""
+    return "Hello " + s == "Hello to the world"
 
 def g1_2():
-    """Find a string that when concatenated onto 'Hello ' gives 'Hello worlds'."""
-    return "worlds"
+    """Find a string that when concatenated onto 'Hello ' gives 'Hello to the world'."""
+    return "to the world"
 
 assert f1_2(g1_2())
 
@@ -120,12 +120,12 @@ def g2_1():
 assert f2_1(g2_1())
 
 def f2_2(s: str):
-    """Changes from f2_1: 'world' to 'moon'
-    return "Hello" + s[::-1] == "Hello moon"
+    """Changes from f2_1: swapcase and preprend the given string instead of concatenate to create the phrase"""
+    return s[::-1].swapcase() + " world" == "Hello world"
 
 def g2_2():
-    """Find a string that when reversed and concatenated onto 'Hello ' gives 'Hello moon'."""
-    return "moon"[::-1]
+    """Find a string that when reversed, swapcased, and prepended onto ' world' gives 'Hello world'."""
+    return "Hello"[::-1].swapcase()
 
 assert f2_2(g2_2())
 
@@ -139,12 +139,12 @@ def g3_1():
 assert f3_1(g3_1())
 
 def f3_2(x: List[int]):
-    """Changes from f3_1: sum of 3 to product of 8"""
-    return len(x) == 2 and x[0]*x[1] == 8
+    """Changes from f3_1: change sum to 8; add requirement for product to equal 12"""
+    return len(x) == 2 and and x[0]+x[1] == 8 and x[0]*x[1] == 12
 
 def g3_2():
-    """Find a list of two integers whose product is 8."""
-    return [2, 4]
+    """Find a list of two integers whose sum is 8 and product is 12."""
+    return [2, 6]
 
 assert f3_2(g3_2())
 
@@ -159,13 +159,13 @@ def g4_1():
 assert f4_1(g4_1())
 
 def f4_2(s: List[str]):
-    """Changes from f4_1: added requirement for at least one 'c'"""
+    """Changes from f4_1: add requirement for exactly two 'c's in the front"""
     return len(set(s)) == 1000 and all(
-        (x.count("a") > x.count("b")) and ('b' in x) and ('c' in x) for x in s)
+        (x.count("a") > x.count("b")) and ('b' in x) and (x.count('c')==2) and (x.startswith('cc')) for x in s)
 
 def g4_2():
-    """Find a list of 1000 distinct strings which each have more 'a's than 'b's and at least one 'b' and at least one 'c'."""
-    return ["a"*(i+2)+"b"+"c" for i in range(1000)]
+    """Find a list of 1000 distinct strings which each have more 'a's than 'b's and at least one 'b' and exactly two 'c's which are in the front."""
+    return ["cc"+"a"*(i+2)+"b" for i in range(1000)]
 
 assert f4_2(g4_2())
 

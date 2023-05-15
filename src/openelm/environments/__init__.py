@@ -16,7 +16,8 @@ from openelm.map_elites import CVTMAPElites, MAPElites
 ENVS_DICT: dict[str, Any] = {
     "sodarace": Sodarace,
     "image_evolution": ImageOptim,
-    "p3": P3ProbSol,
+    "p3_probsol": P3ProbSol,
+    "p3_problem": P3Problem,
     "prompt_evolution": PromptEvolution,
 }
 

@@ -6,17 +6,22 @@ import warnings
 from abc import ABC, abstractmethod
 from copy import deepcopy
 from typing import Generic, Optional, Type, TypeVar, Union
+import warnings
+import re
 
 import numpy as np
 import requests
 from langchain import PromptTemplate
 from langchain.chains import LLMChain
 from transformers import pipeline
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
 
 from openelm.configs import (
     EnvConfig,
     ImageEnvConfig,
-    P3EnvConfig,
+    P3ProblemEnvConfig,
+    P3ProbSolEnvConfig,
     PromptEnvConfig,
     SodaraceEnvConfig,
     StringEnvConfig,
@@ -789,7 +794,7 @@ class Sodarace(BaseEnvironment[Sodaracer]):
 
 
 class P3Solution(Genotype):
-    def __init__(self, program_str: str, result_obj: dict):
+    def __init__(self, program_str: str, result_obj: dict, model: str):
         """
         Genotype for a programming puzzle solution.
         Args:
@@ -798,19 +803,31 @@ class P3Solution(Genotype):
         """
         self.program_str = program_str
         self.result_obj = result_obj
+        self.model = model
+
+        self.pl = pipeline('feature-extraction', model=self.model)
+        seed_features = np.array(self.pl(P3_PROBLEM_LONG_SEED))
+        
+        self.scaler = StandardScaler()
+        seed_features_scaled = self.scaler.fit_transform(np.squeeze(seed_features))
+        self.pca = PCA(.95)
+        self.pca.fit(seed_features_scaled)
 
     def __str__(self) -> str:
         return self.program_str
 
     def to_phenotype(self) -> Optional[Phenotype]:
-        return None
+        features = np.array(self.pl(self.program_str))
+        features_scaled = self.scaler.transform(np.squeeze(features))
+        pca_features = self.pca.transform(features_scaled)
+        return pca_features.max(axis=0).flatten()
 
 
 class P3Problem(BaseEnvironment[P3Solution]):
 
     def __init__(
         self,
-        config: P3EnvConfig,
+        config: P3ProblemEnvConfig,
         mutation_model: MutationModel,
     ) -> None:
         """
@@ -822,6 +839,7 @@ class P3Problem(BaseEnvironment[P3Solution]):
         """
         self.mutation_model = mutation_model
         self.config = config
+        self.batch_size = self.config.batch_size
         self.seed_index = self.config.starting_seed
 
         # Get info for the puzzle that will be solved
@@ -834,6 +852,23 @@ class P3Problem(BaseEnvironment[P3Solution]):
         if self.config.prompt_size == 'long':
             self.solution_preamble += '\n' + puzzle['sol_docstring'] # add in the docstring
         self.ans_type = puzzle['ans_type']
+        
+        if self.config.prompt_size == 'long':
+            self.prompt_seed = P3_PROBLEM_LONG_SEED
+        elif self.config.prompt_size == 'med':
+            self.prompt_seed = P3_PROBLEM_MED_SEED
+        else:
+            raise ValueError('No seed string found')
+
+        # dummy to get shape
+        dummy_pl = pipeline('feature-extraction', model=self.mutation_model.config.model_path)
+        dummy_scaler = StandardScaler()
+        dummy_features = np.array(dummy_pl(self.prompt_seed))
+        dummy_features_scaled = dummy_scaler.fit_transform(np.squeeze(dummy_features))
+        dummy_pca = PCA(.95)
+        dummy_pca_features = dummy_pca.fit_transform(np.squeeze(dummy_features_scaled))
+        self.genotype_ndim: int = dummy_pca_features.shape[-1]
+        self.genotype_space = np.repeat([[-20, 20]], self.genotype_ndim, axis=0).T
         self.rng = None
 
     def get_rng_state(self) -> Optional[np.random._generator.Generator]:
@@ -845,17 +880,25 @@ class P3Problem(BaseEnvironment[P3Solution]):
         pass
     
     def construct_prompt(self, code_batch: Optional[Union[list[str], str]] = None) -> dict[str, str]:
-        prompt_str = ""
-        if self.config.prompt_size == 'long':
-            prompt_str += P3_PROBLEM_LONG_SEED
-        elif self.config.prompt_size == 'med':
-            prompt_str += P3_PROBLEM_MED_SEED
-        else:
-            raise ValueError('No seed string found')
+        prompt_str = self.prompt_seed
 
         prompt_str += (
             f'\n\n{self.problem_func}' # add this particular problem, f6(), to the prompt
-            f'\n\n{self.solution_preamble}' # add g6() preamble to the prompt
+            f'\n\n# Old version of g6()' 
+            f'\n# TODO: fix bugs in the code below\n' 
+        )
+        if code_batch is None:
+            prompt_str += ""
+        else:
+            if isinstance(code_batch, list):
+                # TODO: get nearby genotypes
+                prompt_str += code_batch[0]
+            elif isinstance(code_batch, str):
+                prompt_str += code_batch
+
+        prompt_str += (
+            f'\n\n# Fixed version of g6()' 
+            f'\n{self.solution_preamble}'
         )
 
         template = f'{P3_IMPORTS}\n{self.solution_preamble}'
@@ -887,7 +930,7 @@ class P3Problem(BaseEnvironment[P3Solution]):
                 processes=self.config.processes,
                 debug=self.config.debug,
             )
-        results = [{'program_str': gen_prog, 'result_obj': res_obj}
+        results = [{'program_str': gen_prog, 'result_obj': res_obj, 'model': self.mutation_model.config.model_path}
                     for (gen_prog, res_obj) in zip(generated_programs, results)]
         return [P3Solution(**p) for p in results]
 
@@ -896,7 +939,9 @@ class P3Problem(BaseEnvironment[P3Solution]):
         If passing the solution to the problem returns True, fitness is 1.0
             else -np.inf
         """
-        if not type_check(self.ans_type, sol.result_obj): return 0.0
+        # TODO: consider how to have a larger spectrum than binary fitness
+
+        if not type_check(self.ans_type, sol.result_obj): return -np.inf
 
         eval_code = ( 
             f"{P3_IMPORTS}\n"
@@ -922,8 +967,11 @@ class P3Problem(BaseEnvironment[P3Solution]):
         new_solutions = self.generate_programs(program_list)
         return new_solutions
 
-    def mutate(self, sols: list[P3Solution]) -> list[P3Solution]:
-        raise NotImplementedError
+    def mutate(self, sol_list: list[P3Solution]) -> list[P3Solution]:
+        sols = [s.program_str for s in sol_list]
+        program_list = list(map(self.construct_prompt, sols))
+        new_sols = self.generate_programs(program_list)
+        return new_sols 
 
 class P3ProbSolResult(Genotype):
     def __init__(self, program_str: str, result_obj: dict, model: str):
@@ -938,20 +986,28 @@ class P3ProbSolResult(Genotype):
         self.result_obj = result_obj
         self.model = model
 
+        self.pl = pipeline('feature-extraction', model=self.model)
+        seed_features = np.array(self.pl(P3_PROBSOL_LONG_SEED))
+        
+        self.scaler = StandardScaler()
+        seed_features_scaled = self.scaler.fit_transform(np.squeeze(seed_features))
+        self.pca = PCA(.95)
+        self.pca.fit(seed_features_scaled)
+
     def __str__(self) -> str:
         return self.program_str
 
     def to_phenotype(self) -> Optional[Phenotype]:
-        pl = pipeline('feature-extraction', model=self.model)
-        features = np.array(pl(self.program_str))
-        maxes = features.max(axis=1).flatten()
-        return (maxes-np.min(maxes))/(np.max(maxes)-np.min(maxes)) # normalize
+        features = np.array(self.pl(self.program_str))
+        features_scaled = self.scaler.transform(np.squeeze(features))
+        pca_features = self.pca.transform(features_scaled)
+        return pca_features.max(axis=0).flatten()
 
 class P3ProbSol(BaseEnvironment[P3ProbSolResult]):
 
     def __init__(
         self,
-        config: P3EnvConfig,
+        config: P3ProbSolEnvConfig,
         mutation_model: MutationModel,
     ) -> None:
         """
@@ -966,13 +1022,26 @@ class P3ProbSol(BaseEnvironment[P3ProbSolResult]):
         self.batch_size = self.config.batch_size
         self.seed_index = self.config.starting_seed
 
-        dummy_pl = pipeline('feature-extraction', model=self.mutation_model.config.model_path)
-        dummy_features = np.array(dummy_pl('dummy'))
-        self.genotype_ndim: int = dummy_features.shape[-1]
-        self.genotype_space = np.repeat([[0, 1]], self.genotype_ndim, axis=0).T
+        if self.config.prompt_size == 'long':
+            self.prompt_seed = P3_PROBSOL_LONG_SEED
+        else:
+            raise ValueError('No seed string found')
 
-        # Get info for the puzzle that will be mutated
+        # dummy to get shape
+        dummy_pl = pipeline('feature-extraction', model=self.mutation_model.config.model_path)
+        dummy_scaler = StandardScaler()
+        dummy_features = np.array(dummy_pl(self.prompt_seed))
+        dummy_features_scaled = dummy_scaler.fit_transform(np.squeeze(dummy_features))
+        dummy_pca = PCA(.95)
+        dummy_pca_features = dummy_pca.fit_transform(np.squeeze(dummy_features_scaled))
+        self.genotype_ndim: int = dummy_pca_features.shape[-1]
+        self.genotype_space = np.repeat([[-20, 20]], self.genotype_ndim, axis=0).T
+        self.rng = None
+
+
+        # Get info for the seed puzzle that will be mutated
         # This puzzle is at the index of the puzzles array specified by self.seed_index
+        # TODO: put this in a method/construct_prompt?
         puzzles = requests.get("https://raw.githubusercontent.com/microsoft/PythonProgrammingPuzzles/v0.2/puzzles/puzzles.json").json()
         puzzle = puzzles[self.seed_index]
         if len(puzzle['sol_bodies']) == 0:
@@ -987,24 +1056,42 @@ class P3ProbSol(BaseEnvironment[P3ProbSolResult]):
         self.original_probsol = f6_1 + '\n\n' + g6_1 + '\n\n' + "assert f6_1(g6_1())" 
         self.new_probsol_preamble = 'def f6_2(' 
 
+    def get_rng_state(self) -> Optional[np.random._generator.Generator]:
+        warnings.warn("WARNING: rng state not used in this environment")
+        return None
+    
+    def set_rng_state(self, rng_state: Optional[np.random._generator.Generator]):
+        warnings.warn("WARNING: rng state not used in this environment")
+        pass
+
     def construct_prompt(self, code_batch: Optional[Union[list[str], str]] = None) -> dict[str, str]:
-        prompt_str = ""
-        if self.config.prompt_size == 'long':
-            prompt_str += P3_PROBSOL_LONG_SEED
-        else:
-            raise ValueError('No seed string found')
+        prompt_str = self.prompt_seed
 
         if code_batch is None:
+            # prompt with prob+sol from P3 dataset 
             prompt_str += (
                 f'\n\n{self.original_probsol}' # add this particular probsol, f6_1() and g6_1(), to the prompt
                 f'\n\n{self.new_probsol_preamble}' # add f6_2() preamble to the prompt
             )
         else:
+            # prompt with prob+sol that is given (one that was the output of a prev mutation)
             if isinstance(code_batch, list):
                 # TODO: get nearby genotypes
-                prompt_str += code_batch[0]
+                program_str = code_batch[0]
             elif isinstance(code_batch, str):
-                prompt_str += code_batch
+                program_str = code_batch
+
+            # the prev output was f6_2 and g6_2, so now make it f6_1 and g6_1 for the prompt
+            # and remove comments from f6_1
+            # TODO: consider if there is a better structure than all this string parsing
+            program_str = program_str.replace('def f6_2(', 'def f6_1(')
+            program_str = program_str.replace('def g6_2(', 'def g6_1(')
+            i = program_str.find('def g6_1(')
+            program_str = re.sub('""".*"""', '', program_str[:i]) + program_str[i:]
+            prompt_str += (
+                f'\n\n{program_str}'
+                f'\n\n{self.new_probsol_preamble}'
+            )
 
         template = f'{P3_IMPORTS}\n{self.new_probsol_preamble}'
         return {'prompt': prompt_str, 'template': template}
@@ -1049,12 +1136,12 @@ class P3ProbSol(BaseEnvironment[P3ProbSolResult]):
                     for (gen_prog, res_obj) in zip(generated_programs, results)]
         return [P3ProbSolResult(**p) for p in results]
 
-    def fitness(self, sol: P3ProbSolResult) -> float:
+    def fitness(self, probsol: P3ProbSolResult) -> float:
         """
         If passing the solution to the problem returns True, fitness is 1.0
             else -np.inf
         """
-        if isinstance(sol.result_obj, ExecResult):
+        if isinstance(probsol.result_obj, ExecResult):
             return -np.inf
         
         # TODO: check type expected by f6_2 if any?
@@ -1062,9 +1149,9 @@ class P3ProbSol(BaseEnvironment[P3ProbSolResult]):
 
         eval_code = ( 
             f"{P3_IMPORTS}\n"
-            f"{sol.program_str}\n"
+            f"{probsol.program_str}\n"
             f"def run_eval():\n"
-            f"    return f6_2({sol.result_obj})"
+            f"    return f6_2({probsol.result_obj})"
         )
 
         result = pool_exec_processes(

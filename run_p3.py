@@ -27,7 +27,7 @@ Usage: python run_p3.py
 This defaults to solving puzzle problems.
 
 Example usage with mutating problem+solution pairs a.k.a "probsol", along with other config changes:
-python run_p3.py probsol=True model.model_path=Salesforce/codegen-2B-mono env.batch_size=8 env.iterations_per_puzzle=16
+python run_p3.py probsol=True model.model_path=Salesforce/codegen-2B-mono env.batch_size=8 iterations_per_puzzle=16
 """
 
 class P3:
@@ -71,9 +71,9 @@ class P3:
 
             # Run
             solutions = []
-            assert self.config.env.iterations_per_puzzle >= self.config.env.batch_size
+            assert self.config.iterations_per_puzzle >= self.config.env.batch_size
             try:
-                for i in range(self.config.env.iterations_per_puzzle // self.config.env.batch_size):
+                for i in range(self.config.iterations_per_puzzle // self.config.env.batch_size):
                     set_seed(i) # Change seed for each query
 
                     try:

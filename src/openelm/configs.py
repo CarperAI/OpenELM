@@ -109,9 +109,15 @@ class StringEnvConfig(EnvConfig):
 
 
 @dataclass
-class P3EnvConfig(EnvConfig):
-    env_name: str = "p3"
-    iterations_per_puzzle: int = 128
+class P3ProblemEnvConfig(EnvConfig):
+    env_name: str = "p3_problem"
+    prompt_size: str = 'long' # med or long
+    timeout: float = 1.0 # timeout for running a solution
+    starting_seed: int = field(default_factory=lambda: 3) # index of p3 dataset to use as puzzle to mutate
+
+@dataclass
+class P3ProbSolEnvConfig(EnvConfig):
+    env_name: str = "p3_probsol"
     prompt_size: str = 'long' # med or long
     timeout: float = 1.0 # timeout for running a solution
     starting_seed: int = field(default_factory=lambda: 3) # index of p3 dataset to use as puzzle to mutate
@@ -168,6 +174,7 @@ class P3Config(BaseConfig):
     env: Any = MISSING
     run_name: Optional[str] = None
     # --- The below are for run_p3.py
+    iterations_per_puzzle: int = 128
     starting_seeds: list[int] = field(default_factory=lambda: [3]) # indices of selection of puzzles to evaluate with
     save_results: bool = True
     save_result_obj: bool = False # if saving results, include the whole output text from model for each iteration (which can get long)
@@ -182,7 +189,8 @@ def register_configstore() -> ConfigStore:
     cs.store(group="env", name="sodarace", node=SodaraceEnvConfig)
     cs.store(group="env", name="image_evolution", node=ImageEnvConfig)
     cs.store(group="env", name="string_evolution", node=StringEnvConfig)
-    cs.store(group="env", name="p3", node=P3EnvConfig)
+    cs.store(group="env", name="p3_probsol", node=P3ProbSolEnvConfig)
+    cs.store(group="env", name="p3_problem", node=P3ProblemEnvConfig)
     cs.store(group="env", name="prompt_evolution", node=PromptEnvConfig)
     cs.store(group="qd", name="mapelites", node=MAPElitesConfig)
     cs.store(group="qd", name="cvtmapelites", node=CVTMAPElitesConfig)
