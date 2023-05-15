@@ -11,6 +11,7 @@ import re
 
 import numpy as np
 import requests
+import torch
 from langchain import PromptTemplate
 from langchain.chains import LLMChain
 from transformers import pipeline
@@ -27,7 +28,12 @@ from openelm.configs import (
     SodaraceEnvConfig,
     StringEnvConfig,
 )
-from openelm.environments.env_utils import NULL_SEED, ToyPromptTask, get_image_target
+from openelm.environments.env_utils import (
+    NULL_SEED,
+    AntonymPromptTask,
+    ToyPromptTask,
+    get_image_target,
+)
 from openelm.environments.sodaracer import (
     CIRCLE,
     GALLOPER_PREREQ,
@@ -236,7 +242,9 @@ class PromptGenotype(Genotype):
     """
 
     def __init__(
-        self, prompt: PromptTemplate, fixed_inputs: Optional[dict[str, str]] = None
+        self,
+        prompt: PromptTemplate,
+        fixed_inputs: Optional[dict[str, str]] = None,
     ):
         self.fixed_inputs = fixed_inputs
         if fixed_inputs:
@@ -246,7 +254,8 @@ class PromptGenotype(Genotype):
         self.result_obj = None
 
     def __str__(self) -> str:
-        return self.prompt.template
+        return self.fixed_inputs["instruction_str"]
+        # return self.prompt.template
 
     def format(self, **kwargs) -> str:
         return self.prompt.format(**kwargs)
@@ -260,7 +269,7 @@ class PromptGenotype(Genotype):
         return self.result_obj["output"]
 
     def to_phenotype(self) -> str:
-        return (0.0,)
+        return (len(self.fixed_inputs["instruction_str"]),)
 
 
 class PromptEvolution(BaseEnvironment[PromptGenotype]):
@@ -275,11 +284,16 @@ class PromptEvolution(BaseEnvironment[PromptGenotype]):
         self.config: PromptEnvConfig = config
         self.batch_size = self.config.batch_size
         self.genotype_ndim = 1
-        self.genotype_space = np.array([[0], [1]])
+        self.genotype_space = np.array([[0], [300]])
         self.mutation_model = mutation_model
         if fitness_model is None:
             self.fitness_model = mutation_model
-        self.task = ToyPromptTask()
+
+        self.task_name = self.config.task_name
+        if self.task_name == "toy":
+            self.task = ToyPromptTask()
+        elif self.task_name == "antonym":
+            self.task = AntonymPromptTask()
         self.base_prompt = PromptTemplate(
             template=self.task.base_template, input_variables=self.task.input_variables
         )
@@ -295,13 +309,37 @@ class PromptEvolution(BaseEnvironment[PromptGenotype]):
         return [self.random_prompt() for _ in range(self.batch_size)]
 
     def random_prompt(self):
-        inputs = {
-            "n_repetitions": str(self.rng.integers(10)),
-            "instruction_str": self.task.instruction_str,
-            "few_shot_examples": self.task.create_few_shot_examples(
-                self.task.instruction_str
-            ),
-        }
+        if self.task_name == "toy":
+            inputs = {
+                "n_repetitions": str(self.rng.integers(10)),
+                "instruction_str": self.task.instruction_str,
+                "few_shot_examples": self.task.create_few_shot_examples(
+                    self.task.instruction_str
+                ),
+            }
+        elif self.task_name == "antonym":
+            few_shot_examples = self.task.create_few_shot_examples(
+                self.task.words, self.task.antonyms
+            )
+            generation_prompt = PromptTemplate(
+                input_variables=["few_shot_examples"],
+                template=self.task.generation_instruction,
+            )
+            generation_chain = LLMChain(
+                llm=self.fitness_model.model, prompt=generation_prompt
+            )
+            result = generation_chain({"few_shot_examples": few_shot_examples})
+            new_instruction_str = result["text"]
+
+            # take only the first sentence
+            new_instruction_str = (
+                new_instruction_str.lstrip("0123456789. \n").split(".")[0] + "."
+            )
+
+            inputs = {
+                "instruction_str": new_instruction_str,
+            }
+
         return PromptGenotype(prompt=self.base_prompt, fixed_inputs=inputs)
 
     def mutate(self, genomes: list[PromptGenotype]) -> list[PromptGenotype]:
@@ -309,45 +347,142 @@ class PromptEvolution(BaseEnvironment[PromptGenotype]):
         return prompts
 
     def mutate_prompt(self, prompt):
-        # mutate the instruction string; note that we also need to change the few shot examples to match
-        old_instruction_str = prompt.fixed_inputs["instruction_str"]
-        mutation_prompt = PromptTemplate(
-            input_variables=["instruction_str"],
-            template=self.task.mutation_instruction,
-        )
-        mutation_chain = LLMChain(llm=self.fitness_model.model, prompt=mutation_prompt)
-        result = mutation_chain({"instruction_str": old_instruction_str})
-        new_instruction_str = result["text"].strip().split()[0]
+        if self.task_name == "toy":
+            # mutate the instruction string; note that we also need to change the few shot examples to match
+            old_instruction_str = prompt.fixed_inputs["instruction_str"]
+            mutation_prompt = PromptTemplate(
+                input_variables=["instruction_str"],
+                template=self.task.mutation_instruction,
+            )
+            mutation_chain = LLMChain(
+                llm=self.fitness_model.model, prompt=mutation_prompt
+            )
+            result = mutation_chain({"instruction_str": old_instruction_str})
+            new_instruction_str = (
+                result["text"].strip().split()[0]
+            )  # take the first word
 
-        inputs = {
-            "n_repetitions": str(np.random.randint(10)),
-            "instruction_str": new_instruction_str,
-            "few_shot_examples": self.task.create_few_shot_examples(
-                new_instruction_str
-            ),
-        }
+            inputs = {
+                "n_repetitions": str(np.random.randint(10)),
+                "instruction_str": new_instruction_str,
+                "few_shot_examples": self.task.create_few_shot_examples(
+                    new_instruction_str
+                ),
+            }
+        elif self.task_name == "antonym":
+            return self.random_prompt()
 
         return PromptGenotype(prompt=self.base_prompt, fixed_inputs=inputs)
 
     def fitness(self, x: PromptGenotype) -> float:
-        inputs = {
-            "target": self.task.target,
-        }
-        result = x.evaluate(model=self.fitness_model, inputs=inputs)
+        if self.task_name == "toy":
+            inputs = {
+                "target": self.task.target,
+            }
+            result = x.evaluate(model=self.fitness_model, inputs=inputs)
 
-        # fitness is number of times it generated the target word in a row
-        count = 0
-        for word in result["text"].strip().split():
-            if word.lower() == self.task.target:
-                count += 1
+            # fitness is number of times it generated the target word in a row
+            count = 0
+            for word in result["text"].strip().split():
+                if word.lower() == self.task.target:
+                    count += 1
+                else:
+                    break
+
+            fitness = count
+            if self.config.debug:
+                print(
+                    f"-- Prompt --\n{x.result_obj['prompt']}\n-- Fitness: {fitness} --\n-- Behavior: {x.to_phenotype()} --\n"
+                )
+        elif self.task_name == "antonym":
+            fitnesses = []
+            eval_template = PromptTemplate(
+                input_variables=["instruction_str", "input_str", "output_str"],
+                template="""Instruction: {instruction_str}
+            Input: {input_str}
+            Output: {output_str}""",
+            )
+            for input_str, output_str in zip(self.task.words, self.task.antonyms):
+                fitnesses.append(
+                    self.evaluate_template(
+                        eval_template,
+                        x.fixed_inputs["instruction_str"],
+                        input_str,
+                        output_str,
+                    )
+                )
+            fitness = np.mean(fitnesses)
+            if self.config.debug:
+                print(
+                    f"-- instruction_str --\n{x.fixed_inputs['instruction_str']}\n-- Fitness: {fitness} --\n-- Behavior: {x.to_phenotype()} --\n"
+                )
+
+        return fitness
+
+    def evaluate_template(self, eval_template, instruction_str, input_str, output_str):
+
+        model = self.fitness_model.model.model
+        tokenizer = self.fitness_model.model.tokenizer
+
+        partial_template = eval_template.partial(instruction_str=instruction_str)
+        filled_prompt = partial_template.format(
+            input_str=input_str, output_str=output_str
+        )
+        reference_prompt = partial_template.format(input_str=input_str, output_str="/")
+
+        tokens_filled = tokenizer.encode(filled_prompt, return_tensors="pt")
+        tokens_reference = tokenizer.encode(reference_prompt, return_tensors="pt")
+
+        # label only the tokens of interest, -100 otherwise (masked)
+        # assumes there's only one section in the middle that we're interested in
+        # mark duplicate tokens from front, then from the back
+        labels = tokens_filled.clone()
+        for i, (t1, t2) in enumerate(zip(tokens_filled[0], tokens_reference[0])):
+            if t1 == t2:
+                labels[0, i] = -100 * torch.ones_like(labels[0, i])
             else:
                 break
 
-        fitness = count
-        if self.config.debug:
-            print(f"-- Prompt --\n{x.result_obj['prompt']}\n-- Fitness: {fitness} --")
+        # backward alignment
+        for i, (t1, t2) in enumerate(
+            zip(torch.flip(tokens_filled[0], [0]), torch.flip(tokens_reference[0], [0]))
+        ):
+            if t1 == t2:
+                labels[0, -i - 1] = -100 * torch.ones_like(
+                    labels[0, -i - 1]
+                )  # adjust index for reversed
+            else:
+                break
 
-        return fitness
+        outputs = model(tokens_filled.cuda(), labels=labels.cuda())
+
+        # self.print_labels(tokens_filled, tokens_reference, labels, tokenizer)
+        return -outputs.loss.item()
+
+    def print_labels(self, tokens_filled, tokens_reference, labels, tokenizer):
+        from itertools import zip_longest
+
+        print(
+            f"{'Label':<10}{'Token Filled':<20}{'Token ID':<10}{'Token Reference':<20}{'Token ID':<10}"
+        )
+
+        for tf, tr, label in zip_longest(
+            tokens_filled[0], tokens_reference[0], labels[0]
+        ):
+            decoded_tf, decoded_tr = " ", " "
+            if tf is not None:
+                decoded_tf = tokenizer.decode(
+                    [tf]
+                )  # Wrap tf in a list because .decode() expects a list
+            if tr is not None:
+                decoded_tr = tokenizer.decode([tr])  # Same for tr
+            if label is None:
+                label = ""
+            if tr is None:
+                tr = ""
+            if tf is None:
+                tf = ""
+            print(f"{label:<10}{decoded_tf:<20}{tf:<10}{decoded_tr:<20}{tr:<10}")
 
 
 class ImageGeneration(Genotype):

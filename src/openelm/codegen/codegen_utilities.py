@@ -79,7 +79,9 @@ def model_setup(cfg: ModelConfig, device=None, codegen_tokenizer: bool = True):
 
     tokenizer.pad_token = tokenizer.eos_token
 
-    autoconfig = AutoConfig.from_pretrained(cfg.model_path)
+    autoconfig = AutoConfig.from_pretrained(
+        cfg.model_path, trust_remote_code=cfg.trust_remote_code
+    )
 
     if autoconfig.model_type == "t5":
         model_cls = AutoModelForSeq2SeqLM
@@ -89,7 +91,9 @@ def model_setup(cfg: ModelConfig, device=None, codegen_tokenizer: bool = True):
         cfg.model_path,
         torch_dtype=torch.float16 if cfg.fp16 else None,
         low_cpu_mem_usage=cfg.fp16,
-    ).to(device)
+        trust_remote_code=cfg.trust_remote_code,
+        device_map="auto",
+    )  # .to(device)
 
     return model, tokenizer, device
 

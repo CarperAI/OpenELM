@@ -59,3 +59,60 @@ A:"""
         return f"""{instruction_str} the word {self.target} 2 times: {self.target} {self.target}
 {instruction_str} the word {self.target} 3 times: {self.target} {self.target} {self.target}
 {instruction_str} the word {self.target} 4 times: {self.target} {self.target} {self.target} {self.target}"""
+
+
+@dataclass
+class AntonymPromptTask:
+    base_template = """Instruction: {instruction_str}
+Input: {input_str}
+Output: {output_str}"""
+
+    input_variables = [
+        "instruction_str",
+        "input_str",
+        "output_str",
+    ]
+
+    words = [
+        "sane",
+        "direct",
+        "informally",
+        "unpopular",
+        "subtractive",
+        "nonresidential",
+        "inexact",
+        "uptown",
+        "incomparable",
+        "powerful",
+        "gaseous",
+        "evenly",
+        "formality",
+        "deliberately",
+        "off",
+    ]
+    antonyms = [
+        "insane",
+        "indirect",
+        "formally",
+        "popular",
+        "additive",
+        "residential",
+        "exact",
+        "downtown",
+        "comparable",
+        "powerless",
+        "solid",
+        "unevenly",
+        "informality",
+        "accidentally",
+        "on",
+    ]
+
+    generation_instruction = """I gave a friend an instruction. Based on the instruction they produced the following input-output pairs:\n{few_shot_examples}\nThe instruction was to """
+
+    def create_few_shot_examples(self, input_strings, output_strings):
+        few_shot_examples = ""
+        for input_str, output_str in zip(input_strings, output_strings):
+            few_shot_examples += f"Input: {input_str}\nOutput: {output_str}\n\n"
+
+        return few_shot_examples
