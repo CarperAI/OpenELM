@@ -121,6 +121,7 @@ class P3ProbSolEnvConfig(EnvConfig):
     prompt_size: str = 'long' # med or long
     timeout: float = 1.0 # timeout for running a solution
     starting_seed: int = field(default_factory=lambda: 3) # index of p3 dataset to use as puzzle to mutate
+    eval_k: int = 100 # k for pass@k for fitness
 
 
 @dataclass

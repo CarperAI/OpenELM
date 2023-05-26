@@ -45,7 +45,7 @@ from openelm.environments.p3 import (
     P3_IMPORTS,
 )
 from openelm.mutation_model import MutationModel
-from openelm.utils.code_eval import pool_exec_processes, type_check
+from openelm.utils.code_eval import pool_exec_processes, type_check, pass_at_k
 from openelm.sandbox.server.sandbox_codex_execute import ExecResult
 
 sys.set_int_max_str_digits(0)  # remove length limitation for int->str conversion
@@ -804,6 +804,7 @@ class P3Solution(Genotype):
         self.program_str = program_str
         self.result_obj = result_obj
         self.model = model
+        self.valid = False
 
         self.pl = pipeline('feature-extraction', model=self.model)
         seed_features = np.array(self.pl(P3_PROBLEM_LONG_SEED))
@@ -813,14 +814,21 @@ class P3Solution(Genotype):
         self.pca = PCA(.95)
         self.pca.fit(seed_features_scaled)
 
-    def __str__(self) -> str:
-        return self.program_str
-
     def to_phenotype(self) -> Optional[Phenotype]:
         features = np.array(self.pl(self.program_str))
         features_scaled = self.scaler.transform(np.squeeze(features))
         pca_features = self.pca.transform(features_scaled)
         return pca_features.max(axis=0).flatten()
+
+    def __str__(self) -> str:
+        return self.program_str
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        del state['pl']
+        del state['scaler']
+        del state['pca']
+        return state
 
 
 class P3Problem(BaseEnvironment[P3Solution]):
@@ -829,6 +837,8 @@ class P3Problem(BaseEnvironment[P3Solution]):
         self,
         config: P3ProblemEnvConfig,
         mutation_model: MutationModel,
+        problem_str: str = None,
+        solution_preamble: str = None
     ) -> None:
         """
         The objective is to generate solutions to a given programming puzzle problem.
@@ -836,6 +846,8 @@ class P3Problem(BaseEnvironment[P3Solution]):
             seed: the seed dict.
             config: the config file path or dict.
             mutation_model: the diff model (or alternatives).
+            problem_str: an optional puzzle problem
+            solution_preamble: accompanies optional problem_str
         """
         self.mutation_model = mutation_model
         self.config = config
@@ -843,15 +855,21 @@ class P3Problem(BaseEnvironment[P3Solution]):
         self.seed_index = self.config.starting_seed
 
         # Get info for the puzzle that will be solved
-        # This puzzle is at the index of the puzzles array specified by self.seed_index
-        puzzles = requests.get("https://raw.githubusercontent.com/microsoft/PythonProgrammingPuzzles/v0.2/puzzles/puzzles.json").json()
-        puzzle = puzzles[self.seed_index]
+        if problem_str is None:
+            # This puzzle is at the index of the puzzles array specified by self.seed_index
+            puzzles = requests.get("https://raw.githubusercontent.com/microsoft/PythonProgrammingPuzzles/v0.2/puzzles/puzzles.json").json()
+            puzzle = puzzles[self.seed_index]
 
-        self.problem_func = puzzle['sat'].replace('def sat(', 'def f6(') # prompt form is f6()
-        self.solution_preamble = puzzle['sol_header'].replace('def sol(', 'def g6(') # solution form is g6()
-        if self.config.prompt_size == 'long':
-            self.solution_preamble += '\n' + puzzle['sol_docstring'] # add in the docstring
-        self.ans_type = puzzle['ans_type']
+            self.problem_func = puzzle['sat'].replace('def sat(', 'def f6(') # prompt form is f6()
+            self.solution_preamble = puzzle['sol_header'].replace('def sol(', 'def g6(') # solution form is g6()
+            if self.config.prompt_size == 'long':
+                self.solution_preamble += '\n' + puzzle['sol_docstring'] # add in the docstring
+            self.ans_type = puzzle['ans_type']
+        else:
+            self.problem_func = problem_str
+            self.solution_preamble = solution_preamble
+            # TODO: generate a docstring?
+            self.ans_type = None
         
         if self.config.prompt_size == 'long':
             self.prompt_seed = P3_PROBLEM_LONG_SEED
@@ -884,20 +902,23 @@ class P3Problem(BaseEnvironment[P3Solution]):
 
         prompt_str += (
             f'\n\n{self.problem_func}' # add this particular problem, f6(), to the prompt
-            f'\n\n# Old version of g6()' 
-            f'\n# TODO: fix bugs in the code below\n' 
         )
         if code_batch is None:
-            prompt_str += ""
+            prompt_str += "\n"
         else:
+            prompt_str += (
+                f'\n\n# Old version of g6()' 
+                f'\n# TODO: fix bugs in the code below\n' 
+            )
             if isinstance(code_batch, list):
                 # TODO: get nearby genotypes
                 prompt_str += code_batch[0]
             elif isinstance(code_batch, str):
                 prompt_str += code_batch
 
+            prompt_str += f'\n\n# Fixed version of g6()' 
+            
         prompt_str += (
-            f'\n\n# Fixed version of g6()' 
             f'\n{self.solution_preamble}'
         )
 
@@ -923,25 +944,31 @@ class P3Problem(BaseEnvironment[P3Solution]):
                     return_dict = json.loads(resp.text)
                     results.append(return_dict)
         else:
-            results = pool_exec_processes(
-                generated_programs,
-                func_name="g6",
-                timeout=self.config.timeout,
-                processes=self.config.processes,
-                debug=self.config.debug,
-            )
+            # TODO: handle (probably inside of pool_exec_processes) all cases where the generated code returns
+            # a generator type. The multithreaded execution pickles things and generators can't be pickled
+            # which causes the whole thing to error out. 
+            # For now, try/except and re-try.
+            try:
+                results = pool_exec_processes(
+                    generated_programs,
+                    func_name="g6",
+                    timeout=self.config.timeout,
+                    processes=self.config.processes,
+                    debug=self.config.debug,
+                )
+            except Exception as e:
+                return self.generate_programs(code_batch)
+
         results = [{'program_str': gen_prog, 'result_obj': res_obj, 'model': self.mutation_model.config.model_path}
                     for (gen_prog, res_obj) in zip(generated_programs, results)]
         return [P3Solution(**p) for p in results]
 
-    def fitness(self, sol: P3Solution) -> float:
+    def evaluate_solution(self, sol: P3Solution) -> bool:
         """
-        If passing the solution to the problem returns True, fitness is 1.0
-            else -np.inf
+        Returns whether or not the solution solves this problem
         """
-        # TODO: consider how to have a larger spectrum than binary fitness
-
-        if not type_check(self.ans_type, sol.result_obj): return -np.inf
+        if self.ans_type is not None:
+            return type_check(self.ans_type, sol.result_obj)
 
         eval_code = ( 
             f"{P3_IMPORTS}\n"
@@ -957,7 +984,17 @@ class P3Problem(BaseEnvironment[P3Solution]):
             processes=self.config.processes,
             debug=self.config.debug,
         )
-        if result[0] == True:
+
+        return result[0]
+
+    def fitness(self, sol: P3Solution) -> float:
+        """
+        If passing the solution to the problem returns True, fitness is 1.0
+            else -np.inf
+        """
+        result = self.evaluate_solution(sol)
+
+        if result == True:
             return 1.0
         else:
             return -np.inf
@@ -1003,6 +1040,13 @@ class P3ProbSolResult(Genotype):
         pca_features = self.pca.transform(features_scaled)
         return pca_features.max(axis=0).flatten()
 
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        del state['pl']
+        del state['scaler']
+        del state['pca']
+        return state
+
 class P3ProbSol(BaseEnvironment[P3ProbSolResult]):
 
     def __init__(
@@ -1033,7 +1077,7 @@ class P3ProbSol(BaseEnvironment[P3ProbSolResult]):
         dummy_features = np.array(dummy_pl(self.prompt_seed))
         dummy_features_scaled = dummy_scaler.fit_transform(np.squeeze(dummy_features))
         dummy_pca = PCA(.95)
-        dummy_pca_features = dummy_pca.fit_transform(np.squeeze(dummy_features_scaled))
+        dummy_pca_features = dummy_pca.fit_transform(dummy_features_scaled)
         self.genotype_ndim: int = dummy_pca_features.shape[-1]
         self.genotype_space = np.repeat([[-20, 20]], self.genotype_ndim, axis=0).T
         self.rng = None
@@ -1082,12 +1126,23 @@ class P3ProbSol(BaseEnvironment[P3ProbSolResult]):
                 program_str = code_batch
 
             # the prev output was f6_2 and g6_2, so now make it f6_1 and g6_1 for the prompt
-            # and remove comments from f6_1
+            # and remove comments (which contain changes from prev f6_1) from new f6_1
             # TODO: consider if there is a better structure than all this string parsing
             program_str = program_str.replace('def f6_2(', 'def f6_1(')
             program_str = program_str.replace('def g6_2(', 'def g6_1(')
-            i = program_str.find('def g6_1(')
-            program_str = re.sub('""".*"""', '', program_str[:i]) + program_str[i:]
+
+            i_g6 = program_str.find('def g6_1(')
+            # Remove comments with """
+            program_str = re.sub('""".*"""', '', program_str[:i_g6]) + program_str[i_g6:]
+            # Remove comments with # (and remove empty lines)
+            lines = program_str[:i_g6].strip().split('\n')
+            new_lines = []
+            for l in lines:
+                if l.strip().startswith("#") or len(l.strip()) == 0:
+                    continue
+                new_lines.append(l)
+            program_str = '\n'.join(new_lines) + '\n\n' + program_str[i_g6:]
+
             prompt_str += (
                 f'\n\n{program_str}'
                 f'\n\n{self.new_probsol_preamble}'
@@ -1124,13 +1179,21 @@ class P3ProbSol(BaseEnvironment[P3ProbSolResult]):
                     return_dict = json.loads(resp.text)
                     results.append(return_dict)
         else:
-            results = pool_exec_processes(
-                generated_programs,
-                func_name="g6_2",
-                timeout=self.config.timeout,
-                processes=self.config.processes,
-                debug=self.config.debug,
-            )
+            # TODO: handle (probably inside of pool_exec_processes) all cases where the generated code returns
+            # a generator type. The multithreaded execution pickles things and generators can't be pickled
+            # which causes the whole thing to error out. 
+            # For now, try/except and re-try.
+            try:
+                results = pool_exec_processes(
+                    generated_programs,
+                    func_name="g6_2",
+                    timeout=self.config.timeout,
+                    processes=self.config.processes,
+                    debug=self.config.debug,
+                )
+            except Exception as e:
+                return self.generate_programs(code_batch)
+
 
         results = [{'program_str': gen_prog, 'result_obj': res_obj, 'model': self.mutation_model.config.model_path}
                     for (gen_prog, res_obj) in zip(generated_programs, results)]
@@ -1145,7 +1208,7 @@ class P3ProbSol(BaseEnvironment[P3ProbSolResult]):
             return -np.inf
         
         # TODO: check type expected by f6_2 if any?
-        # TODO: check for triviality of f6_2 requirements s.t. trivial == bad fitness?
+        # TODO: implement checks for absolute triviality of f6_2 requirements
 
         eval_code = ( 
             f"{P3_IMPORTS}\n"
@@ -1154,6 +1217,7 @@ class P3ProbSol(BaseEnvironment[P3ProbSolResult]):
             f"    return f6_2({probsol.result_obj})"
         )
 
+        # Run code to see if g6_2 solves f6_2
         result = pool_exec_processes(
             eval_code,
             func_name='run_eval',
@@ -1161,11 +1225,48 @@ class P3ProbSol(BaseEnvironment[P3ProbSolResult]):
             processes=self.config.processes,
             debug=self.config.debug,
         )
-        # TODO: consider how to have a larger spectrum than binary fitness
-        if result[0] == True:
-            return 1.0
-        else:
+
+        if result[0] != True:
             return -np.inf
+
+        ### Do pass@k eval
+
+        # Get just f6_2() and make it the new f6()
+        i_g6 = probsol.program_str.find('def g6_2(')
+        problem_str = probsol.program_str[:i_g6].strip().replace('def f6_2(', 'def f6(')
+        # Remove comments with """
+        problem_str = re.sub('""".*"""', '', problem_str)
+        # Remove comments with # (and remove empty lines)
+        lines = problem_str.strip().split('\n')
+        new_lines = []
+        for l in lines:
+            if l.strip().startswith("#") or len(l.strip()) == 0:
+                continue
+            new_lines.append(l)
+        problem_str = '\n'.join(new_lines)
+        # Get solution_preamble for g6()
+        i_end_preamble = probsol.program_str[i_g6:].find('):')
+        solution_preamble = probsol.program_str[i_g6:i_g6+i_end_preamble+2].replace('def g6_2(', 'def g6(')
+
+        p3_problem = P3Problem(self.config,
+                               self.mutation_model,
+                               problem_str=problem_str,
+                               solution_preamble=solution_preamble)
+        solutions = []
+        for _ in range(self.config.eval_k // self.config.batch_size + 1):
+            solutions += p3_problem.random()
+
+        c = 0
+        for s in solutions:
+            if p3_problem.evaluate_solution(s) == True:
+                c += 1
+
+        pak = pass_at_k(len(solutions), c, self.config.eval_k)
+
+        # We want a pass@k of >0 so that the problem is reasonably solvable.
+        # So fitness=0 if unsolved (so it's still better than -np.inf).
+        # Other than that, more difficult (lower pass@k) => higher fitness.
+        return 1 / pak if pak > 0 else 0
 
     def random(self) -> list[P3ProbSolResult]:
         program_list = [self.construct_prompt() for _ in range(self.config.batch_size)]

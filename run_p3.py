@@ -54,7 +54,6 @@ class P3:
         """
         puzzles = requests.get("https://raw.githubusercontent.com/microsoft/PythonProgrammingPuzzles/v0.2/puzzles/puzzles.json").json()
         run_start_time = time.time()
-        num_puzzle_errors = 0
         for puzzle_id in self.config.starting_seeds:
             self.config.env.starting_seed = puzzle_id
 
@@ -66,24 +65,15 @@ class P3:
             if self.config.probsol:
                 env = P3ProbSol(config=self.config.env, mutation_model=self.mutation_model)
             else:
-
                 env = P3Problem(config=self.config.env, mutation_model=self.mutation_model)
 
             # Run
             solutions = []
             assert self.config.iterations_per_puzzle >= self.config.env.batch_size
-            try:
-                for i in range(self.config.iterations_per_puzzle // self.config.env.batch_size):
-                    set_seed(i) # Change seed for each query
+            for i in range(self.config.iterations_per_puzzle // self.config.env.batch_size):
+                set_seed(i) # Change seed for each query
 
-                    try:
-                        solutions += env.random()
-                    except Exception as e:
-                        num_puzzle_errors += 1
-                        logging.exception(f'ERROR with solution {i} in {puzzle["name"]}')
-                        raise(e)
-            except Exception as e:
-                continue
+                solutions += env.random()
 
             # Evaluate fitness of solutions
             res_sols_list = []
@@ -116,7 +106,7 @@ class P3:
                 with open(f'{dir}/results.json', 'w') as file:
                     file.write(json.dumps(puzzle_dict))
 
-        logging.info(f'Successfully ran on {len(self.config.starting_seeds)-num_puzzle_errors}' +
+        logging.info(f'Successfully ran on {len(self.config.starting_seeds)}' +
                         f'/{len(self.config.starting_seeds)}' +
                         f' puzzles and saved any results to {self.log_dir}')
 

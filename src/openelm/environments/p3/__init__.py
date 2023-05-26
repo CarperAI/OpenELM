@@ -139,7 +139,7 @@ def g3_1():
 assert f3_1(g3_1())
 
 def f3_2(x: List[int]):
-    """Changes from f3_1: change sum to 8; add requirement for product to equal 12"""
+    """Changes from f3_1: change sum to 8 and add requirement for product to equal 12"""
     return len(x) == 2 and and x[0]+x[1] == 8 and x[0]*x[1] == 12
 
 def g3_2():
