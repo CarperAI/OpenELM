@@ -66,7 +66,7 @@ class PromptModel(MutationModel):
         and return the result.
 
         Args:
-            prompt_dicts (list[dict[str, str]): a list of dictionaries containing
+            prompt_dicts (list[dict[str, str]): A list of dictionaries containing
             the prompt and template for each program.
             local_scope_truncate (bool): Whether or not to truncate the code to
             the local scope.
