@@ -16,6 +16,7 @@ from langchain.chains import LLMChain
 from transformers import pipeline
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
+from openai.embeddings_utils import get_embedding, cosine_similarity
 
 from openelm.configs import (
     EnvConfig,
@@ -41,6 +42,7 @@ from openelm.environments.sodaracer import (
 from openelm.environments.p3 import (
     P3_PROBLEM_MED_SEED,
     P3_PROBLEM_LONG_SEED,
+    P3_PROBSOL_MED_SEED,
     P3_PROBSOL_LONG_SEED,
     P3_IMPORTS,
 )
@@ -794,40 +796,56 @@ class Sodarace(BaseEnvironment[Sodaracer]):
 
 
 class P3Solution(Genotype):
-    def __init__(self, program_str: str, result_obj: dict, model: str):
+    def __init__(self, program_str: str, result_obj: dict, config: P3ProblemEnvConfig):
         """
         Genotype for a programming puzzle solution.
         Args:
             program_str: the solution program string (the g6() function).
             result_obj: dict.
+            config: environment config
         """
         self.program_str = program_str
         self.result_obj = result_obj
-        self.model = model
-        self.valid = False
+        self.config = config
 
-        self.pl = pipeline('feature-extraction', model=self.model)
-        seed_features = np.array(self.pl(P3_PROBLEM_LONG_SEED))
-        
-        self.scaler = StandardScaler()
-        seed_features_scaled = self.scaler.fit_transform(np.squeeze(seed_features))
-        self.pca = PCA(.95)
-        self.pca.fit(seed_features_scaled)
+        # When comparing for phenotype, just use import statement and new solution function
+        baseline = '''from typing import List
+
+def g1():
+    """Find a string that when concatenated onto 'Hello ' gives 'Hello world'."""
+    return "world")'''
+        self.baseline_emb = np.array(get_embedding(baseline, engine=self.config.embedding_model_path))
+
+        if self.config.embedding_model_type == 'hf':
+            self.pl = pipeline('feature-extraction', model=self.config.embedding_model_path)
+            seed_features = np.array(self.pl(baseline))
+            self.scaler = StandardScaler()
+            seed_features_scaled = self.scaler.fit_transform(np.squeeze(seed_features))
+            self.pca = PCA(.95)
+            self.pca.fit(seed_features_scaled)
 
     def to_phenotype(self) -> Optional[Phenotype]:
-        features = np.array(self.pl(self.program_str))
-        features_scaled = self.scaler.transform(np.squeeze(features))
-        pca_features = self.pca.transform(features_scaled)
-        return pca_features.max(axis=0).flatten()
+        if self.config.embedding_model_type == 'openai':
+            compare_str = self.program_str
+            i_assert = compare_str.find('assert')
+            if i_assert > -1:
+                compare_str = compare_str[:i_assert]
+            emb = np.array(get_embedding(compare_str, engine=self.config.embedding_model_path))
+            return cosine_similarity(emb, self.baseline_emb)
+        elif self.config.embedding_model_type == 'hf':
+            features = np.array(self.pl(self.program_str))
+            features_scaled = self.scaler.transform(np.squeeze(features))
+            pca_features = self.pca.transform(features_scaled)
+            return pca_features.max(axis=0).flatten()
 
     def __str__(self) -> str:
         return self.program_str
 
     def __getstate__(self):
         state = self.__dict__.copy()
-        del state['pl']
-        del state['scaler']
-        del state['pca']
+        if 'pl' in state: del state['pl']
+        if 'scaler' in state: del state['scaler']
+        if 'pca' in state: del state['pca']
         return state
 
 
@@ -853,6 +871,14 @@ class P3Problem(BaseEnvironment[P3Solution]):
         self.config = config
         self.batch_size = self.config.batch_size
         self.seed_index = self.config.starting_seed
+        self.rng = None
+
+        if self.config.prompt_size == 'long':
+            self.prompt_seed = P3_PROBLEM_LONG_SEED
+        elif self.config.prompt_size == 'med':
+            self.prompt_seed = P3_PROBLEM_MED_SEED
+        else:
+            raise ValueError('No seed string found')
 
         # Get info for the puzzle that will be solved
         if problem_str is None:
@@ -871,23 +897,23 @@ class P3Problem(BaseEnvironment[P3Solution]):
             # TODO: generate a docstring?
             self.ans_type = None
         
-        if self.config.prompt_size == 'long':
-            self.prompt_seed = P3_PROBLEM_LONG_SEED
-        elif self.config.prompt_size == 'med':
-            self.prompt_seed = P3_PROBLEM_MED_SEED
-        else:
-            raise ValueError('No seed string found')
+        # Use the first example in the prompt seed as basis for embedding sizes
+        i_first = self.prompt_seed.find('assert')
+        first_example = self.prompt_seed[:i_first].strip()
 
-        # dummy to get shape
-        dummy_pl = pipeline('feature-extraction', model=self.mutation_model.config.model_path)
-        dummy_scaler = StandardScaler()
-        dummy_features = np.array(dummy_pl(self.prompt_seed))
-        dummy_features_scaled = dummy_scaler.fit_transform(np.squeeze(dummy_features))
-        dummy_pca = PCA(.95)
-        dummy_pca_features = dummy_pca.fit_transform(np.squeeze(dummy_features_scaled))
-        self.genotype_ndim: int = dummy_pca_features.shape[-1]
-        self.genotype_space = np.repeat([[-20, 20]], self.genotype_ndim, axis=0).T
-        self.rng = None
+        if self.config.embedding_model_type == 'openai':
+            self.genotype_ndim: int = 1 
+            self.genotype_space = np.repeat([[0, 1]], self.genotype_ndim, axis=0).T
+        elif self.config.embedding_model_type == 'hf':
+            # Dummy to get behavior space shape
+            dummy_pl = pipeline('feature-extraction', model=self.config.embedding_model_path)
+            dummy_scaler = StandardScaler()
+            dummy_features = np.array(dummy_pl(first_example))
+            dummy_features_scaled = dummy_scaler.fit_transform(np.squeeze(dummy_features))
+            dummy_pca = PCA(.95)
+            dummy_pca_features = dummy_pca.fit_transform(np.squeeze(dummy_features_scaled))
+            self.genotype_ndim: int = dummy_pca_features.shape[-1]
+            self.genotype_space = np.repeat([[-20, 20]], self.genotype_ndim, axis=0).T
 
     def get_rng_state(self) -> Optional[np.random._generator.Generator]:
         warnings.warn("WARNING: rng state not used in this environment")
@@ -929,8 +955,12 @@ class P3Problem(BaseEnvironment[P3Solution]):
         """Generate new programs with a mutation model and evaluate them."""
         local_scope_exec = True
         generated_programs = self.mutation_model.generate_programs(
-            code_batch, local_scope_exec
+            code_batch, local_scope_exec, do_trunc=False
         )
+
+        for i, gp in enumerate(generated_programs):
+            i_assert = gp.find('assert')
+            generated_programs[i] = gp[:i_assert].strip()
 
         if self.config.sandbox:
             results = []
@@ -958,8 +988,8 @@ class P3Problem(BaseEnvironment[P3Solution]):
                 )
             except Exception as e:
                 return self.generate_programs(code_batch)
-
-        results = [{'program_str': gen_prog, 'result_obj': res_obj, 'model': self.mutation_model.config.model_path}
+            
+        results = [{'program_str': gen_prog, 'result_obj': res_obj, 'config': self.config}
                     for (gen_prog, res_obj) in zip(generated_programs, results)]
         return [P3Solution(**p) for p in results]
 
@@ -1011,40 +1041,65 @@ class P3Problem(BaseEnvironment[P3Solution]):
         return new_sols 
 
 class P3ProbSolResult(Genotype):
-    def __init__(self, program_str: str, result_obj: dict, model: str):
+    def __init__(self, program_str: str, result_obj: dict, config: P3ProbSolEnvConfig):
         """
         Genotype for a programming puzzle problem+solution pair.
         Args:
             program_str: the code for the pair.
             result_obj: the result of the solution.
-            model: the model whose embeddings will create the phenotype
+            config: environment config
         """
         self.program_str = program_str
         self.result_obj = result_obj
-        self.model = model
+        self.config = config
 
-        self.pl = pipeline('feature-extraction', model=self.model)
-        seed_features = np.array(self.pl(P3_PROBSOL_LONG_SEED))
-        
-        self.scaler = StandardScaler()
-        seed_features_scaled = self.scaler.fit_transform(np.squeeze(seed_features))
-        self.pca = PCA(.95)
-        self.pca.fit(seed_features_scaled)
+        i_f6 = program_str.find('def f6_2(')
+        i_g6 = program_str.find('def g6_2(')
+        i_assert = program_str.find('assert')
+        self.problem_func = self.program_str[i_f6:i_g6].strip()
+        self.solution_func = self.program_str[i_g6:i_assert].strip()
+
+        # When comparing for phenotype, just use import statement and new probsol
+        baseline = '''from typing import List
+
+def f1_1(s: str):
+    return "Hello " + s == "Hello world"
+
+def g1_1():
+    """Find a string that when concatenated onto 'Hello ' gives 'Hello world'."""
+    return "world"'''
+        self.baseline_emb = np.array(get_embedding(baseline, engine=self.config.embedding_model_path))
+
+        if self.config.embedding_model_type == 'hf':
+            self.pl = pipeline('feature-extraction', model=self.config.embedding_model_path)
+            seed_features = np.array(self.pl(baseline))
+            self.scaler = StandardScaler()
+            seed_features_scaled = self.scaler.fit_transform(np.squeeze(seed_features))
+            self.pca = PCA(.95)
+            self.pca.fit(seed_features_scaled)
 
     def __str__(self) -> str:
         return self.program_str
 
     def to_phenotype(self) -> Optional[Phenotype]:
-        features = np.array(self.pl(self.program_str))
-        features_scaled = self.scaler.transform(np.squeeze(features))
-        pca_features = self.pca.transform(features_scaled)
-        return pca_features.max(axis=0).flatten()
+        if self.config.embedding_model_type == 'openai':
+            compare_str = self.program_str # TODO: remove comments from f6_2 for diversity measurement
+            i_assert = compare_str.find('assert')
+            if i_assert > -1:
+                compare_str = compare_str[:i_assert]
+            emb = np.array(get_embedding(compare_str, engine=self.config.embedding_model_path))
+            return cosine_similarity(emb, self.baseline_emb)
+        elif self.config.embedding_model_type == 'hf':
+            features = np.array(self.pl(self.program_str))
+            features_scaled = self.scaler.transform(np.squeeze(features))
+            pca_features = self.pca.transform(features_scaled)
+            return pca_features.max(axis=0).flatten()
 
     def __getstate__(self):
         state = self.__dict__.copy()
-        del state['pl']
-        del state['scaler']
-        del state['pca']
+        if 'pl' in state: del state['pl']
+        if 'scaler' in state: del state['scaler']
+        if 'pca' in state: del state['pca']
         return state
 
 class P3ProbSol(BaseEnvironment[P3ProbSolResult]):
@@ -1065,27 +1120,37 @@ class P3ProbSol(BaseEnvironment[P3ProbSolResult]):
         self.config = config
         self.batch_size = self.config.batch_size
         self.seed_index = self.config.starting_seed
+        self.rng = None
 
         if self.config.prompt_size == 'long':
             self.prompt_seed = P3_PROBSOL_LONG_SEED
+        elif self.config.prompt_size == 'med':
+            self.prompt_seed = P3_PROBSOL_MED_SEED
         else:
             raise ValueError('No seed string found')
 
-        # dummy to get shape
-        dummy_pl = pipeline('feature-extraction', model=self.mutation_model.config.model_path)
-        dummy_scaler = StandardScaler()
-        dummy_features = np.array(dummy_pl(self.prompt_seed))
-        dummy_features_scaled = dummy_scaler.fit_transform(np.squeeze(dummy_features))
-        dummy_pca = PCA(.95)
-        dummy_pca_features = dummy_pca.fit_transform(dummy_features_scaled)
-        self.genotype_ndim: int = dummy_pca_features.shape[-1]
-        self.genotype_space = np.repeat([[-20, 20]], self.genotype_ndim, axis=0).T
-        self.rng = None
+        # Use the first example in the prompt seed as basis for embedding sizes
+        i_first = self.prompt_seed.find('assert')
+        first_example = self.prompt_seed[:i_first].strip()
+
+        if self.config.embedding_model_type == 'openai':
+            self.genotype_ndim: int = 1
+            self.genotype_space = np.repeat([[0, 1]], self.genotype_ndim, axis=0).T
+        elif self.config.embedding_model_type == 'hf':
+            # Dummy to get behavior space shape
+            dummy_pl = pipeline('feature-extraction', model=self.config.embedding_model_path)
+            dummy_features = np.array(dummy_pl(first_example))
+            dummy_scaler = StandardScaler()
+            dummy_features_scaled = dummy_scaler.fit_transform(np.squeeze(dummy_features))
+            dummy_pca = PCA(.95)
+            dummy_pca_features = dummy_pca.fit_transform(dummy_features_scaled)
+            self.genotype_ndim: int = dummy_pca_features.shape[-1]
+            self.genotype_space = np.repeat([[-20, 20]], self.genotype_ndim, axis=0).T
 
 
         # Get info for the seed puzzle that will be mutated
         # This puzzle is at the index of the puzzles array specified by self.seed_index
-        # TODO: put this in a method/construct_prompt?
+        # TODO: put this in a method or in construct_prompt()?
         puzzles = requests.get("https://raw.githubusercontent.com/microsoft/PythonProgrammingPuzzles/v0.2/puzzles/puzzles.json").json()
         puzzle = puzzles[self.seed_index]
         if len(puzzle['sol_bodies']) == 0:
@@ -1127,14 +1192,16 @@ class P3ProbSol(BaseEnvironment[P3ProbSolResult]):
 
             # the prev output was f6_2 and g6_2, so now make it f6_1 and g6_1 for the prompt
             # and remove comments (which contain changes from prev f6_1) from new f6_1
-            # TODO: consider if there is a better structure than all this string parsing
-            program_str = program_str.replace('def f6_2(', 'def f6_1(')
-            program_str = program_str.replace('def g6_2(', 'def g6_1(')
-
+            # TODO: pass in the whole object instead of the program_str since it already parsed some of this?
+            i_f6 = program_str.find('def f6_2')
+            program_str = program_str[i_f6:] # remove import statement
+            program_str = program_str.replace('f6_2(', 'f6_1(')
+            program_str = program_str.replace('g6_2(', 'g6_1(')
             i_g6 = program_str.find('def g6_1(')
-            # Remove comments with """
+            # remove comments with """
             program_str = re.sub('""".*"""', '', program_str[:i_g6]) + program_str[i_g6:]
-            # Remove comments with # (and remove empty lines)
+            # remove comments with # (and remove empty lines)
+            i_g6 = program_str.find('def g6_1(')
             lines = program_str[:i_g6].strip().split('\n')
             new_lines = []
             for l in lines:
@@ -1142,6 +1209,7 @@ class P3ProbSol(BaseEnvironment[P3ProbSolResult]):
                     continue
                 new_lines.append(l)
             program_str = '\n'.join(new_lines) + '\n\n' + program_str[i_g6:]
+            program_str = program_str.strip()
 
             prompt_str += (
                 f'\n\n{program_str}'
@@ -1157,15 +1225,6 @@ class P3ProbSol(BaseEnvironment[P3ProbSolResult]):
         generated_programs = self.mutation_model.generate_programs(
             code_batch, local_scope_exec
         )
-
-        # Remove assert statement (last line) from the generated program
-        # since during evaluation it causes an exception if the solution
-        # is incorrect, but we want to return that it was an incorrect
-        # solution as opposed to an un-runnable program
-        for i, gp in enumerate(generated_programs):
-            lines = gp.strip().split('\n')[:-1]
-            gp = '\n'.join(lines)
-            generated_programs[i] = gp
 
         if self.config.sandbox:
             results = []
@@ -1195,24 +1254,27 @@ class P3ProbSol(BaseEnvironment[P3ProbSolResult]):
                 return self.generate_programs(code_batch)
 
 
-        results = [{'program_str': gen_prog, 'result_obj': res_obj, 'model': self.mutation_model.config.model_path}
+        results = [{'program_str': gen_prog, 'result_obj': res_obj, 'config': self.config}
                     for (gen_prog, res_obj) in zip(generated_programs, results)]
         return [P3ProbSolResult(**p) for p in results]
 
     def fitness(self, probsol: P3ProbSolResult) -> float:
         """
-        If passing the solution to the problem returns True, fitness is 1.0
-            else -np.inf
+        Fitness is the inverse of pass@k of the problem func.
+        We want a pass@k of >0 so that the problem is reasonably solvable.
+        So fitness=0 if unsolved (which is still better than -np.inf).
+        Other than that, more difficult (lower pass@k) => higher fitness.
         """
         if isinstance(probsol.result_obj, ExecResult):
             return -np.inf
         
         # TODO: check type expected by f6_2 if any?
         # TODO: implement checks for absolute triviality of f6_2 requirements
+        #   the fitness function being based on pass@k might take care of this though
 
         eval_code = ( 
             f"{P3_IMPORTS}\n"
-            f"{probsol.program_str}\n"
+            f"{probsol.problem_func}\n"
             f"def run_eval():\n"
             f"    return f6_2({probsol.result_obj})"
         )
@@ -1229,11 +1291,10 @@ class P3ProbSol(BaseEnvironment[P3ProbSolResult]):
         if result[0] != True:
             return -np.inf
 
-        ### Do pass@k eval
+        ### Do pass@k eval ###
 
-        # Get just f6_2() and make it the new f6()
-        i_g6 = probsol.program_str.find('def g6_2(')
-        problem_str = probsol.program_str[:i_g6].strip().replace('def f6_2(', 'def f6(')
+        # Get f6_2() and make it the new f6()
+        problem_str = probsol.problem_func.replace('def f6_2(', 'def f6(')
         # Remove comments with """
         problem_str = re.sub('""".*"""', '', problem_str)
         # Remove comments with # (and remove empty lines)
@@ -1245,13 +1306,15 @@ class P3ProbSol(BaseEnvironment[P3ProbSolResult]):
             new_lines.append(l)
         problem_str = '\n'.join(new_lines)
         # Get solution_preamble for g6()
-        i_end_preamble = probsol.program_str[i_g6:].find('):')
-        solution_preamble = probsol.program_str[i_g6:i_g6+i_end_preamble+2].replace('def g6_2(', 'def g6(')
+        i_end_preamble = probsol.solution_func.find('):')
+        solution_preamble = probsol.solution_func[:i_end_preamble+2].replace('def g6_2(', 'def g6(')
 
-        p3_problem = P3Problem(self.config,
-                               self.mutation_model,
-                               problem_str=problem_str,
-                               solution_preamble=solution_preamble)
+        p3_problem = P3Problem(
+            self.config, # TODO: make an actual P3ProblemEnvConfig
+            self.mutation_model,
+            problem_str=problem_str,
+            solution_preamble=solution_preamble
+        )
         solutions = []
         for _ in range(self.config.eval_k // self.config.batch_size + 1):
             solutions += p3_problem.random()
@@ -1262,10 +1325,6 @@ class P3ProbSol(BaseEnvironment[P3ProbSolResult]):
                 c += 1
 
         pak = pass_at_k(len(solutions), c, self.config.eval_k)
-
-        # We want a pass@k of >0 so that the problem is reasonably solvable.
-        # So fitness=0 if unsolved (so it's still better than -np.inf).
-        # Other than that, more difficult (lower pass@k) => higher fitness.
         return 1 / pak if pak > 0 else 0
 
     def random(self) -> list[P3ProbSolResult]:

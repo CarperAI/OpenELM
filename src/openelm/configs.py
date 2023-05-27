@@ -114,6 +114,8 @@ class P3ProblemEnvConfig(EnvConfig):
     prompt_size: str = 'long' # med or long
     timeout: float = 1.0 # timeout for running a solution
     starting_seed: int = field(default_factory=lambda: 3) # index of p3 dataset to use as puzzle to mutate
+    embedding_model_type: str = 'hf' # openai or hf
+    embedding_model_path: str = MISSING # e.g. hf: Salesforce/codegen-350M-mono ; openai: text-embedding-ada-002
 
 @dataclass
 class P3ProbSolEnvConfig(EnvConfig):
@@ -122,6 +124,8 @@ class P3ProbSolEnvConfig(EnvConfig):
     timeout: float = 1.0 # timeout for running a solution
     starting_seed: int = field(default_factory=lambda: 3) # index of p3 dataset to use as puzzle to mutate
     eval_k: int = 100 # k for pass@k for fitness
+    embedding_model_type: str = 'hf' # openai or hf
+    embedding_model_path: str = MISSING # e.g. hf: Salesforce/codegen-350M-mono ; openai: text-embedding-ada-002
 
 
 @dataclass
