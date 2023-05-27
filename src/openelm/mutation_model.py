@@ -60,24 +60,24 @@ class PromptModel(MutationModel):
         self, prompt_dicts: list[dict[str, str]], local_scope_truncate: bool, do_trunc=True, **kwargs
     ) -> list[str]:
         """
-        generate new programs from a batch of programs.
+        Generate new programs from a batch of programs.
 
-        given a piece of code, do prompt mutation, execute the code,
+        Given a piece of code, do prompt mutation, execute the code,
         and return the result.
 
-        args:
+        Args:
             prompt_dicts (list[dict[str, str]): a list of dictionaries containing
             the prompt and template for each program.
-            local_scope_truncate (bool): whether or not to truncate the code to
+            local_scope_truncate (bool): Whether or not to truncate the code to
             the local scope.
 
-        returns:
-            a list of code strings.
+        Returns:
+            A list of code strings.
         """
         prompts = [prompt_dict["prompt"] for prompt_dict in prompt_dicts]
         templates = [prompt_dict["template"] for prompt_dict in prompt_dicts]
-        results: llmresult = self.model.generate(prompts=prompts)
-        # flatten nested list of generations
+        results: LLMResult = self.model.generate(prompts=prompts)
+        # Flatten nested list of generations
         completions: list[str] = [
             gen.text for sublist in results.generations for gen in sublist
         ]
