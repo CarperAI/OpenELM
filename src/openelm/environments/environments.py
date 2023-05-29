@@ -24,8 +24,9 @@ from openelm.environments.sodaracer import (
 from openelm.mutation_model import MutationModel
 from openelm.utils.code_eval import pool_exec_processes, type_check
 
-sys.set_int_max_str_digits(0)  # remove length limitation for int->str conversion
-# (model sometimes outputs really long ints)
+if sys.version_info >= (3, 11): # set_int_max_str_digits() new in python 3.11
+  sys.set_int_max_str_digits(0)  # remove length limitation for int->str conversion
+  # (model sometimes outputs really long ints)
 
 Phenotype = Optional[np.ndarray]
 
