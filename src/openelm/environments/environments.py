@@ -469,7 +469,18 @@ class PromptEvolution(BaseEnvironment[PromptGenotype]):
         return fitness
 
     def evaluate_template(self, eval_template, instruction_str, input_str, output_str):
+        """
+        Evaluates a template on the log likelihood of the output_str, given the instruction_str and input_str.
 
+        Args:
+            eval_template: The template to evaluate.
+            instruction_str: The instruction string.
+            input_str: The input string.
+            output_str: The output string.
+
+        Returns:
+            The log likelihood of the tokens in the output string, given the instruction and input strings.
+        """
         model = self.fitness_model.model.model
         tokenizer = self.fitness_model.model.tokenizer
 
@@ -477,14 +488,15 @@ class PromptEvolution(BaseEnvironment[PromptGenotype]):
         filled_prompt = partial_template.format(
             input_str=input_str, output_str=output_str
         )
-        reference_prompt = partial_template.format(input_str=input_str, output_str="/")
+        # hack; replace the output string to figure out which token numbers correspond to the output (see APE)
+        reference_prompt = partial_template.format(input_str=input_str, output_str="~")
 
         tokens_filled = tokenizer.encode(filled_prompt, return_tensors="pt")
         tokens_reference = tokenizer.encode(reference_prompt, return_tensors="pt")
 
-        # label only the tokens of interest, -100 otherwise (masked)
-        # assumes there's only one section in the middle that we're interested in
-        # mark duplicate tokens from front, then from the back
+        # We label only the tokens of interest, and mask otherwise (set to -100)
+        # This assumes there's only one section in the middle that we're interested in
+        # forward alignment; mask duplicate tokens starting from beginning
         labels = tokens_filled.clone()
         for i, (t1, t2) in enumerate(zip(tokens_filled[0], tokens_reference[0])):
             if t1 == t2:
