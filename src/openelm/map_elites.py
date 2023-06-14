@@ -484,6 +484,8 @@ class MAPElitesBase:
         plt.legend()
         plt.savefig(f"{save_path}/MAPElites_niches_filled.png")
 
+        # self.visualize_individuals()
+
         if len(self.map_dims) > 1:
             ix = tuple(np.zeros(max(1, len(self.fitnesses.dims) - 2), int))
             map2d = self.fitnesses.latest[ix]

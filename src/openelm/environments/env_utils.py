@@ -1,6 +1,9 @@
+import json
 from dataclasses import dataclass
 
 import numpy as np
+
+from openelm.constants import SRC_PATH
 
 
 def get_image_target(name: str) -> np.ndarray:
@@ -62,7 +65,7 @@ A:"""
 
 
 @dataclass
-class AntonymPromptTask:
+class APEPromptTask:
     base_template = """Instruction: {instruction_str}
 Input: {input_str}
 Output: {output_str}"""
@@ -73,46 +76,92 @@ Output: {output_str}"""
         "output_str",
     ]
 
-    words = [
-        "sane",
-        "direct",
-        "informally",
-        "unpopular",
-        "subtractive",
-        "nonresidential",
-        "inexact",
-        "uptown",
-        "incomparable",
-        "powerful",
-        "gaseous",
-        "evenly",
-        "formality",
-        "deliberately",
-        "off",
-    ]
-    antonyms = [
-        "insane",
-        "indirect",
-        "formally",
-        "popular",
-        "additive",
-        "residential",
-        "exact",
-        "downtown",
-        "comparable",
-        "powerless",
-        "solid",
-        "unevenly",
-        "informality",
-        "accidentally",
-        "on",
-    ]
+    generation_instruction = """I gave a friend an instruction. Based on the instruction they produced the following input-output pairs:\n\n{few_shot_examples}\nThe instruction was to """
 
-    generation_instruction = """I gave a friend an instruction. Based on the instruction they produced the following input-output pairs:\n{few_shot_examples}\nThe instruction was to """
+    mutation_instruction = """Generate a new instruction based on the old instruction that keeps the semantic meaning.
 
-    def create_few_shot_examples(self, input_strings, output_strings):
+Old instruction: {instruction_str}
+
+New instruction: """
+
+    def get_random_data(self, n_examples):
+        assert n_examples <= len(
+            self.input_list
+        ), "n_examples is larger than available data size"
+        indices = np.random.choice(len(self.input_list), size=n_examples, replace=False)
+        return [self.input_list[idx] for idx in indices], [
+            self.output_list[idx] for idx in indices
+        ]
+
+    def create_few_shot_examples(self, n_examples):
         few_shot_examples = ""
-        for input_str, output_str in zip(input_strings, output_strings):
+        sampled_inputs, sampled_outputs = self.get_random_data(n_examples)
+
+        for input_str, output_str in zip(sampled_inputs, sampled_outputs):
             few_shot_examples += f"Input: {input_str}\nOutput: {output_str}\n\n"
 
         return few_shot_examples
+
+
+@dataclass
+class AntonymPromptTask(APEPromptTask):
+    def __init__(self):
+        # Load the data
+        with open(
+            SRC_PATH / "environments/prompt/data/raw/induce/larger_animal.json"
+        ) as f:
+            data = json.load(f)
+
+        # Initialize lists
+        self.input_list = []
+        self.output_list = []
+
+        # Iterate over examples
+        for key, value in data["examples"].items():
+            self.input_list.append(value["input"])
+            self.output_list.append(value["output"])
+
+        assert len(self.input_list) == len(self.output_list)
+
+
+class COTPromptTask(APEPromptTask):
+    def __init__(self):
+        self.input_list = []
+        self.output_list = []
+
+        # load CoT dataset
+        with open(
+            SRC_PATH / "environments/prompt/data/cot_dataset/addsub.csv", "r"
+        ) as file:
+            for line in file:
+                row = line.strip().split(",")
+                self.input_list.append(row[0])
+                self.output_list.append(row[1])
+
+        assert len(self.input_list) == len(self.output_list)
+
+
+@dataclass
+class ImageMutationPromptTask:
+    base_template = """{instruction_str}"""
+
+    input_variables = [
+        "instruction_str",
+    ]
+
+    fitness_template = """
+import math
+import numpy as np
+
+def draw():
+    \"\"\"
+    {instruction_str}
+
+    Returns:
+        np.ndarray: the image
+    \"\"\"
+    pic = np.zeros((32, 32, 3))
+    {program_str}
+"""
+
+    instruction_str = "Draws a yellow circle."

@@ -92,8 +92,8 @@ def model_setup(cfg: ModelConfig, device=None, codegen_tokenizer: bool = True):
         torch_dtype=torch.float16 if cfg.fp16 else None,
         low_cpu_mem_usage=cfg.fp16,
         trust_remote_code=cfg.trust_remote_code,
-        device_map="auto",
-    )  # .to(device)
+        # device_map="auto",
+    ).to(device)
 
     return model, tokenizer, device
 

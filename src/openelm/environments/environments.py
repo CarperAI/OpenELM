@@ -31,6 +31,7 @@ from openelm.configs import (
 from openelm.environments.env_utils import (
     NULL_SEED,
     AntonymPromptTask,
+    COTPromptTask,
     ToyPromptTask,
     get_image_target,
 )
@@ -284,7 +285,7 @@ class PromptEvolution(BaseEnvironment[PromptGenotype]):
         self.config: PromptEnvConfig = config
         self.batch_size = self.config.batch_size
         self.genotype_ndim = 1
-        self.genotype_space = np.array([[0], [300]])
+        self.genotype_space = np.array([[0], [250]])
         self.mutation_model = mutation_model
         if fitness_model is None:
             self.fitness_model = mutation_model
@@ -294,6 +295,8 @@ class PromptEvolution(BaseEnvironment[PromptGenotype]):
             self.task = ToyPromptTask()
         elif self.task_name == "antonym":
             self.task = AntonymPromptTask()
+        elif self.task_name == "cot":
+            self.task = COTPromptTask()
         self.base_prompt = PromptTemplate(
             template=self.task.base_template, input_variables=self.task.input_variables
         )
@@ -317,9 +320,9 @@ class PromptEvolution(BaseEnvironment[PromptGenotype]):
                     self.task.instruction_str
                 ),
             }
-        elif self.task_name == "antonym":
+        elif self.task_name == "antonym" or self.task_name == "cot":
             few_shot_examples = self.task.create_few_shot_examples(
-                self.task.words, self.task.antonyms
+                n_examples=10,
             )
             generation_prompt = PromptTemplate(
                 input_variables=["few_shot_examples"],
@@ -333,7 +336,10 @@ class PromptEvolution(BaseEnvironment[PromptGenotype]):
 
             # take only the first sentence
             new_instruction_str = (
-                new_instruction_str.lstrip("0123456789. \n").split(".")[0] + "."
+                new_instruction_str.replace('"', "")
+                .lstrip("0123456789. \n")
+                .split(".")[0]
+                + "."
             )
 
             inputs = {
@@ -350,14 +356,11 @@ class PromptEvolution(BaseEnvironment[PromptGenotype]):
         if self.task_name == "toy":
             # mutate the instruction string; note that we also need to change the few shot examples to match
             old_instruction_str = prompt.fixed_inputs["instruction_str"]
-            mutation_prompt = PromptTemplate(
-                input_variables=["instruction_str"],
-                template=self.task.mutation_instruction,
+            result = self.rewrite_string(
+                input_str=old_instruction_str,
+                rewrite_instruction=self.task.mutation_instruction,
+                variable_name="instruction_str",
             )
-            mutation_chain = LLMChain(
-                llm=self.fitness_model.model, prompt=mutation_prompt
-            )
-            result = mutation_chain({"instruction_str": old_instruction_str})
             new_instruction_str = (
                 result["text"].strip().split()[0]
             )  # take the first word
@@ -369,10 +372,47 @@ class PromptEvolution(BaseEnvironment[PromptGenotype]):
                     new_instruction_str
                 ),
             }
-        elif self.task_name == "antonym":
-            return self.random_prompt()
+        elif self.task_name == "antonym" or self.task_name == "cot":
+            if np.random.random() > 0.5:
+                # rewrite the instruction string
+                old_instruction_str = prompt.fixed_inputs["instruction_str"]
+                result = self.rewrite_string(
+                    input_str=old_instruction_str,
+                    rewrite_instruction=self.task.mutation_instruction,
+                    variable_name="instruction_str",
+                )
+                new_instruction_str = (
+                    result["text"]
+                    .replace('"', "")
+                    .lstrip("0123456789. \n")
+                    .split(".")[0]
+                    + "."
+                )  # take the first sentence
+                inputs = {
+                    "instruction_str": new_instruction_str,
+                }
+            else:
+                # otherwise, just generate a random prompt
+                return self.random_prompt()
 
         return PromptGenotype(prompt=self.base_prompt, fixed_inputs=inputs)
+
+    def rewrite_string(self, input_str, rewrite_instruction, variable_name):
+        """
+        Prompts an LLM to rewrite a string.
+
+        Args:
+            input_str: The string to rewrite.
+            rewrite_instruction: String prompt template for the LLM
+            variable_name: The name of the variable in the template to replace with input_str
+        """
+        rewrite_prompt = PromptTemplate(
+            input_variables=[variable_name],
+            template=rewrite_instruction,
+        )
+        rewrite_chain = LLMChain(llm=self.mutation_model.model, prompt=rewrite_prompt)
+        result = rewrite_chain({variable_name: input_str})
+        return result
 
     def fitness(self, x: PromptGenotype) -> float:
         if self.task_name == "toy":
@@ -394,7 +434,7 @@ class PromptEvolution(BaseEnvironment[PromptGenotype]):
                 print(
                     f"-- Prompt --\n{x.result_obj['prompt']}\n-- Fitness: {fitness} --\n-- Behavior: {x.to_phenotype()} --\n"
                 )
-        elif self.task_name == "antonym":
+        elif self.task_name == "antonym" or self.task_name == "cot":
             fitnesses = []
             eval_template = PromptTemplate(
                 input_variables=["instruction_str", "input_str", "output_str"],
@@ -402,7 +442,10 @@ class PromptEvolution(BaseEnvironment[PromptGenotype]):
             Input: {input_str}
             Output: {output_str}""",
             )
-            for input_str, output_str in zip(self.task.words, self.task.antonyms):
+            inputs, outputs = self.task.get_random_data(
+                n_examples=self.config.evals_per_prompt
+            )
+            for input_str, output_str in zip(inputs, outputs):
                 fitnesses.append(
                     self.evaluate_template(
                         eval_template,
@@ -416,6 +459,12 @@ class PromptEvolution(BaseEnvironment[PromptGenotype]):
                 print(
                     f"-- instruction_str --\n{x.fixed_inputs['instruction_str']}\n-- Fitness: {fitness} --\n-- Behavior: {x.to_phenotype()} --\n"
                 )
+        elif self.task_name == "imagegen":
+            # fitness_prompt = PromptTemplate(
+            #     input_variables=["program_str", "instruction_str"],
+            #     template=self.task.fitness_template,
+            # )
+            pass
 
         return fitness
 
