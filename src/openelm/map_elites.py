@@ -277,16 +277,15 @@ class MAPElitesBase:
             ), f'unmatching environments, got {self.env.config.env_name} and {old_config["env_name"]}'
 
             # compute top indices
-            if hasattr(self.genomes, "top"):
-                num_bins = self.genomes.shape[1]
-                top_array = np.array(self.genomes.top)
-                for i in range(num_bins):
-                    nonzero_1d = np.nonzero(self.genomes.array[:, i])
-                    if len(nonzero_1d[0]) > 0:
-                        top_array[i] = nonzero_1d[0][-1]
+            if hasattr(self.fitnesses, "top"):
+                top_array = np.array(self.fitnesses.top)
+                for cell_idx in np.ndindex(self.fitnesses.array.shape[1:]): # all indices of cells in map
+                    nonzero = np.nonzero(self.fitnesses.array[(slice(None),) + cell_idx] != -np.inf) # check full history depth at cell
+                    if len(nonzero[0]) > 0:
+                        top_array[cell_idx] = nonzero[0][-1]
                 # correct stats
-                self.genomes.top = top_array
-                self.fitnesses.top = top_array
+                self.genomes.top = top_array.copy()
+                self.fitnesses.top = top_array.copy()
             self.genomes.empty = False
             self.fitnesses.empty = False
 
@@ -330,8 +329,13 @@ class MAPElitesBase:
         start_step = int(self.start_step)
         total_steps = int(total_steps)
         tbar = trange(start_step, total_steps, initial=start_step, total=total_steps)
-        max_fitness = -np.inf
-        max_genome = None
+        if self.niches_filled() == 0:
+            max_fitness = -np.inf
+            max_genome = None
+        else: # take max fitness in case of filled loaded snapshot
+            max_fitness = self.max_fitness()
+            max_index = np.where(self.fitnesses.latest == max_fitness)
+            max_genome = self.genomes[max_index]
         if self.save_history:
             self.history = defaultdict(list)
 
@@ -389,7 +393,7 @@ class MAPElitesBase:
             self.fitness_history["min"].append(self.min_fitness())
             self.fitness_history["mean"].append(self.mean_fitness())
 
-            if n_steps != 0 and n_steps % self.save_snapshot_interval == 0:
+            if self.save_snapshot_interval is not None and n_steps != 0 and n_steps % self.save_snapshot_interval == 0:
                 self.save_results(step=n_steps)
 
         self.current_max_genome = max_genome
