@@ -21,13 +21,12 @@ from openelm.utils.diff_eval import apply_diff, split_diff
 def get_model(config: ModelConfig):
     if config.model_type == "hf":
         return HuggingFaceLLM(config=config)
-    elif config.model_type == "oai":
+    elif config.model_type == "openai":
         # Adapt config here
         cfg: dict = {
             "max_tokens": config.gen_max_len,
             "temperature": config.temp,
             "top_p": config.top_p,
-            "batch_size": config.batch_size,
             # TODO: rename config option?
             "model_name": config.model_path,
         }
@@ -58,7 +57,7 @@ class PromptModel(MutationModel):
         self.model: LLM = get_model(self.config)
 
     def generate_programs(
-        self, prompt_dicts: list[dict[str, str]], local_scope_truncate: bool, **kwargs
+        self, prompt_dicts: list[dict[str, str]], local_scope_truncate: bool, do_trunc=True, **kwargs
     ) -> list[str]:
         """
         Generate new programs from a batch of programs.
@@ -83,10 +82,16 @@ class PromptModel(MutationModel):
             gen.text for sublist in results.generations for gen in sublist
         ]
 
-        trunc = functools.partial(truncate, only_local_scope=local_scope_truncate)
-        truncations: list[str] = [
-            templates[i] + trunc(completions[i]) for i in range(len(completions))
-        ]
+        if do_trunc:
+            trunc = functools.partial(truncate, only_local_scope=local_scope_truncate)
+            truncations: list[str] = [
+                templates[i] + trunc(completions[i]) for i in range(len(completions))
+            ]
+        else:
+            truncations: list[str] = [
+                templates[i] + '\n    ' + completions[i] for i in range(len(completions))
+            ]
+
         return truncations
 
 
