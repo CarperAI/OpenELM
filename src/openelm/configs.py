@@ -46,7 +46,7 @@ class QDConfig(BaseConfig):
     total_steps: int = 5
     history_length: int = 1
     save_history: bool = False
-    save_snapshot_interval: int = 1000
+    save_snapshot_interval: Optional[int] = None
     log_snapshot_dir: str = ""
     seed: Optional[int] = 42
     save_np_rng_state: bool = False
