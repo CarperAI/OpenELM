@@ -11,3 +11,4 @@ Flask
 scikit-learn
 matplotlib
 langchain
+openai
