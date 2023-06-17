@@ -143,13 +143,13 @@ class QAPromptTask(APEPromptTask):
 @dataclass
 class AnimalPromptTask(QAPromptTask):
     def __init__(self):
-        self.load_data("environments/prompt/data/raw/induce/larger_animal.json")
+        self.load_data("environments/prompt/datasets/raw/induce/larger_animal.json")
 
 
 @dataclass
 class AntonymPromptTask(QAPromptTask):
     def __init__(self):
-        self.load_data("environments/prompt/data/raw/induce/antonyms.json")
+        self.load_data("environments/prompt/datasets/raw/induce/antonyms.json")
 
 
 @dataclass
@@ -160,7 +160,7 @@ class COTPromptTask(APEPromptTask):
 
         # load CoT dataset
         with open(
-            SRC_PATH / "environments/prompt/data/cot_dataset/addsub.csv", "r"
+            SRC_PATH / "environments/prompt/datasets/cot_dataset/addsub.csv", "r"
         ) as file:
             for line in file:
                 row = line.strip().split(",")
