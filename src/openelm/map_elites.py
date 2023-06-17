@@ -487,12 +487,20 @@ class MAPElitesBase:
         # self.visualize_individuals()
 
         if len(self.map_dims) > 1:
-            ix = tuple(np.zeros(max(1, len(self.fitnesses.dims) - 2), int))
-            map2d = self.fitnesses.latest[ix]
-            print(
-                "plotted genes:",
-                *[str(g) for g in self.genomes.latest[ix].flatten().tolist()],
-            )
+            if len(self.fitnesses.dims) == 2:
+                map2d = self.fitnesses.latest
+                print(
+                    "plotted genes:",
+                    *[str(g) for g in self.genomes.latest.flatten().tolist()],
+                )
+            else:
+                ix = tuple(np.zeros(max(1, len(self.fitnesses.dims) - 2), int))
+                map2d = self.fitnesses.latest[ix]
+
+                print(
+                    "plotted genes:",
+                    *[str(g) for g in self.genomes.latest[ix].flatten().tolist()],
+                )
 
             plt.figure()
             plt.pcolor(map2d, cmap="inferno")

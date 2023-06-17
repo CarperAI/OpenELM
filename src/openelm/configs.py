@@ -132,7 +132,7 @@ class P3ProbSolEnvConfig(EnvConfig):
 @dataclass
 class PromptEnvConfig(EnvConfig):
     env_name: str = "prompt_evolution"
-    task_name: str = "cot"  # toy or antonym or cot
+    task_name: str = "antonym"  # toy or antonym or animal or cot
     evals_per_prompt: int = 10
 
 

@@ -30,6 +30,7 @@ from openelm.configs import (
 )
 from openelm.environments.env_utils import (
     NULL_SEED,
+    AnimalPromptTask,
     AntonymPromptTask,
     COTPromptTask,
     ToyPromptTask,
@@ -84,6 +85,38 @@ def numpy_to_ascii_art(arr):
     chars = np.choose(idx, art_chars)
     ascii_art = "\n".join(["".join(x) for x in chars])
     return ascii_art
+
+
+def get_positive_score(sentiment, mode="distilbert"):
+    """Get the positive score from a sentiment analysis result."""
+    if mode == "distilbert":
+        return next(
+            result["score"] for result in sentiment if result["label"] == "POSITIVE"
+        )
+    elif mode == "roberta":
+        return next(
+            result["score"] for result in sentiment if result["label"] == "LABEL_2"
+        )
+    else:
+        raise ValueError(f"Invalid mode: {mode}")
+
+
+def get_negative_score(sentiment, mode="distilbert"):
+    """Get the negative score from a sentiment analysis result."""
+    if mode == "distilbert":
+        return next(
+            result["score"] for result in sentiment if result["label"] == "NEGATIVE"
+        )
+    elif mode == "roberta":
+        return next(
+            result["score"] for result in sentiment if result["label"] == "LABEL_0"
+        )
+    else:
+        raise ValueError(f"Invalid mode: {mode}")
+
+
+def get_sentiment_score(sentiment, mode="distilbert"):
+    return get_positive_score(sentiment, mode) - get_negative_score(sentiment, mode)
 
 
 class Genotype(ABC):
@@ -246,6 +279,7 @@ class PromptGenotype(Genotype):
         self,
         prompt: PromptTemplate,
         fixed_inputs: Optional[dict[str, str]] = None,
+        behavior_model=None,
     ):
         self.fixed_inputs = fixed_inputs
         if fixed_inputs:
@@ -253,6 +287,17 @@ class PromptGenotype(Genotype):
         else:
             self.prompt = prompt
         self.result_obj = None
+        if behavior_model:
+            # assume sentiment analysis; can expand this later
+            sentiment = behavior_model(self.__str__())
+            self.behavior = (
+                len(self.fixed_inputs["instruction_str"]),
+                get_sentiment_score(
+                    sentiment[0], mode=behavior_model.model.config.model_type
+                ),
+            )
+        else:
+            self.behavior = (len(self.fixed_inputs["instruction_str"]),)
 
     def __str__(self) -> str:
         return self.fixed_inputs["instruction_str"]
@@ -269,8 +314,8 @@ class PromptGenotype(Genotype):
         }
         return self.result_obj["output"]
 
-    def to_phenotype(self) -> str:
-        return (len(self.fixed_inputs["instruction_str"]),)
+    def to_phenotype(self):
+        return self.behavior
 
 
 class PromptEvolution(BaseEnvironment[PromptGenotype]):
@@ -284,19 +329,37 @@ class PromptEvolution(BaseEnvironment[PromptGenotype]):
     ):
         self.config: PromptEnvConfig = config
         self.batch_size = self.config.batch_size
-        self.genotype_ndim = 1
-        self.genotype_space = np.array([[0], [250]])
         self.mutation_model = mutation_model
         if fitness_model is None:
             self.fitness_model = mutation_model
+        self.behavior_model = pipeline(
+            "sentiment-analysis",
+            model="cardiffnlp/twitter-roberta-base-sentiment",
+            # model="distilbert-base-uncased-finetuned-sst-2-english",
+            top_k=None,
+            # return_all_scores=True,
+        )
 
         self.task_name = self.config.task_name
         if self.task_name == "toy":
+            self.genotype_ndim = 1
+            self.genotype_space = np.array([[0], [250]])
             self.task = ToyPromptTask()
         elif self.task_name == "antonym":
+            self.genotype_ndim = 2
+            self.genotype_space = np.array([[0, -1], [250, 1]])
             self.task = AntonymPromptTask()
+        elif self.task_name == "animal":
+            self.genotype_ndim = 2
+            self.genotype_space = np.array([[0, -1], [250, 1]])
+            self.task = AnimalPromptTask()
         elif self.task_name == "cot":
+            self.genotype_ndim = 2
+            self.genotype_space = np.array([[0, -1], [250, 1]])
             self.task = COTPromptTask()
+        else:
+            raise ValueError(f"Unknown task: {self.task_name}")
+
         self.base_prompt = PromptTemplate(
             template=self.task.base_template, input_variables=self.task.input_variables
         )
@@ -320,7 +383,11 @@ class PromptEvolution(BaseEnvironment[PromptGenotype]):
                     self.task.instruction_str
                 ),
             }
-        elif self.task_name == "antonym" or self.task_name == "cot":
+        elif (
+            self.task_name == "antonym"
+            or self.task_name == "animal"
+            or self.task_name == "cot"
+        ):
             few_shot_examples = self.task.create_few_shot_examples(
                 n_examples=10,
             )
@@ -346,7 +413,11 @@ class PromptEvolution(BaseEnvironment[PromptGenotype]):
                 "instruction_str": new_instruction_str,
             }
 
-        return PromptGenotype(prompt=self.base_prompt, fixed_inputs=inputs)
+        return PromptGenotype(
+            prompt=self.base_prompt,
+            fixed_inputs=inputs,
+            behavior_model=self.behavior_model,
+        )
 
     def mutate(self, genomes: list[PromptGenotype]) -> list[PromptGenotype]:
         prompts = [self.mutate_prompt(prompt) for prompt in genomes]
@@ -358,7 +429,7 @@ class PromptEvolution(BaseEnvironment[PromptGenotype]):
             old_instruction_str = prompt.fixed_inputs["instruction_str"]
             result = self.rewrite_string(
                 input_str=old_instruction_str,
-                rewrite_instruction=self.task.mutation_instruction,
+                rewrite_instruction=np.random.choice(self.task.mutation_instructions),
                 variable_name="instruction_str",
             )
             new_instruction_str = (
@@ -372,13 +443,19 @@ class PromptEvolution(BaseEnvironment[PromptGenotype]):
                     new_instruction_str
                 ),
             }
-        elif self.task_name == "antonym" or self.task_name == "cot":
-            if np.random.random() > 0.5:
+        elif (
+            self.task_name == "antonym"
+            or self.task_name == "animal"
+            or self.task_name == "cot"
+        ):
+            if np.random.random() > 0.3:
                 # rewrite the instruction string
                 old_instruction_str = prompt.fixed_inputs["instruction_str"]
                 result = self.rewrite_string(
                     input_str=old_instruction_str,
-                    rewrite_instruction=self.task.mutation_instruction,
+                    rewrite_instruction=np.random.choice(
+                        self.task.mutation_instructions
+                    ),
                     variable_name="instruction_str",
                 )
                 new_instruction_str = (
@@ -395,7 +472,11 @@ class PromptEvolution(BaseEnvironment[PromptGenotype]):
                 # otherwise, just generate a random prompt
                 return self.random_prompt()
 
-        return PromptGenotype(prompt=self.base_prompt, fixed_inputs=inputs)
+        return PromptGenotype(
+            prompt=self.base_prompt,
+            fixed_inputs=inputs,
+            behavior_model=self.behavior_model,
+        )
 
     def rewrite_string(self, input_str, rewrite_instruction, variable_name):
         """
@@ -412,6 +493,10 @@ class PromptEvolution(BaseEnvironment[PromptGenotype]):
         )
         rewrite_chain = LLMChain(llm=self.mutation_model.model, prompt=rewrite_prompt)
         result = rewrite_chain({variable_name: input_str})
+        # if self.config.debug:
+        #     print(
+        #         f"-- Rewrite Instruction --\n{rewrite_instruction}\n-- Input --\n{input_str}\n-- Output --\n{result['text']}\n"
+        #     )
         return result
 
     def fitness(self, x: PromptGenotype) -> float:
@@ -434,13 +519,15 @@ class PromptEvolution(BaseEnvironment[PromptGenotype]):
                 print(
                     f"-- Prompt --\n{x.result_obj['prompt']}\n-- Fitness: {fitness} --\n-- Behavior: {x.to_phenotype()} --\n"
                 )
-        elif self.task_name == "antonym" or self.task_name == "cot":
+        elif (
+            self.task_name == "antonym"
+            or self.task_name == "animal"
+            or self.task_name == "cot"
+        ):
             fitnesses = []
             eval_template = PromptTemplate(
                 input_variables=["instruction_str", "input_str", "output_str"],
-                template="""Instruction: {instruction_str}
-            Input: {input_str}
-            Output: {output_str}""",
+                template=self.task.evaluation_instruction,
             )
             inputs, outputs = self.task.get_random_data(
                 n_examples=self.config.evals_per_prompt

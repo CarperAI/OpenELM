@@ -43,7 +43,8 @@ class ToyPromptTask:
     target = "hello"
     instruction_str = "Repeat"
 
-    mutation_instruction = """Q: What is a synonym for happy?
+    mutation_instructions = [
+        """Q: What is a synonym for happy?
 A: Cheerful
 
 Q: What is a synonym for sad?
@@ -57,6 +58,7 @@ A: End
 
 Q: What is a synonym for {instruction_str}?
 A:"""
+    ]
 
     def create_few_shot_examples(self, instruction_str):
         return f"""{instruction_str} the word {self.target} 2 times: {self.target} {self.target}
@@ -78,11 +80,27 @@ Output: {output_str}"""
 
     generation_instruction = """I gave a friend an instruction. Based on the instruction they produced the following input-output pairs:\n\n{few_shot_examples}\nThe instruction was to """
 
-    mutation_instruction = """Generate a new instruction based on the old instruction that keeps the semantic meaning.
+    mutation_instructions = [
+        """Generate a new instruction based on the old instruction that keeps the semantic meaning.
 
 Old instruction: {instruction_str}
 
-New instruction: """
+New instruction: """,
+        """Rewrite this instruction to be more polite.
+
+Old instruction: {instruction_str}
+
+New instruction: """,
+        """Rewrite this instruction to be more forceful.
+
+Old instruction: {instruction_str}
+
+New instruction: """,
+    ]
+
+    evaluation_instruction = """Instruction: {instruction_str}
+Input: {input_str}
+Output: {output_str}"""
 
     def get_random_data(self, n_examples):
         assert n_examples <= len(
@@ -104,12 +122,10 @@ New instruction: """
 
 
 @dataclass
-class AntonymPromptTask(APEPromptTask):
-    def __init__(self):
+class QAPromptTask(APEPromptTask):
+    def load_data(self, data_path):
         # Load the data
-        with open(
-            SRC_PATH / "environments/prompt/data/raw/induce/larger_animal.json"
-        ) as f:
+        with open(SRC_PATH / data_path) as f:
             data = json.load(f)
 
         # Initialize lists
@@ -124,6 +140,19 @@ class AntonymPromptTask(APEPromptTask):
         assert len(self.input_list) == len(self.output_list)
 
 
+@dataclass
+class AnimalPromptTask(QAPromptTask):
+    def __init__(self):
+        self.load_data("environments/prompt/data/raw/induce/larger_animal.json")
+
+
+@dataclass
+class AntonymPromptTask(QAPromptTask):
+    def __init__(self):
+        self.load_data("environments/prompt/data/raw/induce/antonyms.json")
+
+
+@dataclass
 class COTPromptTask(APEPromptTask):
     def __init__(self):
         self.input_list = []
