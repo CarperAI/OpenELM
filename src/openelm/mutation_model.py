@@ -28,7 +28,6 @@ def get_model(config: ModelConfig):
             "max_tokens": config.gen_max_len,
             "temperature": config.temp,
             "top_p": config.top_p,
-            "batch_size": config.batch_size,
             # TODO: rename config option?
             "model_name": config.model_path,
         }
@@ -109,6 +108,7 @@ class DiffModel(PromptModel):
     def generate_programs(
         self, prompt_dicts: list[dict[str, str]], local_scope_truncate: bool, **kwargs
     ) -> list[str]:
+        # local_scope_truncate = False
         prompts = [prompt_dict["prompt"] for prompt_dict in prompt_dicts]
         templates = [prompt_dict["template"] for prompt_dict in prompt_dicts]
         results: LLMResult = self.model.generate(prompts=prompts)
