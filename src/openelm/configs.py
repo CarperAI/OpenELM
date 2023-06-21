@@ -18,10 +18,10 @@ class ModelConfig(BaseConfig):
     seed: Optional[int] = None
     deterministic: bool = False
     top_p: float = 0.95
-    temp: float = 0.85
-    gen_max_len: int = 768
-    batch_size: int = 32
-    model_type: str = "hf"  # Can be "hf", "openai", etc
+    temp: float = 1.1
+    gen_max_len: int = 512
+    batch_size: int = 10
+    model_type: str = "oai"  # Can be "hf", "openai", etc
     model_path: str = MISSING  # Can be HF model name or path to local model
     logits_only: bool = False
     do_sample: bool = True
@@ -31,7 +31,7 @@ class ModelConfig(BaseConfig):
 @dataclass
 class PromptModelConfig(ModelConfig):
     model_name: str = "prompt"
-    model_path: str = "Salesforce/codegen-350M-mono"
+    model_path: str = "gpt-4"  # Salesforce/codegen-2B-mono"
 
 
 @dataclass
@@ -42,11 +42,11 @@ class DiffModelConfig(ModelConfig):
 
 @dataclass
 class QDConfig(BaseConfig):
-    init_steps: int = 2
-    total_steps: int = 5
+    init_steps: int = 250
+    total_steps: int = 2500
     history_length: int = 1
     save_history: bool = False
-    save_snapshot_interval: int = 1000
+    save_snapshot_interval: int = 10
     log_snapshot_dir: str = ""
     seed: Optional[int] = 42
     save_np_rng_state: bool = False
@@ -56,7 +56,7 @@ class QDConfig(BaseConfig):
 @dataclass
 class MAPElitesConfig(QDConfig):
     qd_name: str = "mapelites"
-    map_grid_size: tuple[int, ...] = field(default_factory=lambda: (12,))
+    map_grid_size: tuple[int, ...] = field(default_factory=lambda: (5,))
 
 
 @dataclass
@@ -71,8 +71,8 @@ class EnvConfig(BaseConfig):
     timeout: float = 5.0  # Seconds
     sandbox: bool = False
     sandbox_server: str = "http://localhost:5000"
-    processes: int = 12
-    batch_size: int = 32  # Batch size of MAP-Elites
+    processes: int = 1
+    batch_size: int = 10  # Batch size of MAP-Elites
     env_name: str = MISSING
     debug: bool = False
     seed: Optional[int] = 42
@@ -85,13 +85,13 @@ class SodaraceEnvConfig(EnvConfig):
     behavior_space: list[list[float]] = field(
         default_factory=lambda: [
             # Height, Width, Mass dimensions
+            [0, 500],
+            [0, 500],
             [0, 1000],
-            [0, 1000],
-            [0, 2000],
         ]
     )
     starting_seeds: list[str] = field(default_factory=lambda: ["square"])
-    instruction: int = 1
+    instruction: int = 2
     crossover: bool = False
 
 
@@ -117,6 +117,17 @@ class P3EnvConfig(EnvConfig):
 
 
 @dataclass
+class QDEnvConfig(EnvConfig):
+    env_name: str = "qdaif"
+    behavior_space: list[list[float]] = field(
+        default_factory=lambda: [
+            [0, 5],
+            [0, 5],
+        ]
+    )
+
+
+@dataclass
 class PromptEnvConfig(EnvConfig):
     env_name: str = "prompt_evolution"
     evals_per_prompt: int = 1  # TODO
@@ -125,7 +136,7 @@ class PromptEnvConfig(EnvConfig):
 defaults_elm = [
     {"model": "prompt"},
     {"qd": "mapelites"},
-    {"env": "sodarace"},
+    {"env": "qdaif"},
     "_self_",
 ]
 
@@ -182,6 +193,7 @@ def register_configstore() -> ConfigStore:
     cs.store(group="env", name="string_evolution", node=StringEnvConfig)
     cs.store(group="env", name="p3_problem", node=P3EnvConfig)
     cs.store(group="env", name="prompt_evolution", node=PromptEnvConfig)
+    cs.store(group="env", name="qdaif", node=QDEnvConfig)
     cs.store(group="qd", name="mapelites", node=MAPElitesConfig)
     cs.store(group="qd", name="cvtmapelites", node=CVTMAPElitesConfig)
     cs.store(group="model", name="prompt", node=PromptModelConfig)

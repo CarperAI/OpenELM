@@ -8,6 +8,7 @@ from typing import Optional
 import numpy as np
 from sklearn.cluster import KMeans
 from tqdm import trange
+from openelm.constants import PROJECT_PATH
 
 from openelm.configs import CVTMAPElitesConfig, MAPElitesConfig, QDConfig
 from openelm.environments import BaseEnvironment, Genotype
@@ -238,8 +239,9 @@ class MAPElitesBase:
         # index over explored niches to select from
         self.nonzero: Map = Map(dims=self.map_dims, fill_value=False, dtype=bool)
 
-        log_path = Path(log_snapshot_dir)
-        if log_snapshot_dir and os.path.isdir(log_path):
+        # log_path = Path(log_snapshot_dir)
+        log_path = PROJECT_PATH / "logs" / "elm" / "qdaif"
+        if os.path.isdir(log_path):
             stem_dir = log_path.stem
 
             assert (
@@ -252,21 +254,24 @@ class MAPElitesBase:
             with open(log_path / "config.json") as f:
                 old_config = json.load(f)
 
-            snapshot_path = log_path / "maps.npz"
+            snapshot_path = log_path / "maps.pkl"
             assert os.path.isfile(
                 snapshot_path
-            ), f'{log_path} does not contain map snapshot "maps.npz"'
+            ), f'{log_path} does not contain map snapshot "maps.pkl"'
             # first, load arrays and set them in Maps
-            npz_file = np.load(
-                snapshot_path, allow_pickle=True
-            )  # (history_len, num_bins_1, num_bins_2, ...)
+            # Load maps from pickle file
+            with open(snapshot_path, "rb") as f:
+                maps = pickle.load(f)
+            # maps_file = np.load(
+            #     snapshot_path, allow_pickle=True
+            # )  # (history_len, num_bins_1, num_bins_2, ...)
             assert (
-                self.genomes.array.shape == npz_file["genomes"].shape
-            ), f"expected shape of map doesn't match init config settings, got {self.genomes.array.shape} and {npz_file['genomes'].shape}"
+                self.genomes.array.shape == maps["genomes"].shape
+            ), f"expected shape of map doesn't match init config settings, got {self.genomes.array.shape} and {maps['genomes'].shape}"
 
-            self.genomes.array = npz_file["genomes"]
-            self.fitnesses.array = npz_file["fitnesses"]
-            self.nonzero.array = npz_file["nonzero"]
+            self.genomes.array = maps["genomes"]
+            self.fitnesses.array = maps["fitnesses"]
+            self.nonzero.array = maps["nonzero"]
             # check if one of the solutions in the snapshot contains the expected genotype type for the run
             assert not np.all(
                 self.nonzero.array is False
@@ -388,6 +393,8 @@ class MAPElitesBase:
             self.fitness_history["max"].append(self.max_fitness())
             self.fitness_history["min"].append(self.min_fitness())
             self.fitness_history["mean"].append(self.mean_fitness())
+            self.fitness_history["qd_score"].append(self.qd_score())
+            self.fitness_history["niches_filled"].append(self.niches_filled())
 
             if n_steps != 0 and n_steps % self.save_snapshot_interval == 0:
                 self.save_results(step=n_steps)
@@ -426,13 +433,14 @@ class MAPElitesBase:
         # create folder for dumping results and metadata
         output_folder = Path(self.config.output_dir) / f"step_{step}"
         os.makedirs(output_folder, exist_ok=True)
-
-        np.savez_compressed(
-            (output_folder / "maps.npz"),
-            fitnesses=self.fitnesses.array,
-            genomes=self.genomes.array,
-            nonzero=self.nonzero.array,
-        )
+        maps = {
+            "fitnesses": self.fitnesses.array,
+            "genomes": self.genomes.array,
+            "nonzero": self.nonzero.array,
+        }
+        # Save maps as pickle file
+        with open((output_folder / "maps.pkl"), "wb") as f:
+            pickle.dump(maps, f)
         if self.save_history:
             with open((output_folder / "history.pkl"), "wb") as f:
                 pickle.dump(self.history, f)
@@ -470,14 +478,15 @@ class MAPElitesBase:
 
         if len(self.map_dims) > 1:
             ix = tuple(np.zeros(max(1, len(self.fitnesses.dims) - 2), int))
-            map2d = self.fitnesses.latest[ix]
-            print(
-                "plotted genes:",
-                *[str(g) for g in self.genomes.latest[ix].flatten().tolist()],
-            )
+            map2d = self.fitnesses.latest
+            # print(
+            #     "plotted genes:",
+            #     *[str(g) for g in self.genomes.latest[ix].flatten().tolist()],
+            # )
 
             plt.figure()
             plt.pcolor(map2d, cmap="inferno")
+            plt.colorbar()
             plt.savefig(f"{save_path}/MAPElites_vis.png")
 
     def visualize_individuals(self):
