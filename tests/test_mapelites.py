@@ -196,3 +196,26 @@ def test_load_snapshot():
 
     assert result_1 == result_2, f"deterministic runs lead to different results from search ({result_1}), ({result_2})"
     assert (elites_1.fitnesses.array == elites_2.fitnesses.array).all(), "fitness map from resumed run not same as run from scratch"
+
+
+@pytest.mark.slow
+def test_load_snapshot_with_history():
+    test_dir = Path(__file__).parent / "test_data" / "test_snapshot"
+    # clean up test generated directory before running test
+    if test_dir.exists() and test_dir.is_dir():
+        shutil.rmtree(test_dir)
+
+    target_string = "GaV"
+
+    # run map-elites for 30 steps, while saving intermediate checkpoint
+    env: BaseEnvironment = MatchString(StringEnvConfig(target=target_string, batch_size=8))
+    elites_1 = MAPElites(env, MAPElitesConfig(map_grid_size=(3,), history_length=5, save_snapshot_interval=15, output_dir=test_dir, seed=42, save_np_rng_state=True))
+    result_1 = elites_1.search(init_steps=20, total_steps=30)
+
+    # resume map-elites run from snapshot at step 15, then search up to step 30 as before
+    snapshot_to_load = test_dir / "step_15"
+    elites_2 = MAPElites(env, MAPElitesConfig(map_grid_size=(3,), history_length=5, save_snapshot_interval=15, log_snapshot_dir=snapshot_to_load, output_dir=test_dir, load_np_rng_state=True))
+    result_2 = elites_2.search(init_steps=20, total_steps=30)
+
+    assert result_1 == result_2, f"deterministic runs lead to different results from search ({result_1}), ({result_2})"
+    assert (elites_1.fitnesses.array == elites_2.fitnesses.array).all(), "fitness map from resumed run not same as run from scratch"
