@@ -26,6 +26,7 @@ class ModelConfig(BaseConfig):
     logits_only: bool = False
     do_sample: bool = True
     num_return_sequences: int = 1
+    trust_remote_code: bool = True  # needed for mosaicml/mpt-7b-instruct
 
 
 @dataclass
@@ -131,7 +132,8 @@ class P3ProbSolEnvConfig(EnvConfig):
 @dataclass
 class PromptEnvConfig(EnvConfig):
     env_name: str = "prompt_evolution"
-    evals_per_prompt: int = 1  # TODO
+    task_name: str = "antonym"  # toy or antonym or animal or cot
+    evals_per_prompt: int = 10
 
 
 defaults_elm = [
