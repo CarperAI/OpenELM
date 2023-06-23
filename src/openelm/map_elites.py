@@ -318,7 +318,7 @@ class MAPElitesBase:
         ix = self.rng.choice(np.flatnonzero(self.nonzero.array))
         return np.unravel_index(ix, self.nonzero.dims)
 
-    def search(self, init_steps: int, total_steps: int, atol: float = 1.0) -> str:
+    def search(self, init_steps: int, total_steps: int, atol: float = 0.0) -> str:
         """
         Run the MAP-Elites search algorithm.
 
@@ -403,6 +403,8 @@ class MAPElitesBase:
             self.fitness_history["mean"].append(self.mean_fitness())
             self.fitness_history["qd_score"].append(self.qd_score())
             self.fitness_history["niches_filled"].append(self.niches_filled())
+            self.fitness_history["qd_score"].append(self.qd_score())
+            self.fitness_history["niches_filled"].append(self.niches_filled())
 
             if (
                 self.save_snapshot_interval is not None
@@ -482,19 +484,39 @@ class MAPElitesBase:
 
         save_path: str = self.config.output_dir
         plt.figure()
-        plt.plot(self.fitness_history["max"], label="max fitness")
-        plt.plot(self.fitness_history["mean"], label="mean fitness")
-        plt.plot(self.fitness_history["min"], label="min fitness")
+        plt.plot(self.fitness_history["max"], label="Max fitness")
+        plt.plot(self.fitness_history["mean"], label="Mean fitness")
+        plt.plot(self.fitness_history["min"], label="Min fitness")
         plt.legend()
         plt.savefig(f"{save_path}/MAPElites_fitness_history.png")
 
+        plt.figure()
+        plt.plot(self.fitness_history["qd_score"], label="QD score")
+        plt.legend()
+        plt.savefig(f"{save_path}/MAPElites_qd_score.png")
+
+        plt.figure()
+        plt.plot(self.fitness_history["niches_filled"], label="Niches filled")
+        plt.legend()
+        plt.savefig(f"{save_path}/MAPElites_niches_filled.png")
+
+        # self.visualize_individuals()
+
         if len(self.map_dims) > 1:
-            ix = tuple(np.zeros(max(1, len(self.fitnesses.dims) - 2), int))
-            map2d = self.fitnesses.latest
-            # print(
-            #     "plotted genes:",
-            #     *[str(g) for g in self.genomes.latest[ix].flatten().tolist()],
-            # )
+            if len(self.fitnesses.dims) == 2:
+                map2d = self.fitnesses.latest
+                print(
+                    "plotted genes:",
+                    *[str(g) for g in self.genomes.latest.flatten().tolist()],
+                )
+            else:
+                ix = tuple(np.zeros(max(1, len(self.fitnesses.dims) - 2), int))
+                map2d = self.fitnesses.latest[ix]
+
+                print(
+                    "plotted genes:",
+                    *[str(g) for g in self.genomes.latest[ix].flatten().tolist()],
+                )
 
             plt.figure()
             plt.pcolor(map2d, cmap="inferno")
