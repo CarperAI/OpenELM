@@ -10,8 +10,9 @@ from openelm.environments.environments import (
     PromptEvolution,
     P3ProbSol,
     Sodarace,
+    LMXGenerationEnvironment,
 )
-from openelm.map_elites import CVTMAPElites, MAPElites
+from openelm.map_elites import CVTMAPElites, MAPElites, LMXMapElites
 
 ENVS_DICT: dict[str, Any] = {
     "sodarace": Sodarace,
@@ -19,11 +20,13 @@ ENVS_DICT: dict[str, Any] = {
     "p3_probsol": P3ProbSol,
     "p3_problem": P3Problem,
     "prompt_evolution": PromptEvolution,
+    "lmx_generation": LMXGenerationEnvironment,
 }
 
 QD_DICT: dict[str, Any] = {
     "mapelites": MAPElites,
     "cvtmapelites": CVTMAPElites,
+    "lmx_mapelites": LMXMapElites,
 }
 
 __all__ = [

@@ -1,9 +1,25 @@
 import json
-from dataclasses import dataclass
-
+import traceback
+import math
 import numpy as np
 
 from openelm.constants import SRC_PATH
+from typing import List, Sequence
+from dataclasses import dataclass
+from aleph_alpha_client import Client, Prompt, EvaluationRequest
+
+
+# helper function to calculate the cosine similarity between two vectors
+def cosine_similarity(v1: Sequence[float], v2: Sequence[float]) -> float:
+    "compute cosine similarity of v1 to v2: (v1 dot v2)/{||v1||*||v2||)"
+    sumxx, sumxy, sumyy = 0, 0, 0
+    for i in range(len(v1)):
+        x = v1[i]
+        y = v2[i]
+        sumxx += x * x
+        sumyy += y * y
+        sumxy += x * y
+    return sumxy / math.sqrt(sumxx * sumyy)
 
 
 def get_image_target(name: str) -> np.ndarray:
@@ -194,3 +210,71 @@ def draw():
 """
 
     instruction_str = "Draws a yellow circle."
+
+
+def lognormalize(x):
+    a = np.logaddexp.reduce(x)
+    return np.exp(x - a)
+
+
+class AIFeedback:
+    def __init__(
+        self,
+        classifier_model: str,
+        label_options: List[str],
+        feedback_template: str,
+        aa_client: Client,
+    ):
+        """
+        Class which defines pipeline setup for general completion of instructions,
+        and evaluating classifications for AI feedback
+
+        Args:
+            classifier_model: checkpoint used to evaluate likelihoods of AI feedback attributes from LM predicting feedback label options
+            label_options: multiple choice answers for feedback classification
+            feedback_template: prompt template to feed to classifier model
+        """
+        self.classifier_model = classifier_model
+        self.feedback_template = feedback_template
+        self.label_options = label_options
+        self.aa_client = aa_client
+
+    def evaluate(self, generation_text):
+        eval_requests = []
+        client_responses = []
+        response_logprobs = []
+        probability_fields = {}
+        prompt = self.feedback_template.format(**generation_text)
+        try:
+            while True:
+                try:
+                    for eval_answer in self.label_options:
+                        request = EvaluationRequest(
+                            prompt=Prompt.from_text(prompt),
+                            completion_expected=eval_answer,
+                        )
+                        eval_requests.append(request)
+                    for eval_request in eval_requests:
+                        response = self.aa_client.evaluate(
+                            eval_request, model=self.classifier_model
+                        )
+                        client_responses.append(response)
+
+                    for client_response in client_responses:
+                        log_prob = client_response[2]["log_probability"]
+                        response_logprobs.append(log_prob)
+
+                    response_logprobs = np.array(response_logprobs)
+
+                    normalized_probs = lognormalize(response_logprobs)
+
+                    for i, score in enumerate(normalized_probs):
+                        probability_fields[self.label_options[i]] = score
+
+                    return probability_fields
+                except Exception:
+                    print("Error with AA API, retry")
+                    traceback.print_exc()
+        except KeyboardInterrupt:
+            print("killed")
+            raise

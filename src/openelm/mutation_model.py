@@ -2,6 +2,7 @@ import functools
 import os
 import re
 from abc import ABC, abstractmethod
+import traceback
 from collections import defaultdict
 from typing import Any, Optional
 
@@ -16,6 +17,7 @@ from transformers import BatchEncoding
 from openelm.codegen import model_setup, set_seed, truncate
 from openelm.configs import ModelConfig
 from openelm.utils.diff_eval import apply_diff, split_diff
+from aleph_alpha_client import Client, CompletionRequest, Prompt
 
 
 def get_model(config: ModelConfig):
@@ -57,7 +59,11 @@ class PromptModel(MutationModel):
         self.model: LLM = get_model(self.config)
 
     def generate_programs(
-        self, prompt_dicts: list[dict[str, str]], local_scope_truncate: bool, do_trunc=True, **kwargs
+        self,
+        prompt_dicts: list[dict[str, str]],
+        local_scope_truncate: bool,
+        do_trunc=True,
+        **kwargs,
     ) -> list[str]:
         """
         Generate new programs from a batch of programs.
@@ -89,7 +95,8 @@ class PromptModel(MutationModel):
             ]
         else:
             truncations: list[str] = [
-                templates[i] + '\n    ' + completions[i] for i in range(len(completions))
+                templates[i] + "\n    " + completions[i]
+                for i in range(len(completions))
             ]
 
         return truncations
@@ -227,3 +234,47 @@ class HuggingFaceLLM(LLM):
                 generations_dict[prompt].append(generation)
 
         return LLMResult(generations=list(generations_dict.values()))
+
+
+class AlephAlphaLLM(MutationModel):
+    """support to use Aleph Alpha API as Mutation model."""
+
+    def __init__(self, config: ModelConfig) -> None:
+        self.config: ModelConfig = config
+        try:
+            with open(self.config.api_token_file, "r") as file:
+                api_token = file.read().strip()
+        except FileNotFoundError:
+            print(f"Could not find file {self.config.api_token_file}")
+        self.client = Client(token=api_token)
+        self.model_used = self.config.model_used
+
+    def generate_programs(self, prompt: str, **kwargs) -> str:
+        """
+        Generate completion from a prompt.
+
+        Args:
+            prompt (str)
+
+        Returns:
+            Completion string.
+        """
+        try:
+            while True:
+                try:
+                    request = CompletionRequest(
+                        prompt=Prompt.from_text(prompt),
+                        maximum_tokens=self.config.gen_max_len,
+                        temperature=self.config.temp,
+                        stop_sequences=self.config.stop_sequences,
+                        frequency_penalty=self.config.frequency_penalty,
+                        repetition_penalties_include_prompt=True,
+                    )
+                    response = self.client.complete(request, model=self.model_used)
+                    return response.completions[0].completion
+                except Exception:
+                    print("Error with AA API, retry")
+                    traceback.print_exc()
+        except KeyboardInterrupt:
+            print("killed")
+            raise

@@ -2,8 +2,10 @@ import json
 import os
 import pickle
 from collections import defaultdict
+from typing import Optional, Union
+import os
 from pathlib import Path
-from typing import Optional
+import json
 
 import numpy as np
 from sklearn.cluster import KMeans
@@ -11,6 +13,7 @@ from tqdm import trange
 
 from openelm.configs import CVTMAPElitesConfig, MAPElitesConfig, QDConfig
 from openelm.environments import BaseEnvironment, Genotype
+from openelm.utils.utils import safe_open_w
 
 Phenotype = Optional[np.ndarray]
 MapIndex = Optional[tuple]
@@ -76,6 +79,23 @@ class Map:
             top_val = (top_val + 1) % self.history_length
             self.top[map_ix] = top_val
             self.array[(self.top[map_ix], *map_ix)] = value
+
+    def assign_fitness_in_depth(self, map_ix, value: float) -> int:
+        indices_at_bin = (slice(None),) + map_ix
+        # expecting a non-empty index, only calling this method when we know current fitness can be placed somewhere
+        insert_idx = np.where(self.array[indices_at_bin] < value)[0][-1]
+        new_bin_fitnesses = np.concatenate(
+            (
+                self.array[indices_at_bin][1 : insert_idx + 1],
+                np.array([value]),
+                self.array[indices_at_bin][insert_idx + 1 :],
+            )
+        )
+        self.array[indices_at_bin] = new_bin_fitnesses
+        return insert_idx
+
+    def insert_individual_at_depth(self, map_ix, depth, individual):
+        self.array[(depth,) + map_ix] = individual
 
     @property
     def latest(self) -> np.ndarray:
@@ -279,8 +299,12 @@ class MAPElitesBase:
             # compute top indices
             if hasattr(self.fitnesses, "top"):
                 top_array = np.array(self.fitnesses.top)
-                for cell_idx in np.ndindex(self.fitnesses.array.shape[1:]): # all indices of cells in map
-                    nonzero = np.nonzero(self.fitnesses.array[(slice(None),) + cell_idx] != -np.inf) # check full history depth at cell
+                for cell_idx in np.ndindex(
+                    self.fitnesses.array.shape[1:]
+                ):  # all indices of cells in map
+                    nonzero = np.nonzero(
+                        self.fitnesses.array[(slice(None),) + cell_idx] != -np.inf
+                    )  # check full history depth at cell
                     if len(nonzero[0]) > 0:
                         top_array[cell_idx] = nonzero[0][-1]
                 # correct stats
@@ -332,7 +356,7 @@ class MAPElitesBase:
         if self.niches_filled() == 0:
             max_fitness = -np.inf
             max_genome = None
-        else: # take max fitness in case of filled loaded snapshot
+        else:  # take max fitness in case of filled loaded snapshot
             max_fitness = self.max_fitness()
             max_index = np.where(self.fitnesses.latest == max_fitness)
             max_genome = self.genomes[max_index]
@@ -354,54 +378,74 @@ class MAPElitesBase:
                 # Mutate the elite.
                 new_individuals = self.env.mutate(batch)
 
-            # `new_individuals` is a list of generation/mutation. We put them
-            # into the behavior space one-by-one.
-            # TODO: account for the case where multiple new individuals are
-            # placed in the same niche, for saving histories.
-            for individual in new_individuals:
-                fitness = self.env.fitness(individual)
-                if np.isinf(fitness):
-                    continue
-                map_ix = self.to_mapindex(individual.to_phenotype())
-                # if the return is None, the individual is invalid and is thrown
-                # into the recycle bin.
-                if map_ix is None:
-                    self.recycled[self.recycled_count % len(self.recycled)] = individual
-                    self.recycled_count += 1
-                    continue
-
-                if self.save_history:
-                    # TODO: thresholding
-                    self.history[map_ix].append(individual)
-                self.nonzero[map_ix] = True
-
-                # If new fitness greater than old fitness in niche, replace.
-                if fitness > self.fitnesses[map_ix]:
-                    self.fitnesses[map_ix] = fitness
-                    self.genomes[map_ix] = individual
-                # If new fitness is the highest so far, update the tracker.
-                if fitness > max_fitness:
-                    max_fitness = fitness
-                    max_genome = individual
-
-                    tbar.set_description(f"{max_fitness=:.4f}")
-                # Stop if best fitness is within atol of maximum possible fitness.
-                if np.isclose(max_fitness, self.env.max_fitness, atol=atol):
-                    break
+            max_genome, max_fitness = self.update_map(
+                new_individuals, max_genome, max_fitness
+            )
+            tbar.set_description(f"{max_fitness=:.4f}")
 
             self.fitness_history["max"].append(self.max_fitness())
             self.fitness_history["min"].append(self.min_fitness())
             self.fitness_history["mean"].append(self.mean_fitness())
             self.fitness_history["qd_score"].append(self.qd_score())
-            self.fitness_history["niches_filled"].append(self.niches_filled())
 
-            if self.save_snapshot_interval is not None and n_steps != 0 and n_steps % self.save_snapshot_interval == 0:
+            if (
+                self.save_snapshot_interval is not None
+                and n_steps != 0
+                and n_steps % self.save_snapshot_interval == 0
+            ):
                 self.save_results(step=n_steps)
 
         self.current_max_genome = max_genome
         self.save_results(step=n_steps)
         self.visualize()
         return str(max_genome)
+
+    def update_map(self, new_individuals, max_genome, max_fitness):
+        """
+        Update the map if new individuals achieve better fitness scores.
+
+        Args:
+            new_individuals (list[Genotype]) : List of new solutions
+            max_fitness : current maximum fitness
+
+        Returns:
+            max_genome : updated maximum genome
+            max_fitness : updated maximum fitness
+
+        """
+        # `new_individuals` is a list of generation/mutation. We put them
+        # into the behavior space one-by-one.
+        for individual in new_individuals:
+            fitness = self.env.fitness(individual)
+            if np.isinf(fitness):
+                continue
+            phenotype = individual.to_phenotype()
+            map_ix = self.to_mapindex(phenotype)
+
+            # if the return is None, the individual is invalid and is thrown
+            # into the recycle bin.
+            if map_ix is None:
+                self.recycled[self.recycled_count % len(self.recycled)] = individual
+                self.recycled_count += 1
+                continue
+
+            if self.save_history:
+                # TODO: thresholding
+                self.history[map_ix].append(individual)
+
+            self.nonzero[map_ix] = True
+
+            # If new fitness greater than old fitness in niche, replace.
+            if fitness > self.fitnesses[map_ix]:
+                self.fitnesses[map_ix] = fitness
+                self.genomes[map_ix] = individual
+
+            # update if new fitness is the highest so far.
+            if fitness > max_fitness:
+                max_fitness = fitness
+                max_genome = individual
+
+        return max_genome, max_fitness
 
     def niches_filled(self):
         """Get the number of niches that have been explored in the map."""
@@ -467,24 +511,26 @@ class MAPElitesBase:
         import matplotlib.pyplot as plt
 
         save_path: str = self.config.output_dir
+        os.makedirs(save_path, exist_ok=True)
         plt.figure()
         plt.plot(self.fitness_history["max"], label="Max fitness")
         plt.plot(self.fitness_history["mean"], label="Mean fitness")
         plt.plot(self.fitness_history["min"], label="Min fitness")
         plt.legend()
         plt.savefig(f"{save_path}/MAPElites_fitness_history.png")
+        plt.close("all")
 
         plt.figure()
         plt.plot(self.fitness_history["qd_score"], label="QD score")
         plt.legend()
         plt.savefig(f"{save_path}/MAPElites_qd_score.png")
+        plt.close("all")
 
         plt.figure()
         plt.plot(self.fitness_history["niches_filled"], label="Niches filled")
         plt.legend()
         plt.savefig(f"{save_path}/MAPElites_niches_filled.png")
-
-        # self.visualize_individuals()
+        plt.close("all")
 
         if len(self.map_dims) > 1:
             if len(self.fitnesses.dims) == 2:
@@ -505,6 +551,7 @@ class MAPElitesBase:
             plt.figure()
             plt.pcolor(map2d, cmap="inferno")
             plt.savefig(f"{save_path}/MAPElites_vis.png")
+        plt.close("all")
 
     def visualize_individuals(self):
         """Visualize the genes of the best performing solution."""
@@ -802,3 +849,258 @@ class CVTMAPElites(MAPElitesBase):
             return
         save_path: str = self.config.output_dir
         plt.savefig(f"{save_path}/MAPElites_behaviour_history.png")
+
+
+class LMXMapElites(MAPElites):
+    """
+    Class implementing Map-Elites for Language model Crossover.
+    """
+
+    def __init__(self, env, config: MAPElitesConfig, *args, **kwargs):
+        super().__init__(env, config, *args, **kwargs)
+
+        assert (
+            self.env.config.env_name == "lmx_generation"
+        ), "use lmx_generation environment with the LMX Map elites"
+
+        # custom options for utilities - make easier to run gen, lmx_near, extended logging
+        self.pass_latest_genomes_to_env = self.config.pass_latest_genomes_to_env
+        self.append_bin_idx_to_batch = self.config.append_bin_idx_to_batch
+        self.write_all_individuals_to_jsonl = self.config.write_all_individuals_to_jsonl
+        if self.write_all_individuals_to_jsonl:
+            self.individual_entries_list = []
+
+        self.__init_prompt_pool()
+
+    def __init_prompt_pool(self):
+        # load prompt pool from a checkpoint or intermediate state of search
+
+        log_path = Path(self.config.log_snapshot_dir)
+        if (
+            self.config.add_prompt_pool
+            and self.config.log_snapshot_dir
+            and os.path.isdir(log_path)
+        ):
+            try:
+                with open((log_path / "prompt_pool.pkl"), "rb") as f:
+                    self.env.prompt_pool = pickle.load(f)
+            except FileExistsError:
+                print(
+                    f'file {log_path / "prompt_pool.pkl"} for loading the prompt pool was not found.'
+                )
+
+    def search(self, init_steps: int, total_steps: int, atol: float = 1.0) -> str:
+        """
+        Run the MAP-Elites search algorithm with LMX.
+
+        Args:
+            initsteps (int): Number of initial random solutions to generate.
+            totalsteps (int): Total number of steps to run the algorithm for,
+                including initial steps.
+            atol (float, optional): Tolerance for how close the best performing
+                solution has to be to the maximum possible fitness before the
+                search stops early. Defaults to 1.
+
+        Returns:
+            str: A string representation of the best perfoming solution. The
+                best performing solution object can be accessed via the
+                `current_max_genome` class attribute.
+        """
+        start_step = int(self.start_step)
+        total_steps = int(total_steps)
+        tbar = trange(start_step, total_steps, initial=start_step, total=total_steps)
+        if self.niches_filled() == 0:
+            max_fitness = -np.inf
+            max_genome = None
+        else:  # take max fitness in case of filled loaded snapshot
+            max_fitness = self.max_fitness()
+            max_index = np.where(self.fitnesses.latest == max_fitness)
+            max_genome = self.genomes[max_index]
+        if self.save_history:
+            self.history = defaultdict(list)
+
+        for n_steps in tbar:
+            need_more_elites_for_lmx_near = (
+                len(np.where(self.nonzero.array == True)[0]) < self.env.num_fewshot
+            )
+            if (
+                n_steps < init_steps
+                or self.genomes.empty
+                or need_more_elites_for_lmx_near
+            ):
+                # Initialise by generating initsteps random solutions.
+                # If map is still empty: force to do generation instead of mutation.
+                new_individuals: list[Genotype] = self.env.random()
+            else:
+                # Randomly select a batch of elites from the map.
+                batch: Union[list[Genotype], list[Genotype, int]] = []
+                for _ in range(self.env.batch_size):
+                    map_ix = self.random_selection()
+                    batch.append((self.genomes[map_ix], map_ix))
+
+                # Mutate the elite.
+                new_individuals = self.env.mutate(batch)
+
+            max_genome, max_fitness = self.update_map(
+                new_individuals, max_genome, max_fitness
+            )
+            tbar.set_description(f"{max_fitness=:.4f}")
+
+            self.fitness_history["max"].append(self.max_fitness())
+            self.fitness_history["min"].append(self.min_fitness())
+            self.fitness_history["mean"].append(self.mean_fitness())
+            self.fitness_history["qd_score"].append(self.qd_score())
+
+            if (
+                self.save_snapshot_interval is not None
+                and n_steps != 0
+                and n_steps % self.save_snapshot_interval == 0
+            ):
+                self.save_results(step=n_steps)
+
+        self.current_max_genome = max_genome
+        if self.write_all_individuals_to_jsonl:
+            with open(
+                Path(self.config.output_dir) / "history.jsonl", "a+", encoding="UTF-8"
+            ) as f:
+                for i in range(len(self.individual_entries_list)):
+                    f.write(json.dumps(self.individual_entries_list[i]))
+                    f.write("\n")
+        self.save_results(step=n_steps)
+        self.visualize()
+        return str(max_genome)
+
+    def update_map(self, new_individuals, max_genome, max_fitness):
+        """
+        Update the map if new individuals achieve better fitness scores.
+
+        Args:
+            new_individuals (list[Genotype]) : List of new solutions
+            max_fitness : current maximum fitness
+
+        Returns:
+            max_genome : updated maximum genome
+            max_fitness : updated maximum fitness
+
+        """
+
+        # `new_individuals` is a list of generation/mutation. We put them
+        # into the behavior space one-by-one.
+        for individual in new_individuals:
+            fitness = self.env.fitness(individual)
+            if np.isinf(fitness):
+                continue
+            phenotype = individual.to_phenotype()
+            map_ix = self.to_mapindex(phenotype)
+
+            # count number of current generations for logging
+            num_gens = self.env.num_generations
+
+            # if the return is None, the individual is invalid and is thrown
+            # into the recycle bin.
+            if map_ix is None:
+                self.recycled[self.recycled_count % len(self.recycled)] = individual
+                self.recycled_count += 1
+                if self.write_all_individuals_to_jsonl:
+                    num_gens = self.env.num_generations
+                    individual_dict = {
+                        "genotype": None,
+                        "phenotype": None,
+                        "fitness": None,
+                        "num_gens_current": num_gens,
+                    }
+                    self.individual_entries_list.append(individual_dict)
+                continue
+
+            if self.save_history:
+                # TODO: thresholding
+                self.history[map_ix].append(individual)
+
+            self.nonzero[map_ix] = True
+
+            # If new fitness greater than old fitness in niche, replace.
+            if fitness > self.fitnesses[map_ix]:
+                if self.config.add_prompt_pool and self.config.filter_prompt_pool:
+                    # add to prompt pool for lmx env, filtered
+                    self.env.prompt_pool.append(individual.generated_completion)
+                if self.pass_latest_genomes_to_env:
+                    self.env.latest_genomes = self.genomes.latest
+                # use old assignment of solution to bin
+                if not self.config.use_alt_depth_method or self.history_length == 1:
+                    self.fitnesses[map_ix] = fitness
+                    self.genomes[map_ix] = individual
+            # if the new fitness is greater than lowest fitness solution currently in bin with history depth
+            if (
+                self.config.use_alt_depth_method
+                and self.history_length > 1
+                and fitness > self.fitnesses.array[(0,) + map_ix]
+            ):
+                placed_depth = self.fitnesses.assign_fitness_in_depth(map_ix, fitness)
+                self.genomes.insert_individual_at_depth(
+                    map_ix, placed_depth, individual
+                )
+
+            # add to prompt pool for lmx env, unfiltered
+            if self.config.add_prompt_pool and not self.config.filter_prompt_pool:
+                self.env.prompt_pool.append(individual.generated_completion)
+
+            if self.write_all_individuals_to_jsonl:
+                if phenotype.shape[0] == 1:
+                    individual_dict = {
+                        "genotype": str(individual),
+                        "phenotype": phenotype[0],
+                        "fitness": fitness,
+                        "num_gens_current": num_gens,
+                    }
+                else:
+                    individual_dict = {
+                        "genotype": str(individual),
+                        "phenotype": list(phenotype),
+                        "fitness": fitness,
+                        "num_gens_current": num_gens,
+                    }
+                self.individual_entries_list.append(individual_dict)
+
+            # If new fitness is the highest so far, update the tracker.
+            if fitness > max_fitness:
+                max_fitness = fitness
+                max_genome = individual
+
+            return max_genome, max_fitness
+
+    def save_results(self, step: int):
+        # create folder for dumping results and metadata
+        output_folder = Path(self.config.output_dir) / f"step_{step}"
+        os.makedirs(output_folder, exist_ok=True)
+
+        np.savez_compressed(
+            (output_folder / "maps.npz"),
+            fitnesses=self.fitnesses.array,
+            genomes=self.genomes.array,
+            nonzero=self.nonzero.array,
+        )
+        if self.save_history:
+            with open((output_folder / "history.pkl"), "wb") as f:
+                pickle.dump(self.history, f)
+
+        with safe_open_w((output_folder / "fitness_history.pkl"), "wb") as f:
+            pickle.dump(self.fitness_history, f)
+
+        # save numpy rng state to load if resuming from deterministic snapshot
+        if self.save_np_rng_state:
+            rng_generators = {
+                "env_rng": self.env.get_rng_state(),
+                "qd_rng": self.rng,
+            }
+            with open((output_folder / "np_rng_state.pkl"), "wb") as f:
+                pickle.dump(rng_generators, f)
+        # save env_name to check later, for verifying correctness of environment to run with snapshot load
+        tmp_config = dict()
+        tmp_config["env_name"] = self.env.config.env_name
+
+        with open((output_folder / "config.json"), "w") as f:
+            json.dump(tmp_config, f)
+        if self.config.add_prompt_pool:
+            with safe_open_w((output_folder / "prompt_pool.pkl"), "wb") as f:
+                pickle.dump(self.env.prompt_pool, f)
+        f.close()

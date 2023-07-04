@@ -12,4 +12,7 @@ scikit-learn
 matplotlib
 langchain
 openai
+pandas
 plotly
+aleph_alpha_client
+pygame
