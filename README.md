@@ -1,4 +1,113 @@
 [![DOI](https://zenodo.org/badge/532259603.svg)](https://zenodo.org/badge/latestdoi/532259603)
+
+# LMX generation pseudocode
+
+LMX specific config values:
+```
+MODEL_USED: model for generation
+CLASSIFIER_MODEL: model for AI Feedback
+MUTATION_METHOD: use lmx_near or replace to mutate prompts
+SOLUTION_INIT_METHOD: method to create an initial population for the map, supports: generated or seed 
+```
+
+Necessary config arguments for the generation domain (default values are set to reproduce the short story experiments):
+Below we will provide example config arguments for our three experiment domains: short story, movie review and opinion piece
+```
+    "fitness_query": string that is compared to the generation to compute the fitness
+    "prompt_template": string used in the prompt to create a repeating few-shot pattern
+    "prompt_pool_path": Path to a file with example prompts for the choosen domain 
+    "gen_max_len": max token limit for output from API
+```
+
+Pseudocode:
+
+```python
+# given
+generator = LLM
+generator_prompt = "Here is a random example of a review for the movie \"Die Hard\":"
+few_shot_prompt = f"{generator_prompt} {gen_movie_review}\n###\n" # repeated 3 times
+
+# init map with first solutions -> generated from scratch
+pool_movie_reviews = generate_movie_review_with_zero_shot(generator_prompt)
+first_individuals = randomly_sample_few_shot_from_pool_and_generate_with_few_shot(pool_movie_reviews) # store items of few-shot prompt, along with gen_movie_review (genotype), and sentiment measure (phenotype)
+evaluate_measure_and_fitness(first_individuals)
+
+# evolve solutions from archive (replace operator)
+individual = random_elite_from_map()
+few_shot_items_list = individual.genotype # mutate this
+few_shot_idx_to_replace = random_idx(few_shot_items_list)
+few_shot_items_list[few_shot_idx_to_replace] = random_item(pool_movie_reviews)
+new_individual = generate_with_few_shot(few_shot_items_list)
+evaluate_measure_and_fitness(new_individual.gen_movie_review)
+
+# more optimal pool
+if added_to_archive_successfully(new_individual):
+    pool_movie_reviews.append(new_individual.gen_movie_review)
+```
+
+Example config arguments for reproducing LMX experiments:
+Short Story:
+```python
+"fitness_query": "A fantasy story about a suspicious spy and a rich politician"
+"prompt_template": 'Here is a random example of a fantasy story about a suspicious spy and a rich politician:'
+"prompt_pool_path": "src/openelm/environments/lmx_seed_pools/short_story_seed_pool.txt"
+"gen_max_len": 100
+"instruction_prompt" : "You are given an input text containing a short story. Determine if the story uses language that is easy to read for toddlers. Write \"easy\" if the text is easy to read for toddlers, otherwise answer \"hard\" if it is hard to read for toddlers."
+```
+
+Movie Review: 
+```python
+"fitness_query": "Movie review for the film \"Die Hard\""
+"prompt_template": 'Here is a random example of a review for the movie "Die Hard":'
+"prompt_pool_path": "src/openelm/environments/lmx_seed_pools/movie_seed_pool.txt"
+"gen_max_len": 50
+"instruction_prompt" : "Determine the sentiment of the text by writing 'positive' or 'negative' in in the output."
+```
+
+Opinion Piece:
+```python
+"fitness_query": "An opinion piece about eating vegetables and plant-based foods"
+"prompt_template": 'Here is a random opinion piece about eating vegetables and plant-based foods:'
+"prompt_pool_path": "src/openelm/environments/lmx_seed_pools/opinion_piece_seed_pool.txt"
+"gen_max_len": 50
+"instruction_prompt" : "Determine the sentiment of the given opinion on eating vegetables and plant-based foods (from the input text) by writing 'positive' or 'negative' in in the output."
+```
+
+AI feedback for a single dimension is shown as an example in `__post_init__` of `LMXGenerationEnvConfig`:
+```python
+self.ai_feedback_entries = { # entries to setup ai feedback.
+    "sentiment": {
+        "answer_space": [
+            f"{extra_prefix}positive",
+            f"{extra_prefix}negative",
+        ],
+        "feedback_prompt_template": f"### Instruction:\n{self.instruction_prompt}{extra_suffix}\n\n### Input:{{genotype}}\n\n### Response:"
+    },
+}
+```
+
+If we want to extend the evaluation to multiple AI feedback measures, we can set it like this (either adding extra config options for instruction_prompt, or writing their own prompts directly):
+```python
+self.ai_feedback_entries = { # entries to setup ai feedback.
+    "feedback_1": {
+        "answer_space": [
+            f"{extra_prefix}answer_1",
+            f"{extra_prefix}answer_2",
+        ],
+        "feedback_prompt_template": f"### Instruction:\n{self.instruction_prompt_1}{extra_suffix}\n\n### Input:{{genotype}}\n\n### Response:"
+    },
+    "feedback_2": {
+        "answer_space": [
+            f"{extra_prefix}answer_3",
+            f"{extra_prefix}answer_4",
+        ],
+        "feedback_prompt_template": f"### Instruction:\n{self.instruction_prompt_2}{extra_suffix}\n\n### Input:{{genotype}}\n\n### Response:"
+    },
+}
+```
+
+For access to the AI feedback model used in the experiments `luminous-supreme-qdaif`, please send an email, with [QDAIF] in the subject line, to [support@aleph-alpha.com](mailto:support@aleph-alpha.com)
+
 # OpenELM
 
 This repository is a replication of [Evolution Through Large Models](https://arxiv.org/abs/2206.08896), a recent paper from OpenAI exploring the links between large language models (LLMs) and evolutionary computing, particularly focused on code generation.

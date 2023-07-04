@@ -5,13 +5,18 @@ import sys
 import warnings
 from abc import ABC, abstractmethod
 from copy import deepcopy
-from typing import Generic, Optional, Type, TypeVar, Union
+from typing import Generic, Optional, Type, TypeVar, Union, Any
+
+import random
 import warnings
 import re
 
 import numpy as np
+
 import requests
 import torch
+from transformers import pipeline
+
 from langchain import PromptTemplate
 from langchain.chains import LLMChain
 from transformers import pipeline
@@ -27,6 +32,7 @@ from openelm.configs import (
     PromptEnvConfig,
     SodaraceEnvConfig,
     StringEnvConfig,
+    LMXGenerationEnvConfig,
 )
 from openelm.environments.env_utils import (
     NULL_SEED,
@@ -35,6 +41,8 @@ from openelm.environments.env_utils import (
     COTPromptTask,
     ToyPromptTask,
     get_image_target,
+    AIFeedback,
+    cosine_similarity,
 )
 from openelm.environments.sodaracer import (
     CIRCLE,
@@ -57,6 +65,15 @@ from openelm.environments.p3 import (
 from openelm.mutation_model import MutationModel
 from openelm.utils.code_eval import pool_exec_processes, type_check, pass_at_k
 from openelm.sandbox.server.sandbox_codex_execute import ExecResult
+
+from aleph_alpha_client import (
+    Client,
+    CompletionRequest,
+    Prompt,
+    EvaluationRequest,
+    SemanticEmbeddingRequest,
+    SemanticRepresentation,
+)
 
 sys.set_int_max_str_digits(0)  # remove length limitation for int->str conversion
 # (model sometimes outputs really long ints)
@@ -1097,25 +1114,31 @@ class P3Solution(Genotype):
 def g1():
     """Find a string that when concatenated onto 'Hello ' gives 'Hello world'."""
     return "world")'''
-        self.baseline_emb = np.array(get_embedding(baseline, engine=self.config.embedding_model_path))
+        self.baseline_emb = np.array(
+            get_embedding(baseline, engine=self.config.embedding_model_path)
+        )
 
-        if self.config.embedding_model_type == 'hf':
-            self.pl = pipeline('feature-extraction', model=self.config.embedding_model_path)
+        if self.config.embedding_model_type == "hf":
+            self.pl = pipeline(
+                "feature-extraction", model=self.config.embedding_model_path
+            )
             seed_features = np.array(self.pl(baseline))
             self.scaler = StandardScaler()
             seed_features_scaled = self.scaler.fit_transform(np.squeeze(seed_features))
-            self.pca = PCA(.95)
+            self.pca = PCA(0.95)
             self.pca.fit(seed_features_scaled)
 
     def to_phenotype(self) -> Optional[Phenotype]:
-        if self.config.embedding_model_type == 'openai':
+        if self.config.embedding_model_type == "openai":
             compare_str = self.program_str
-            i_assert = compare_str.find('assert')
+            i_assert = compare_str.find("assert")
             if i_assert > -1:
                 compare_str = compare_str[:i_assert]
-            emb = np.array(get_embedding(compare_str, engine=self.config.embedding_model_path))
+            emb = np.array(
+                get_embedding(compare_str, engine=self.config.embedding_model_path)
+            )
             return cosine_similarity(emb, self.baseline_emb)
-        elif self.config.embedding_model_type == 'hf':
+        elif self.config.embedding_model_type == "hf":
             features = np.array(self.pl(self.program_str))
             features_scaled = self.scaler.transform(np.squeeze(features))
             pca_features = self.pca.transform(features_scaled)
@@ -1126,20 +1149,22 @@ def g1():
 
     def __getstate__(self):
         state = self.__dict__.copy()
-        if 'pl' in state: del state['pl']
-        if 'scaler' in state: del state['scaler']
-        if 'pca' in state: del state['pca']
+        if "pl" in state:
+            del state["pl"]
+        if "scaler" in state:
+            del state["scaler"]
+        if "pca" in state:
+            del state["pca"]
         return state
 
 
 class P3Problem(BaseEnvironment[P3Solution]):
-
     def __init__(
         self,
         config: P3ProblemEnvConfig,
         mutation_model: MutationModel,
         problem_str: str = None,
-        solution_preamble: str = None
+        solution_preamble: str = None,
     ) -> None:
         """
         The objective is to generate solutions to a given programming puzzle problem.
@@ -1156,45 +1181,59 @@ class P3Problem(BaseEnvironment[P3Solution]):
         self.seed_index = self.config.starting_seed
         self.rng = None
 
-        if self.config.prompt_size == 'long':
+        if self.config.prompt_size == "long":
             self.prompt_seed = P3_PROBLEM_LONG_SEED
-        elif self.config.prompt_size == 'med':
+        elif self.config.prompt_size == "med":
             self.prompt_seed = P3_PROBLEM_MED_SEED
         else:
-            raise ValueError('No seed string found')
+            raise ValueError("No seed string found")
 
         # Get info for the puzzle that will be solved
         if problem_str is None:
             # This puzzle is at the index of the puzzles array specified by self.seed_index
-            puzzles = requests.get("https://raw.githubusercontent.com/microsoft/PythonProgrammingPuzzles/v0.2/puzzles/puzzles.json").json()
+            puzzles = requests.get(
+                "https://raw.githubusercontent.com/microsoft/PythonProgrammingPuzzles/v0.2/puzzles/puzzles.json"
+            ).json()
             puzzle = puzzles[self.seed_index]
 
-            self.problem_func = puzzle['sat'].replace('def sat(', 'def f6(') # prompt form is f6()
-            self.solution_preamble = puzzle['sol_header'].replace('def sol(', 'def g6(') # solution form is g6()
-            if self.config.prompt_size == 'long':
-                self.solution_preamble += '\n' + puzzle['sol_docstring'] # add in the docstring
-            self.ans_type = puzzle['ans_type']
+            self.problem_func = puzzle["sat"].replace(
+                "def sat(", "def f6("
+            )  # prompt form is f6()
+            self.solution_preamble = puzzle["sol_header"].replace(
+                "def sol(", "def g6("
+            )  # solution form is g6()
+            if self.config.prompt_size == "long":
+                self.solution_preamble += (
+                    "\n" + puzzle["sol_docstring"]
+                )  # add in the docstring
+            self.ans_type = puzzle["ans_type"]
         else:
             self.problem_func = problem_str
             self.solution_preamble = solution_preamble
             # TODO: generate a docstring?
             self.ans_type = None
-        
+
         # Use the first example in the prompt seed as basis for embedding sizes
-        i_first = self.prompt_seed.find('assert')
+        i_first = self.prompt_seed.find("assert")
         first_example = self.prompt_seed[:i_first].strip()
 
-        if self.config.embedding_model_type == 'openai':
-            self.genotype_ndim: int = 1 
+        if self.config.embedding_model_type == "openai":
+            self.genotype_ndim: int = 1
             self.genotype_space = np.repeat([[0, 1]], self.genotype_ndim, axis=0).T
-        elif self.config.embedding_model_type == 'hf':
+        elif self.config.embedding_model_type == "hf":
             # Dummy to get behavior space shape
-            dummy_pl = pipeline('feature-extraction', model=self.config.embedding_model_path)
+            dummy_pl = pipeline(
+                "feature-extraction", model=self.config.embedding_model_path
+            )
             dummy_scaler = StandardScaler()
             dummy_features = np.array(dummy_pl(first_example))
-            dummy_features_scaled = dummy_scaler.fit_transform(np.squeeze(dummy_features))
-            dummy_pca = PCA(.95)
-            dummy_pca_features = dummy_pca.fit_transform(np.squeeze(dummy_features_scaled))
+            dummy_features_scaled = dummy_scaler.fit_transform(
+                np.squeeze(dummy_features)
+            )
+            dummy_pca = PCA(0.95)
+            dummy_pca_features = dummy_pca.fit_transform(
+                np.squeeze(dummy_features_scaled)
+            )
             self.genotype_ndim: int = dummy_pca_features.shape[-1]
             self.genotype_space = np.repeat([[-20, 20]], self.genotype_ndim, axis=0).T
 
@@ -1205,19 +1244,18 @@ class P3Problem(BaseEnvironment[P3Solution]):
     def set_rng_state(self, rng_state: Optional[np.random._generator.Generator]):
         warnings.warn("WARNING: rng state not used in this environment")
         pass
-    
-    def construct_prompt(self, code_batch: Optional[Union[list[str], str]] = None) -> dict[str, str]:
+
+    def construct_prompt(
+        self, code_batch: Optional[Union[list[str], str]] = None
+    ) -> dict[str, str]:
         prompt_str = self.prompt_seed
 
-        prompt_str += (
-            f'\n\n{self.problem_func}' # add this particular problem, f6(), to the prompt
-        )
+        prompt_str += f"\n\n{self.problem_func}"  # add this particular problem, f6(), to the prompt
         if code_batch is None:
             prompt_str += "\n"
         else:
             prompt_str += (
-                f'\n\n# Old version of g6()' 
-                f'\n# TODO: fix bugs in the code below\n' 
+                f"\n\n# Old version of g6()" f"\n# TODO: fix bugs in the code below\n"
             )
             if isinstance(code_batch, list):
                 # TODO: get nearby genotypes
@@ -1225,14 +1263,12 @@ class P3Problem(BaseEnvironment[P3Solution]):
             elif isinstance(code_batch, str):
                 prompt_str += code_batch
 
-            prompt_str += f'\n\n# Fixed version of g6()' 
-            
-        prompt_str += (
-            f'\n{self.solution_preamble}'
-        )
+            prompt_str += f"\n\n# Fixed version of g6()"
 
-        template = f'{P3_IMPORTS}\n{self.solution_preamble}'
-        return {'prompt': prompt_str, 'template': template}
+        prompt_str += f"\n{self.solution_preamble}"
+
+        template = f"{P3_IMPORTS}\n{self.solution_preamble}"
+        return {"prompt": prompt_str, "template": template}
 
     def generate_programs(self, code_batch: list[str]) -> list[P3Solution]:
         """Generate new programs with a mutation model and evaluate them."""
@@ -1242,7 +1278,7 @@ class P3Problem(BaseEnvironment[P3Solution]):
         )
 
         for i, gp in enumerate(generated_programs):
-            i_assert = gp.find('assert')
+            i_assert = gp.find("assert")
             generated_programs[i] = gp[:i_assert].strip()
 
         if self.config.sandbox:
@@ -1259,7 +1295,7 @@ class P3Problem(BaseEnvironment[P3Solution]):
         else:
             # TODO: handle (probably inside of pool_exec_processes) all cases where the generated code returns
             # a generator type. The multithreaded execution pickles things and generators can't be pickled
-            # which causes the whole thing to error out. 
+            # which causes the whole thing to error out.
             # For now, try/except and re-try.
             try:
                 results = pool_exec_processes(
@@ -1271,9 +1307,11 @@ class P3Problem(BaseEnvironment[P3Solution]):
                 )
             except Exception as e:
                 return self.generate_programs(code_batch)
-            
-        results = [{'program_str': gen_prog, 'result_obj': res_obj, 'config': self.config}
-                    for (gen_prog, res_obj) in zip(generated_programs, results)]
+
+        results = [
+            {"program_str": gen_prog, "result_obj": res_obj, "config": self.config}
+            for (gen_prog, res_obj) in zip(generated_programs, results)
+        ]
         return [P3Solution(**p) for p in results]
 
     def evaluate_solution(self, sol: P3Solution) -> bool:
@@ -1283,7 +1321,7 @@ class P3Problem(BaseEnvironment[P3Solution]):
         if self.ans_type is not None:
             return type_check(self.ans_type, sol.result_obj)
 
-        eval_code = ( 
+        eval_code = (
             f"{P3_IMPORTS}\n"
             f"{self.problem_func}\n"
             f"def run_eval():\n"
@@ -1292,7 +1330,7 @@ class P3Problem(BaseEnvironment[P3Solution]):
 
         result = pool_exec_processes(
             eval_code,
-            func_name='run_eval',
+            func_name="run_eval",
             timeout=self.config.timeout,
             processes=self.config.processes,
             debug=self.config.debug,
@@ -1321,7 +1359,291 @@ class P3Problem(BaseEnvironment[P3Solution]):
         sols = [s.program_str for s in sol_list]
         program_list = list(map(self.construct_prompt, sols))
         new_sols = self.generate_programs(program_list)
-        return new_sols 
+        return new_sols
+
+
+class LMXGeneration(Genotype):
+    def __init__(
+        self,
+        prompt_metadata: dict[str, Any],
+        generated_completion: str,
+        behavior_measure: bool,
+        classifier_model: str,
+        ai_feedback_entries: dict,
+        aa_client: str,
+    ):
+        """
+        Genotype for a generated completion, with parent few-shot prompt.
+
+        Args:
+            prompt_metadata: the prompt, and items of few-shot prompt
+            generated_completion: generated completion
+        """
+        self.prompt_metadata = prompt_metadata
+        self.generated_completion = generated_completion
+        self.behavior_measure = behavior_measure
+        self.ai_feedback_entries = ai_feedback_entries
+        self.classifier_model = classifier_model
+        self.aa_client = aa_client
+
+    def __str__(self) -> str:
+        return self.generated_completion
+
+    def to_phenotype(self) -> Phenotype:
+        assert (
+            self.generated_completion != "" and self.generated_completion is not None
+        ), "generated completion can not be None or an empty string"
+        assert (
+            self.ai_feedback_entries is not None
+        ), "ai_feedback_entries must be defined when using ai_feedback"
+
+        feedback_scores_list = []
+        for feedback_type in self.ai_feedback_entries:
+            answer_space = self.ai_feedback_entries[feedback_type]["answer_space"]
+            feedback_prompt_template = self.ai_feedback_entries[feedback_type][
+                "feedback_prompt_template"
+            ]
+            ai_feedback_evaluator = AIFeedback(
+                classifier_model=self.classifier_model,
+                label_options=answer_space,
+                feedback_template=feedback_prompt_template,
+                aa_client=self.aa_client,
+            )
+            feedback_scores = ai_feedback_evaluator.evaluate(
+                {"genotype": self.generated_completion}
+            )
+            feedback_scores_list.append(feedback_scores[answer_space[0]])
+
+        return np.array(feedback_scores_list)
+
+
+class LMXGenerationEnvironment(BaseEnvironment[LMXGeneration]):
+    def __init__(self, config, mutation_model, num_fewshot=3):
+        """
+        Language Model Crossover Environment.
+        Q: Quality metric (e.g asymmetric search with a reference sentence)
+        D: Diversity metric (e.g. Sentiment classifier score)
+        Steps:
+            1. Initialize seed with seed generations, and generate some random completions
+            2. Mutation operator: re-ordering of few-shot prompt and temperature in genotype,
+            3. Compute Q and D
+
+        Args:
+            config: the config file path or dict.
+            mutation_model: Language Model API.
+            num_fewshot: number of few shot prompts that for the meta prompt
+        """
+        self.config: LMXGenerationEnvConfig = config
+        self.genotype_ndim = len(self.config.ai_feedback_entries.keys())
+        self.genotype_space = np.repeat([[0, 1]], self.genotype_ndim, axis=0).T
+        self.mutation_model = mutation_model
+        self.num_fewshot = num_fewshot
+        self.solution_init_method = self.config.solution_init_method
+        self.init_prompt_template = self.config.few_shot_template
+        self.batch_size = self.config.batch_size
+        self.max_len_history = self.config.max_len_history
+        self.init_size = self.config.init_size
+        self.latest_genomes = None
+        self.num_generations = 0
+        self.behavior_measure = self.config.behavior_measure
+
+        with open(self.config.api_token_file, "r") as file:
+            self.api_token = file.read().strip()
+        self.aa_client = Client(token=self.api_token)
+
+        self.init_prompt_pool()
+
+        if self.config.fitness_method == "ai_feedback":
+            self.quality_ai_feedback = AIFeedback(
+                classifier_model=self.config.classifier_model,
+                label_options=self.config.quality_ai_feedback_entries["quality"][
+                    "answer_space"
+                ],
+                feedback_template=self.config.quality_ai_feedback_entries["quality"][
+                    "feedback_prompt_template"
+                ],
+                aa_client=self.aa_client,
+            )
+
+    def init_prompt_pool(self):
+        # prompt pool to sample few shot prompt from, when using 'replace'
+        if self.solution_init_method == "generated":
+            self.prompt_pool = []
+        elif self.solution_init_method == "seed":
+            try:
+                with open(self.config.prompt_pool_path) as file:
+                    self.prompt_pool = file.read().splitlines()
+            except FileExistsError:
+                print(f"file {self.config.prompt_pool_path} does not exist")
+
+    def get_rng_state(self) -> Optional[np.random._generator.Generator]:
+        return None
+
+    def set_rng_state(self, rng_state: Optional[np.random._generator.Generator]):
+        pass
+
+    def construct_prompt(self, list_of_fewshot_reviews: list[str]) -> str:
+        prompt = self.init_prompt_template + list_of_fewshot_reviews[0]
+        for i in range(1, len(list_of_fewshot_reviews)):
+            prompt += "\n###\n" + self.init_prompt_template + list_of_fewshot_reviews[i]
+        prompt += "\n###\n" + self.init_prompt_template
+        return prompt
+
+    def generate_completion(self, prompt: str, is_init: bool = False) -> str:
+        # ensure non-empty string is returned during init
+        while True:
+            completion = self.mutation_model.generate_programs(prompt)
+            self.num_generations += 1
+            if completion != "":  # non-empty completion
+                if completion[-1] != ".":
+                    completion += "."  # add extra full stop to ensure few-shot examples always end with stop
+                return completion
+            elif not is_init:  # else continue loop, only returning non-empty completion
+                return completion
+
+    def random(self) -> list[LMXGeneration]:
+        list_of_reviews = []
+        if self.solution_init_method == "generated":
+            for i in range(self.init_size):
+                completion = self.generate_completion(
+                    self.init_prompt_template, is_init=True
+                )
+                self.prompt_pool.append(completion)
+
+            for _ in range(self.batch_size):
+                init_fewshot = random.sample(self.prompt_pool, k=self.num_fewshot)
+                completion, prompt_metadata = self.make_prompt_and_completion(
+                    init_fewshot, is_init=True
+                )
+                list_of_reviews.append(
+                    LMXGeneration(
+                        prompt_metadata=prompt_metadata,
+                        generated_completion=completion,
+                        behavior_measure=self.behavior_measure,
+                        classifier_model=self.config.classifier_model,
+                        ai_feedback_entries=self.config.ai_feedback_entries,
+                        aa_client=self.aa_client,
+                    )
+                )
+
+            return list_of_reviews
+        elif self.solution_init_method == "seed":
+            for _ in range(self.batch_size):
+                init_fewshot = random.sample(self.prompt_pool, k=self.num_fewshot)
+                completion, prompt_metadata = self.make_prompt_and_completion(
+                    init_fewshot, is_init=True
+                )
+                list_of_reviews.append(
+                    LMXGeneration(
+                        prompt_metadata=prompt_metadata,
+                        generated_completion=completion,
+                        behavior_measure=self.behavior_measure,
+                        classifier_model=self.config.classifier_model,
+                        ai_feedback_entries=self.config.ai_feedback_entries,
+                        aa_client=self.aa_client,
+                    )
+                )
+
+            return list_of_reviews
+        else:
+            raise NotImplementedError
+
+    def make_prompt_and_completion(
+        self, init_fewshot: list[str], is_init: bool = False
+    ):
+        prompt = self.construct_prompt(init_fewshot)
+        completion = self.generate_completion(prompt, is_init)
+        prompt_metadata = {"fewshot_items": init_fewshot, "prompt": prompt}
+        return completion, prompt_metadata
+
+    def mutate(
+        self, x: Union[list[LMXGeneration], list[LMXGeneration, int]]
+    ) -> list[LMXGeneration]:  # during default search, this could return none
+        list_of_reviews = []
+        for i in range(self.batch_size):
+            x_individual = x[i]
+            if type(x_individual) is tuple:
+                genotype_object = x_individual[0]
+                genotype_bin_idx = x_individual[1]
+            else:
+                genotype_object = x_individual
+
+            if self.config.mutation_method == "replace":
+                fewshot_items = genotype_object.prompt_metadata["fewshot_items"]
+                idx_to_replace = random.choice(range(len(fewshot_items)))
+                fewshot_items[idx_to_replace] = random.choice(self.prompt_pool)
+                if len(self.prompt_pool) > self.max_len_history:
+                    # remove oldest
+                    self.prompt_pool.pop(0)  # oldest in history
+            elif self.config.mutation_method == "lmx_near":
+                # original formula ref in colab: https://colab.research.google.com/drive/1SXrq-YGffg6M725hgKXY1lqxTMsa1wLl?usp=sharing
+                fewshot_items = []
+                orig_idx = np.array(
+                    genotype_bin_idx
+                )  # in list of individuals, access individual, and its bin idx
+                non_empty_idx = np.where(self.latest_genomes != 0.0)
+                non_empty_idx_array = np.array(non_empty_idx)
+                non_empty_pop = self.latest_genomes[non_empty_idx]
+                # all euclidean distances, between non-empty map indices and currently selected origin index
+                dists = np.array(
+                    [
+                        1.0
+                        / (
+                            1
+                            + np.linalg.norm(orig_idx - non_empty_idx_array[:, idx])
+                            ** 3
+                        )
+                        for idx in range(len(non_empty_pop))
+                    ]
+                )
+                dists /= np.sum(dists)
+                examples = np.random.choice(
+                    non_empty_pop, p=dists, replace=False, size=self.num_fewshot
+                )
+                examples = list(examples)
+                for j, example in enumerate(examples):
+                    fewshot_items.append(example.generated_completion)
+            # gather chosen few-shot items and generate completion (crossover)
+            completion, prompt_metadata = self.make_prompt_and_completion(fewshot_items)
+            list_of_reviews.append(
+                LMXGeneration(
+                    prompt_metadata=prompt_metadata,
+                    generated_completion=completion,
+                    behavior_measure=self.behavior_measure,
+                    classifier_model=self.config.classifier_model,
+                    ai_feedback_entries=self.config.ai_feedback_entries,
+                    aa_client=self.aa_client,
+                )
+            )
+
+        return list_of_reviews
+
+    def fitness(self, x: LMXGeneration) -> float:
+        if x.generated_completion == "":
+            return -np.inf
+        if self.config.fitness_method == "embedding":
+            query = self.config.fitness_query
+            asymmetric_query = self.embed(query, SemanticRepresentation.Query)
+            asymmetric_embedding = self.embed(
+                x.generated_completion, SemanticRepresentation.Document
+            )
+            return cosine_similarity(asymmetric_query, asymmetric_embedding)
+        elif self.config.fitness_method == "ai_feedback":
+            feedback_scores = self.quality_ai_feedback.evaluate(
+                {"genotype": x.generated_completion}
+            )
+            return float(feedback_scores[self.quality_ai_feedback.label_options[0]])
+        else:
+            raise NotImplementedError
+
+    # helper function to embed text using the symmetric or asymmetric model
+    def embed(self, text: str, representation: SemanticRepresentation):
+        request = SemanticEmbeddingRequest(
+            prompt=Prompt.from_text(text), representation=representation
+        )
+        result = self.aa_client.semantic_embed(request, model="luminous-base")
+        return result.embedding
+
 
 class P3ProbSolResult(Genotype):
     def __init__(self, program_str: str, result_obj: dict, config: P3ProbSolEnvConfig):
@@ -1336,9 +1658,9 @@ class P3ProbSolResult(Genotype):
         self.result_obj = result_obj
         self.config = config
 
-        i_f6 = program_str.find('def f6_2(')
-        i_g6 = program_str.find('def g6_2(')
-        i_assert = program_str.find('assert')
+        i_f6 = program_str.find("def f6_2(")
+        i_g6 = program_str.find("def g6_2(")
+        i_assert = program_str.find("assert")
         self.problem_func = self.program_str[i_f6:i_g6].strip()
         self.solution_func = self.program_str[i_g6:i_assert].strip()
 
@@ -1351,28 +1673,36 @@ def f1_1(s: str):
 def g1_1():
     """Find a string that when concatenated onto 'Hello ' gives 'Hello world'."""
     return "world"'''
-        self.baseline_emb = np.array(get_embedding(baseline, engine=self.config.embedding_model_path))
+        self.baseline_emb = np.array(
+            get_embedding(baseline, engine=self.config.embedding_model_path)
+        )
 
-        if self.config.embedding_model_type == 'hf':
-            self.pl = pipeline('feature-extraction', model=self.config.embedding_model_path)
+        if self.config.embedding_model_type == "hf":
+            self.pl = pipeline(
+                "feature-extraction", model=self.config.embedding_model_path
+            )
             seed_features = np.array(self.pl(baseline))
             self.scaler = StandardScaler()
             seed_features_scaled = self.scaler.fit_transform(np.squeeze(seed_features))
-            self.pca = PCA(.95)
+            self.pca = PCA(0.95)
             self.pca.fit(seed_features_scaled)
 
     def __str__(self) -> str:
         return self.program_str
 
     def to_phenotype(self) -> Optional[Phenotype]:
-        if self.config.embedding_model_type == 'openai':
-            compare_str = self.program_str # TODO: remove comments from f6_2 for diversity measurement
-            i_assert = compare_str.find('assert')
+        if self.config.embedding_model_type == "openai":
+            compare_str = (
+                self.program_str
+            )  # TODO: remove comments from f6_2 for diversity measurement
+            i_assert = compare_str.find("assert")
             if i_assert > -1:
                 compare_str = compare_str[:i_assert]
-            emb = np.array(get_embedding(compare_str, engine=self.config.embedding_model_path))
+            emb = np.array(
+                get_embedding(compare_str, engine=self.config.embedding_model_path)
+            )
             return cosine_similarity(emb, self.baseline_emb)
-        elif self.config.embedding_model_type == 'hf':
+        elif self.config.embedding_model_type == "hf":
             features = np.array(self.pl(self.program_str))
             features_scaled = self.scaler.transform(np.squeeze(features))
             pca_features = self.pca.transform(features_scaled)
@@ -1380,13 +1710,16 @@ def g1_1():
 
     def __getstate__(self):
         state = self.__dict__.copy()
-        if 'pl' in state: del state['pl']
-        if 'scaler' in state: del state['scaler']
-        if 'pca' in state: del state['pca']
+        if "pl" in state:
+            del state["pl"]
+        if "scaler" in state:
+            del state["scaler"]
+        if "pca" in state:
+            del state["pca"]
         return state
 
-class P3ProbSol(BaseEnvironment[P3ProbSolResult]):
 
+class P3ProbSol(BaseEnvironment[P3ProbSolResult]):
     def __init__(
         self,
         config: P3ProbSolEnvConfig,
@@ -1405,65 +1738,78 @@ class P3ProbSol(BaseEnvironment[P3ProbSolResult]):
         self.seed_index = self.config.starting_seed
         self.rng = None
 
-        if self.config.prompt_size == 'long':
+        if self.config.prompt_size == "long":
             self.prompt_seed = P3_PROBSOL_LONG_SEED
-        elif self.config.prompt_size == 'med':
+        elif self.config.prompt_size == "med":
             self.prompt_seed = P3_PROBSOL_MED_SEED
         else:
-            raise ValueError('No seed string found')
+            raise ValueError("No seed string found")
 
         # Use the first example in the prompt seed as basis for embedding sizes
-        i_first = self.prompt_seed.find('assert')
+        i_first = self.prompt_seed.find("assert")
         first_example = self.prompt_seed[:i_first].strip()
 
-        if self.config.embedding_model_type == 'openai':
+        if self.config.embedding_model_type == "openai":
             self.genotype_ndim: int = 1
             self.genotype_space = np.repeat([[0, 1]], self.genotype_ndim, axis=0).T
-        elif self.config.embedding_model_type == 'hf':
+        elif self.config.embedding_model_type == "hf":
             # Dummy to get behavior space shape
-            dummy_pl = pipeline('feature-extraction', model=self.config.embedding_model_path)
+            dummy_pl = pipeline(
+                "feature-extraction", model=self.config.embedding_model_path
+            )
             dummy_features = np.array(dummy_pl(first_example))
             dummy_scaler = StandardScaler()
-            dummy_features_scaled = dummy_scaler.fit_transform(np.squeeze(dummy_features))
-            dummy_pca = PCA(.95)
+            dummy_features_scaled = dummy_scaler.fit_transform(
+                np.squeeze(dummy_features)
+            )
+            dummy_pca = PCA(0.95)
             dummy_pca_features = dummy_pca.fit_transform(dummy_features_scaled)
             self.genotype_ndim: int = dummy_pca_features.shape[-1]
             self.genotype_space = np.repeat([[-20, 20]], self.genotype_ndim, axis=0).T
 
-
         # Get info for the seed puzzle that will be mutated
         # This puzzle is at the index of the puzzles array specified by self.seed_index
         # TODO: put this in a method or in construct_prompt()?
-        puzzles = requests.get("https://raw.githubusercontent.com/microsoft/PythonProgrammingPuzzles/v0.2/puzzles/puzzles.json").json()
+        puzzles = requests.get(
+            "https://raw.githubusercontent.com/microsoft/PythonProgrammingPuzzles/v0.2/puzzles/puzzles.json"
+        ).json()
         puzzle = puzzles[self.seed_index]
-        if len(puzzle['sol_bodies']) == 0:
-            raise ValueError(f'No sample solution is provided for the puzzle at index {self.seed_index}')
+        if len(puzzle["sol_bodies"]) == 0:
+            raise ValueError(
+                f"No sample solution is provided for the puzzle at index {self.seed_index}"
+            )
 
-        f6_1 = puzzle['sat'].replace('def sat(', 'def f6_1(') # problem form is f6_1()
-        g6_1 = puzzle['sol_header'].replace('def sol(', 'def g6_1(') # solution form is g6_1()
-        if self.config.prompt_size == 'long':
-            g6_1 += '\n' + puzzle['sol_docstring'] # add in the docstring
-        g6_1 += '\n' + puzzle['sol_bodies'][0] # include the first example solution function body
+        f6_1 = puzzle["sat"].replace("def sat(", "def f6_1(")  # problem form is f6_1()
+        g6_1 = puzzle["sol_header"].replace(
+            "def sol(", "def g6_1("
+        )  # solution form is g6_1()
+        if self.config.prompt_size == "long":
+            g6_1 += "\n" + puzzle["sol_docstring"]  # add in the docstring
+        g6_1 += (
+            "\n" + puzzle["sol_bodies"][0]
+        )  # include the first example solution function body
 
-        self.original_probsol = f6_1 + '\n\n' + g6_1 + '\n\n' + "assert f6_1(g6_1())" 
-        self.new_probsol_preamble = 'def f6_2(' 
+        self.original_probsol = f6_1 + "\n\n" + g6_1 + "\n\n" + "assert f6_1(g6_1())"
+        self.new_probsol_preamble = "def f6_2("
 
     def get_rng_state(self) -> Optional[np.random._generator.Generator]:
         warnings.warn("WARNING: rng state not used in this environment")
         return None
-    
+
     def set_rng_state(self, rng_state: Optional[np.random._generator.Generator]):
         warnings.warn("WARNING: rng state not used in this environment")
         pass
 
-    def construct_prompt(self, code_batch: Optional[Union[list[str], str]] = None) -> dict[str, str]:
+    def construct_prompt(
+        self, code_batch: Optional[Union[list[str], str]] = None
+    ) -> dict[str, str]:
         prompt_str = self.prompt_seed
 
         if code_batch is None:
-            # prompt with prob+sol from P3 dataset 
+            # prompt with prob+sol from P3 dataset
             prompt_str += (
-                f'\n\n{self.original_probsol}' # add this particular probsol, f6_1() and g6_1(), to the prompt
-                f'\n\n{self.new_probsol_preamble}' # add f6_2() preamble to the prompt
+                f"\n\n{self.original_probsol}"  # add this particular probsol, f6_1() and g6_1(), to the prompt
+                f"\n\n{self.new_probsol_preamble}"  # add f6_2() preamble to the prompt
             )
         else:
             # prompt with prob+sol that is given (one that was the output of a prev mutation)
@@ -1476,31 +1822,30 @@ class P3ProbSol(BaseEnvironment[P3ProbSolResult]):
             # the prev output was f6_2 and g6_2, so now make it f6_1 and g6_1 for the prompt
             # and remove comments (which contain changes from prev f6_1) from new f6_1
             # TODO: pass in the whole object instead of the program_str since it already parsed some of this?
-            i_f6 = program_str.find('def f6_2')
-            program_str = program_str[i_f6:] # remove import statement
-            program_str = program_str.replace('f6_2(', 'f6_1(')
-            program_str = program_str.replace('g6_2(', 'g6_1(')
-            i_g6 = program_str.find('def g6_1(')
+            i_f6 = program_str.find("def f6_2")
+            program_str = program_str[i_f6:]  # remove import statement
+            program_str = program_str.replace("f6_2(", "f6_1(")
+            program_str = program_str.replace("g6_2(", "g6_1(")
+            i_g6 = program_str.find("def g6_1(")
             # remove comments with """
-            program_str = re.sub('""".*"""', '', program_str[:i_g6]) + program_str[i_g6:]
+            program_str = (
+                re.sub('""".*"""', "", program_str[:i_g6]) + program_str[i_g6:]
+            )
             # remove comments with # (and remove empty lines)
-            i_g6 = program_str.find('def g6_1(')
-            lines = program_str[:i_g6].strip().split('\n')
+            i_g6 = program_str.find("def g6_1(")
+            lines = program_str[:i_g6].strip().split("\n")
             new_lines = []
             for l in lines:
                 if l.strip().startswith("#") or len(l.strip()) == 0:
                     continue
                 new_lines.append(l)
-            program_str = '\n'.join(new_lines) + '\n\n' + program_str[i_g6:]
+            program_str = "\n".join(new_lines) + "\n\n" + program_str[i_g6:]
             program_str = program_str.strip()
 
-            prompt_str += (
-                f'\n\n{program_str}'
-                f'\n\n{self.new_probsol_preamble}'
-            )
+            prompt_str += f"\n\n{program_str}" f"\n\n{self.new_probsol_preamble}"
 
-        template = f'{P3_IMPORTS}\n{self.new_probsol_preamble}'
-        return {'prompt': prompt_str, 'template': template}
+        template = f"{P3_IMPORTS}\n{self.new_probsol_preamble}"
+        return {"prompt": prompt_str, "template": template}
 
     def generate_programs(self, code_batch: list[str]) -> list[P3ProbSolResult]:
         """Generate new programs with a mutation model and evaluate them."""
@@ -1523,7 +1868,7 @@ class P3ProbSol(BaseEnvironment[P3ProbSolResult]):
         else:
             # TODO: handle (probably inside of pool_exec_processes) all cases where the generated code returns
             # a generator type. The multithreaded execution pickles things and generators can't be pickled
-            # which causes the whole thing to error out. 
+            # which causes the whole thing to error out.
             # For now, try/except and re-try.
             try:
                 results = pool_exec_processes(
@@ -1536,9 +1881,10 @@ class P3ProbSol(BaseEnvironment[P3ProbSolResult]):
             except Exception as e:
                 return self.generate_programs(code_batch)
 
-
-        results = [{'program_str': gen_prog, 'result_obj': res_obj, 'config': self.config}
-                    for (gen_prog, res_obj) in zip(generated_programs, results)]
+        results = [
+            {"program_str": gen_prog, "result_obj": res_obj, "config": self.config}
+            for (gen_prog, res_obj) in zip(generated_programs, results)
+        ]
         return [P3ProbSolResult(**p) for p in results]
 
     def fitness(self, probsol: P3ProbSolResult) -> float:
@@ -1550,12 +1896,12 @@ class P3ProbSol(BaseEnvironment[P3ProbSolResult]):
         """
         if isinstance(probsol.result_obj, ExecResult):
             return -np.inf
-        
+
         # TODO: check type expected by f6_2 if any?
         # TODO: implement checks for absolute triviality of f6_2 requirements
         #   the fitness function being based on pass@k might take care of this though
 
-        eval_code = ( 
+        eval_code = (
             f"{P3_IMPORTS}\n"
             f"{probsol.problem_func}\n"
             f"def run_eval():\n"
@@ -1565,7 +1911,7 @@ class P3ProbSol(BaseEnvironment[P3ProbSolResult]):
         # Run code to see if g6_2 solves f6_2
         result = pool_exec_processes(
             eval_code,
-            func_name='run_eval',
+            func_name="run_eval",
             timeout=self.config.timeout,
             processes=self.config.processes,
             debug=self.config.debug,
@@ -1577,26 +1923,28 @@ class P3ProbSol(BaseEnvironment[P3ProbSolResult]):
         ### Do pass@k eval ###
 
         # Get f6_2() and make it the new f6()
-        problem_str = probsol.problem_func.replace('def f6_2(', 'def f6(')
+        problem_str = probsol.problem_func.replace("def f6_2(", "def f6(")
         # Remove comments with """
-        problem_str = re.sub('""".*"""', '', problem_str)
+        problem_str = re.sub('""".*"""', "", problem_str)
         # Remove comments with # (and remove empty lines)
-        lines = problem_str.strip().split('\n')
+        lines = problem_str.strip().split("\n")
         new_lines = []
         for l in lines:
             if l.strip().startswith("#") or len(l.strip()) == 0:
                 continue
             new_lines.append(l)
-        problem_str = '\n'.join(new_lines)
+        problem_str = "\n".join(new_lines)
         # Get solution_preamble for g6()
-        i_end_preamble = probsol.solution_func.find('):')
-        solution_preamble = probsol.solution_func[:i_end_preamble+2].replace('def g6_2(', 'def g6(')
+        i_end_preamble = probsol.solution_func.find("):")
+        solution_preamble = probsol.solution_func[: i_end_preamble + 2].replace(
+            "def g6_2(", "def g6("
+        )
 
         p3_problem = P3Problem(
-            self.config, # TODO: make an actual P3ProblemEnvConfig
+            self.config,  # TODO: make an actual P3ProblemEnvConfig
             self.mutation_model,
             problem_str=problem_str,
-            solution_preamble=solution_preamble
+            solution_preamble=solution_preamble,
         )
         solutions = []
         for _ in range(self.config.eval_k // self.config.batch_size + 1):
@@ -1619,4 +1967,4 @@ class P3ProbSol(BaseEnvironment[P3ProbSolResult]):
         probsols = [pb.program_str for pb in probsol_list]
         program_list = list(map(self.construct_prompt, probsols))
         new_probsols = self.generate_programs(program_list)
-        return new_probsols 
+        return new_probsols

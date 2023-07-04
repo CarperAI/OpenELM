@@ -4,6 +4,15 @@ from typing import Any, Optional
 from hydra.core.config_store import ConfigStore
 from omegaconf import MISSING
 
+AVAILABLE_GENERATION_MODELS_AA = [
+    "luminous-base",
+    "luminous-extended",
+    "luminous-supreme",
+]
+AVAILABLE_CLASSIFIER_MODEL_AA = ["luminous-supreme-qdaif", "luminous-supreme-control"]
+VALID_SOLUTION_INIT_METHODS = ["seed", "generated"]
+VALID_MUTATION_METHODS = ["lmx_near", "replace"]
+
 
 @dataclass
 class BaseConfig:
@@ -18,8 +27,8 @@ class ModelConfig(BaseConfig):
     seed: Optional[int] = None
     deterministic: bool = False
     top_p: float = 0.95
-    temp: float = 0.85
-    gen_max_len: int = 768
+    temp: float = 0.8
+    gen_max_len: int = 100
     batch_size: int = 32
     model_type: str = "hf"  # Can be "hf", "openai", etc
     model_path: str = MISSING  # Can be HF model name or path to local model
@@ -27,6 +36,7 @@ class ModelConfig(BaseConfig):
     do_sample: bool = True
     num_return_sequences: int = 1
     trust_remote_code: bool = True  # needed for mosaicml/mpt-7b-instruct
+    frequency_penalty: float = 0.0  # for more open-ended domains (note: maybe penalty doesn't work well experimentally)
 
 
 @dataclass
@@ -42,12 +52,47 @@ class DiffModelConfig(ModelConfig):
 
 
 @dataclass
+class APIModelConfig(ModelConfig):
+    model_name: str = "api"
+    model_path: str = ""
+    model_used: str = "luminous-base"
+    api_token_file: str = "aa_client_token.txt"
+    stop_sequences: list[Any] = field(
+        default_factory=lambda: [
+            "\n#",
+            "\n##",
+            "\n###",
+            "###",
+            "\n####",
+            "\n#####",
+            "####",
+            "#####",
+            "\n",
+            "\n\n",
+            "\n\n\n",
+            "\n\n\n\n",
+            "@@@",
+            "#",
+            "##",
+            "\nHere",
+            "\n\nHere",
+        ]
+    )
+
+    def __post_init__(self):
+        # assert use of valid model
+        assert (
+            self.model_used in AVAILABLE_GENERATION_MODELS_AA
+        ), f"Model {self.model_used} is not supported. Please select one of the following models: {AVAILABLE_GENERATION_MODELS_AA}"
+
+
+@dataclass
 class QDConfig(BaseConfig):
-    init_steps: int = 2
-    total_steps: int = 5
-    history_length: int = 1
-    save_history: bool = False
-    save_snapshot_interval: Optional[int] = None
+    init_steps: int = 50
+    total_steps: int = 2000
+    history_length: int = 100
+    save_history: bool = True
+    save_snapshot_interval: Optional[int] = 500
     log_snapshot_dir: str = ""
     seed: Optional[int] = 42
     save_np_rng_state: bool = False
@@ -57,7 +102,19 @@ class QDConfig(BaseConfig):
 @dataclass
 class MAPElitesConfig(QDConfig):
     qd_name: str = "mapelites"
-    map_grid_size: tuple[int, ...] = field(default_factory=lambda: (12,))
+    map_grid_size: tuple[int, ...] = field(default_factory=lambda: (20,))
+
+
+@dataclass
+class LMXMapElitesConfig(QDConfig):
+    qd_name: str = "lmx_mapelites"
+    map_grid_size: tuple[int, ...] = field(default_factory=lambda: (20,))
+    pass_latest_genomes_to_env: bool = True
+    write_all_individuals_to_jsonl: bool = True
+    append_bin_idx_to_batch: bool = True
+    add_prompt_pool: bool = True
+    filter_prompt_pool: bool = True
+    use_alt_depth_method: bool = True
 
 
 @dataclass
@@ -73,7 +130,7 @@ class EnvConfig(BaseConfig):
     sandbox: bool = False
     sandbox_server: str = "http://localhost:5000"
     processes: int = 12
-    batch_size: int = 32  # Batch size of MAP-Elites
+    batch_size: int = 1
     env_name: str = MISSING
     debug: bool = False
     seed: Optional[int] = 42
@@ -112,21 +169,26 @@ class StringEnvConfig(EnvConfig):
 @dataclass
 class P3ProblemEnvConfig(EnvConfig):
     env_name: str = "p3_problem"
-    prompt_size: str = 'long' # med or long
-    timeout: float = 1.0 # timeout for running a solution
-    starting_seed: int = field(default_factory=lambda: 3) # index of p3 dataset to use as puzzle to mutate
-    embedding_model_type: str = 'hf' # openai or hf
-    embedding_model_path: str = MISSING # e.g. hf: Salesforce/codegen-350M-mono ; openai: text-embedding-ada-002
+    prompt_size: str = "long"  # med or long
+    timeout: float = 1.0  # timeout for running a solution
+    starting_seed: int = field(
+        default_factory=lambda: 3
+    )  # index of p3 dataset to use as puzzle to mutate
+    embedding_model_type: str = "hf"  # openai or hf
+    embedding_model_path: str = MISSING  # e.g. hf: Salesforce/codegen-350M-mono ; openai: text-embedding-ada-002
+
 
 @dataclass
 class P3ProbSolEnvConfig(EnvConfig):
     env_name: str = "p3_probsol"
-    prompt_size: str = 'long' # med or long
-    timeout: float = 1.0 # timeout for running a solution
-    starting_seed: int = field(default_factory=lambda: 3) # index of p3 dataset to use as puzzle to mutate
-    eval_k: int = 100 # k for pass@k for fitness
-    embedding_model_type: str = 'hf' # openai or hf
-    embedding_model_path: str = MISSING # e.g. hf: Salesforce/codegen-350M-mono ; openai: text-embedding-ada-002
+    prompt_size: str = "long"  # med or long
+    timeout: float = 1.0  # timeout for running a solution
+    starting_seed: int = field(
+        default_factory=lambda: 3
+    )  # index of p3 dataset to use as puzzle to mutate
+    eval_k: int = 100  # k for pass@k for fitness
+    embedding_model_type: str = "hf"  # openai or hf
+    embedding_model_path: str = MISSING  # e.g. hf: Salesforce/codegen-350M-mono ; openai: text-embedding-ada-002
 
 
 @dataclass
@@ -136,10 +198,76 @@ class PromptEnvConfig(EnvConfig):
     evals_per_prompt: int = 10
 
 
+@dataclass
+class LMXGenerationEnvConfig(EnvConfig):
+    env_name: str = "lmx_generation"
+    behavior_measure: str = "ai_feedback"
+    solution_init_method: str = "seed"  # seed, generated
+    mutation_method: str = "lmx_near"  # replace, lmx_near
+    max_len_history: int = (
+        100  # for storage of few-shot pool, based on accepted fit solutions
+    )
+    fitness_query: str = "A fantasy story about a suspicious spy and a rich politician"
+    few_shot_template: str = "Here is a random example of a fantasy story about a suspicious spy and a rich politician:"
+    instruction_prompt: str = "Determine the sentiment of the text by writing 'positive' or 'negative' in in the output."
+    quality_feedback_prompt = """Determine if the input text contains a high-quality short story containing two characters, a suspicious spy, and a rich politician. Answer "yes" if the input contains a high-quality short story about a suspicious spy and a rich politician, otherwise answer "no"."""
+    init_size: int = (
+        5  # with generated init method, should be slightly more than few-shot size
+    )
+    prompt_pool_path: str = (
+        "src/openelm/environments/lmx_seed_pools/short_story_seed_pool.txt"
+    )
+    classifier_model: str = "luminous-supreme-qdaif"
+    api_token_file: str = "aa_client_token.txt"
+    fitness_method: str = "ai_feedback"
+    use_alt_depth_method: bool = True
+
+    def __post_init__(self):
+        # assert valid config values
+        assert (
+            self.classifier_model in AVAILABLE_CLASSIFIER_MODEL_AA
+        ), f"Model {self.classifier_model} is currently not supported. Please pick one of the following models: {AVAILABLE_CLASSIFIER_MODEL_AA}"
+        assert (
+            self.solution_init_method in VALID_SOLUTION_INIT_METHODS
+        ), f"Please select one of the following options as init method: {VALID_SOLUTION_INIT_METHODS}"
+        assert (
+            self.mutation_method in VALID_MUTATION_METHODS
+        ), f"Please select one of the following mutation methods: {VALID_MUTATION_METHODS}"
+
+        # set some classifier model specific paramters
+        if self.classifier_model == "luminous-supreme-qdaif":
+            extra_prefix = " \n"
+            extra_suffix = ""
+        elif self.classifier_model == "luminous-supreme-control":
+            extra_prefix = ""
+            extra_suffix = " Please respond with a single word only."
+        else:
+            raise NotImplementedError
+
+        self.ai_feedback_entries = {  # entries to setup ai feedback.
+            "sentiment": {
+                "answer_space": [
+                    f"{extra_prefix}positive",
+                    f"{extra_prefix}negative",
+                ],
+                "feedback_prompt_template": f"### Instruction:\n{self.instruction_prompt}{extra_suffix}\n\n### Input:{{genotype}}\n\n### Response:",
+            },
+        }
+        self.quality_ai_feedback_entries = {
+            "quality": {
+                "answer_space": [
+                    f"{extra_prefix}yes",
+                    f"{extra_prefix}no",
+                ],
+                "feedback_prompt_template": f"### Instruction:\n{self.quality_feedback_prompt}{extra_suffix}\n\n### Input:{{genotype}}\n\n### Response:",
+            },
+        }
+
+
 defaults_elm = [
-    {"model": "prompt"},
-    {"qd": "mapelites"},
-    {"env": "sodarace"},
+    {"model": "api"},
+    {"qd": "lmx_mapelites"},
+    {"env": "lmx_generation"},
     "_self_",
 ]
 
@@ -182,12 +310,16 @@ class P3Config(BaseConfig):
     run_name: Optional[str] = None
     # --- The below are for run_p3.py
     iterations_per_puzzle: int = 128
-    starting_seeds: list[int] = field(default_factory=lambda: [3]) # indices of selection of puzzles to evaluate with
+    starting_seeds: list[int] = field(
+        default_factory=lambda: [3]
+    )  # indices of selection of puzzles to evaluate with
     save_results: bool = True
-    save_result_obj: bool = False # if saving results, include the whole output text from model for each iteration (which can get long)
-    probsol: bool = True # generate new problem+solution pairs from given problems instead of just solutions to given problems
-    eval_k: int = -1 # set >0 to evaluate pass@k of previous runs using this k, instead of doing a new run
-    eval_timestamp: str = '' # optionally provide timestamp of run to eval pass@k, otherwise eval with latest run of every problem
+    save_result_obj: bool = False  # if saving results, include the whole output text from model for each iteration (which can get long)
+    probsol: bool = True  # generate new problem+solution pairs from given problems instead of just solutions to given problems
+    eval_k: int = (
+        -1
+    )  # set >0 to evaluate pass@k of previous runs using this k, instead of doing a new run
+    eval_timestamp: str = ""  # optionally provide timestamp of run to eval pass@k, otherwise eval with latest run of every problem
 
 
 def register_configstore() -> ConfigStore:
@@ -196,13 +328,16 @@ def register_configstore() -> ConfigStore:
     cs.store(group="env", name="sodarace", node=SodaraceEnvConfig)
     cs.store(group="env", name="image_evolution", node=ImageEnvConfig)
     cs.store(group="env", name="string_evolution", node=StringEnvConfig)
+    cs.store(group="env", name="lmx_generation", node=LMXGenerationEnvConfig)
     cs.store(group="env", name="p3_probsol", node=P3ProbSolEnvConfig)
     cs.store(group="env", name="p3_problem", node=P3ProblemEnvConfig)
     cs.store(group="env", name="prompt_evolution", node=PromptEnvConfig)
     cs.store(group="qd", name="mapelites", node=MAPElitesConfig)
     cs.store(group="qd", name="cvtmapelites", node=CVTMAPElitesConfig)
+    cs.store(group="qd", name="lmx_mapelites", node=LMXMapElitesConfig)
     cs.store(group="model", name="prompt", node=PromptModelConfig)
     cs.store(group="model", name="diff", node=DiffModelConfig)
+    cs.store(group="model", name="api", node=APIModelConfig)
     cs.store(name="elmconfig", node=ELMConfig)
     cs.store(name="p3config", node=P3Config)
     return cs

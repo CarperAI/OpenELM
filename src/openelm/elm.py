@@ -2,9 +2,14 @@ from typing import Optional
 
 from hydra.core.hydra_config import HydraConfig
 
-from openelm.configs import DiffModelConfig, ELMConfig, PromptModelConfig
+from openelm.configs import (
+    DiffModelConfig,
+    ELMConfig,
+    PromptModelConfig,
+    APIModelConfig,
+)
 from openelm.environments import ENVS_DICT, QD_DICT
-from openelm.mutation_model import DiffModel, MutationModel, PromptModel
+from openelm.mutation_model import DiffModel, MutationModel, PromptModel, AlephAlphaLLM
 
 
 class ELM:
@@ -26,6 +31,10 @@ class ELM:
             self.mutation_model: MutationModel = PromptModel(self.config.model)
         elif isinstance(self.config.model, DiffModelConfig):
             self.mutation_model = DiffModel(self.config.model)
+        elif isinstance(self.config.model, APIModelConfig):
+            self.mutation_model = AlephAlphaLLM(self.config.model)
+        else:
+            raise NotImplementedError()
 
         self.environment = ENVS_DICT[env_name](
             config=self.config.env,

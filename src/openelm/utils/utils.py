@@ -1,5 +1,6 @@
 from dataclasses import is_dataclass
 from pathlib import Path
+import os
 
 from omegaconf import DictConfig, OmegaConf
 
@@ -22,3 +23,9 @@ def validate_config(config):
             raise IOError(
                 "Invalid config type. Must be a path to a yaml, a dict, or dataclass."
             )
+
+
+def safe_open_w(path, *args, **kwargs):
+    """Open "path" for writing, creating any parent directories as needed."""
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    return open(path, *args, **kwargs)
