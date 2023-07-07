@@ -10,7 +10,6 @@ from sklearn.cluster import KMeans
 from tqdm import trange
 
 from openelm.configs import CVTMAPElitesConfig, MAPElitesConfig, QDConfig
-from openelm.constants import PROJECT_PATH
 from openelm.environments import BaseEnvironment, Genotype
 
 Phenotype = Optional[np.ndarray]
@@ -146,7 +145,7 @@ class Map:
 
 class MAPElitesBase:
     """
-    Class implementing MAP-Elites, a quality-diversity algorithm.
+    Base class for MAP-Elites, a quality-diversity algorithm.
 
     MAP-Elites creates a map of high perfoming solutions at each point in a
     discretized behavior space. First, the algorithm generates some initial random
@@ -215,7 +214,6 @@ class MAPElitesBase:
     def _init_maps(
         self, init_map: Optional[Map] = None, log_snapshot_dir: Optional[str] = None
     ):
-        # TODO: abstract all maps out to a single class.
         # perfomance of niches
         if init_map is None:
             self.map_dims = self._get_map_dimensions()
@@ -239,9 +237,8 @@ class MAPElitesBase:
         # index over explored niches to select from
         self.nonzero: Map = Map(dims=self.map_dims, fill_value=False, dtype=bool)
 
-        # log_path = Path(log_snapshot_dir)
-        log_path = PROJECT_PATH / "logs" / "elm" / "qdaif"
-        if os.path.isdir(log_path):
+        log_path = Path(log_snapshot_dir)
+        if log_snapshot_dir and os.path.isdir(log_path):
             stem_dir = log_path.stem
 
             assert (
@@ -262,9 +259,6 @@ class MAPElitesBase:
             # Load maps from pickle file
             with open(snapshot_path, "rb") as f:
                 maps = pickle.load(f)
-            # maps_file = np.load(
-            #     snapshot_path, allow_pickle=True
-            # )  # (history_len, num_bins_1, num_bins_2, ...)
             assert (
                 self.genomes.array.shape == maps["genomes"].shape
             ), f"expected shape of map doesn't match init config settings, got {self.genomes.array.shape} and {maps['genomes'].shape}"
@@ -602,8 +596,9 @@ class CVTMAPElites(MAPElitesBase):
     """
     Class implementing CVT-MAP-Elites, a variant of MAP-Elites.
 
-    This replaces the grid of niches in MAP-Elites with niches generated using a Centroidal Voronoi Tessellation.
-    Unlike in MAP-Elites, we have a fixed number of total niches rather than a fixed number of subdivisions per dimension.
+    This replaces the grid of niches in MAP-Elites with niches generated using a
+    Centroidal Voronoi Tessellation. Unlike in MAP-Elites, we have a fixed number
+    of total niches rather than a fixed number of subdivisions per dimension.
     """
 
     def __init__(

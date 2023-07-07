@@ -21,7 +21,7 @@ class ModelConfig(BaseConfig):
     temp: float = 1.1
     gen_max_len: int = 512
     batch_size: int = 10
-    model_type: str = "oai"  # Can be "hf", "openai", etc
+    model_type: str = "hf"  # Can be "hf", "openai", etc
     model_path: str = MISSING  # Can be HF model name or path to local model
     logits_only: bool = False
     do_sample: bool = True
@@ -32,7 +32,7 @@ class ModelConfig(BaseConfig):
 @dataclass
 class PromptModelConfig(ModelConfig):
     model_name: str = "prompt"
-    model_path: str = "gpt-4"  # Salesforce/codegen-2B-mono"
+    model_path: str = "Salesforce/codegen-350M-mono"
 
 
 @dataclass
@@ -202,12 +202,15 @@ class P3Config(BaseConfig):
         default_factory=lambda: [3]
     )  # indices of selection of puzzles to evaluate with
     save_results: bool = True
-    save_result_obj: bool = False  # if saving results, include the whole output text from model for each iteration (which can get long)
-    probsol: bool = True  # generate new problem+solution pairs from given problems instead of just solutions to given problems
-    eval_k: int = (
-        -1
-    )  # set >0 to evaluate pass@k of previous runs using this k, instead of doing a new run
-    eval_timestamp: str = ""  # optionally provide timestamp of run to eval pass@k, otherwise eval with latest run of every problem
+    save_result_obj: bool = False  # if saving results, include the whole output
+    # text from model for each iteration (which can get long)
+    probsol: bool = True  # generate new problem+solution pairs from given
+    # problems instead of just solutions to given problems
+    # set eval_k >0 to evaluate pass@k of previous runs using this k, instead of
+    # doing a new run
+    eval_k: int = -1
+    eval_timestamp: str = ""  # optionally provide timestamp of run to eval
+    # pass@k, otherwise eval with latest run of every problem
 
 
 def register_configstore() -> ConfigStore:

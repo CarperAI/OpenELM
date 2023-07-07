@@ -164,7 +164,8 @@ def pass_at_k(n, c, k):
 
 def type_check(typ, obj):
     """
-    Checks the object is the correct type. Supports only bool, int, float, str, and (possibly nested) lists of these
+    Checks the object is the correct type. Supports only bool, int, float, str,
+    and (possibly nested) lists of these
 
     From: https://github.com/microsoft/PythonProgrammingPuzzles/blob/v0.2/puzzle_generator.py
     """

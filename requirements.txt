@@ -10,6 +10,7 @@ requests
 Flask
 scikit-learn
 matplotlib
-langchain
+langchain==0.0.225
+typing_extensions==4.5
 openai
 plotly
