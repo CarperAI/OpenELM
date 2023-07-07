@@ -397,8 +397,6 @@ class MAPElitesBase:
             self.fitness_history["mean"].append(self.mean_fitness())
             self.fitness_history["qd_score"].append(self.qd_score())
             self.fitness_history["niches_filled"].append(self.niches_filled())
-            self.fitness_history["qd_score"].append(self.qd_score())
-            self.fitness_history["niches_filled"].append(self.niches_filled())
 
             if (
                 self.save_snapshot_interval is not None
