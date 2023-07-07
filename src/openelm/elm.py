@@ -3,12 +3,14 @@ from typing import Optional
 from hydra.core.hydra_config import HydraConfig
 
 from openelm.configs import DiffModelConfig, ELMConfig, PromptModelConfig
-from openelm.environments import ENVS_DICT, QD_DICT
+from openelm.environments import QD_DICT, BaseEnvironment, load_env
 from openelm.mutation_model import DiffModel, MutationModel, PromptModel
 
 
 class ELM:
-    def __init__(self, config: ELMConfig) -> None:
+    def __init__(
+        self, config: ELMConfig, env: Optional[BaseEnvironment] = None
+    ) -> None:
         """
         The main class of ELM.
 
@@ -17,6 +19,7 @@ class ELM:
 
         Args:
             config: The config containing the diff model, environment, and QD algorithm.
+            env (Optional): An optional environment to pass in. Defaults to None.
         """
         self.config: ELMConfig = config
         self.config.qd.output_dir = HydraConfig.get().runtime.output_dir
@@ -25,12 +28,15 @@ class ELM:
         if isinstance(self.config.model, PromptModelConfig):
             self.mutation_model: MutationModel = PromptModel(self.config.model)
         elif isinstance(self.config.model, DiffModelConfig):
+            print("Diff model")
             self.mutation_model = DiffModel(self.config.model)
-
-        self.environment = ENVS_DICT[env_name](
-            config=self.config.env,
-            mutation_model=self.mutation_model,
-        )
+        if env is None:
+            self.environment = load_env(env_name)(
+                config=self.config.env,
+                mutation_model=self.mutation_model,
+            )
+        else:
+            self.environment = env
         self.qd_algorithm = QD_DICT[qd_name](
             env=self.environment,
             config=self.config.qd,

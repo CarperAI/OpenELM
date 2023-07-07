@@ -145,7 +145,7 @@ class Map:
 
 class MAPElitesBase:
     """
-    Class implementing MAP-Elites, a quality-diversity algorithm.
+    Base class for MAP-Elites, a quality-diversity algorithm.
 
     MAP-Elites creates a map of high perfoming solutions at each point in a
     discretized behavior space. First, the algorithm generates some initial random
@@ -214,7 +214,6 @@ class MAPElitesBase:
     def _init_maps(
         self, init_map: Optional[Map] = None, log_snapshot_dir: Optional[str] = None
     ):
-        # TODO: abstract all maps out to a single class.
         # perfomance of niches
         if init_map is None:
             self.map_dims = self._get_map_dimensions()
@@ -252,21 +251,21 @@ class MAPElitesBase:
             with open(log_path / "config.json") as f:
                 old_config = json.load(f)
 
-            snapshot_path = log_path / "maps.npz"
+            snapshot_path = log_path / "maps.pkl"
             assert os.path.isfile(
                 snapshot_path
-            ), f'{log_path} does not contain map snapshot "maps.npz"'
+            ), f'{log_path} does not contain map snapshot "maps.pkl"'
             # first, load arrays and set them in Maps
-            npz_file = np.load(
-                snapshot_path, allow_pickle=True
-            )  # (history_len, num_bins_1, num_bins_2, ...)
+            # Load maps from pickle file
+            with open(snapshot_path, "rb") as f:
+                maps = pickle.load(f)
             assert (
-                self.genomes.array.shape == npz_file["genomes"].shape
-            ), f"expected shape of map doesn't match init config settings, got {self.genomes.array.shape} and {npz_file['genomes'].shape}"
+                self.genomes.array.shape == maps["genomes"].shape
+            ), f"expected shape of map doesn't match init config settings, got {self.genomes.array.shape} and {maps['genomes'].shape}"
 
-            self.genomes.array = npz_file["genomes"]
-            self.fitnesses.array = npz_file["fitnesses"]
-            self.nonzero.array = npz_file["nonzero"]
+            self.genomes.array = maps["genomes"]
+            self.fitnesses.array = maps["fitnesses"]
+            self.nonzero.array = maps["nonzero"]
             # check if one of the solutions in the snapshot contains the expected genotype type for the run
             assert not np.all(
                 self.nonzero.array is False
@@ -279,8 +278,12 @@ class MAPElitesBase:
             # compute top indices
             if hasattr(self.fitnesses, "top"):
                 top_array = np.array(self.fitnesses.top)
-                for cell_idx in np.ndindex(self.fitnesses.array.shape[1:]): # all indices of cells in map
-                    nonzero = np.nonzero(self.fitnesses.array[(slice(None),) + cell_idx] != -np.inf) # check full history depth at cell
+                for cell_idx in np.ndindex(
+                    self.fitnesses.array.shape[1:]
+                ):  # all indices of cells in map
+                    nonzero = np.nonzero(
+                        self.fitnesses.array[(slice(None),) + cell_idx] != -np.inf
+                    )  # check full history depth at cell
                     if len(nonzero[0]) > 0:
                         top_array[cell_idx] = nonzero[0][-1]
                 # correct stats
@@ -332,7 +335,7 @@ class MAPElitesBase:
         if self.niches_filled() == 0:
             max_fitness = -np.inf
             max_genome = None
-        else: # take max fitness in case of filled loaded snapshot
+        else:  # take max fitness in case of filled loaded snapshot
             max_fitness = self.max_fitness()
             max_index = np.where(self.fitnesses.latest == max_fitness)
             max_genome = self.genomes[max_index]
@@ -394,8 +397,14 @@ class MAPElitesBase:
             self.fitness_history["mean"].append(self.mean_fitness())
             self.fitness_history["qd_score"].append(self.qd_score())
             self.fitness_history["niches_filled"].append(self.niches_filled())
+            self.fitness_history["qd_score"].append(self.qd_score())
+            self.fitness_history["niches_filled"].append(self.niches_filled())
 
-            if self.save_snapshot_interval is not None and n_steps != 0 and n_steps % self.save_snapshot_interval == 0:
+            if (
+                self.save_snapshot_interval is not None
+                and n_steps != 0
+                and n_steps % self.save_snapshot_interval == 0
+            ):
                 self.save_results(step=n_steps)
 
         self.current_max_genome = max_genome
@@ -432,13 +441,14 @@ class MAPElitesBase:
         # create folder for dumping results and metadata
         output_folder = Path(self.config.output_dir) / f"step_{step}"
         os.makedirs(output_folder, exist_ok=True)
-
-        np.savez_compressed(
-            (output_folder / "maps.npz"),
-            fitnesses=self.fitnesses.array,
-            genomes=self.genomes.array,
-            nonzero=self.nonzero.array,
-        )
+        maps = {
+            "fitnesses": self.fitnesses.array,
+            "genomes": self.genomes.array,
+            "nonzero": self.nonzero.array,
+        }
+        # Save maps as pickle file
+        with open((output_folder / "maps.pkl"), "wb") as f:
+            pickle.dump(maps, f)
         if self.save_history:
             with open((output_folder / "history.pkl"), "wb") as f:
                 pickle.dump(self.history, f)
@@ -504,6 +514,7 @@ class MAPElitesBase:
 
             plt.figure()
             plt.pcolor(map2d, cmap="inferno")
+            plt.colorbar()
             plt.savefig(f"{save_path}/MAPElites_vis.png")
 
     def visualize_individuals(self):
@@ -585,8 +596,9 @@ class CVTMAPElites(MAPElitesBase):
     """
     Class implementing CVT-MAP-Elites, a variant of MAP-Elites.
 
-    This replaces the grid of niches in MAP-Elites with niches generated using a Centroidal Voronoi Tessellation.
-    Unlike in MAP-Elites, we have a fixed number of total niches rather than a fixed number of subdivisions per dimension.
+    This replaces the grid of niches in MAP-Elites with niches generated using a
+    Centroidal Voronoi Tessellation. Unlike in MAP-Elites, we have a fixed number
+    of total niches rather than a fixed number of subdivisions per dimension.
     """
 
     def __init__(

@@ -7,6 +7,7 @@ from typing import Any, Optional
 
 import numpy as np
 import torch
+from langchain.chat_models import ChatOpenAI
 from langchain.llms import OpenAI
 from langchain.llms.base import LLM
 from langchain.schema import Generation, LLMResult
@@ -30,7 +31,10 @@ def get_model(config: ModelConfig):
             # TODO: rename config option?
             "model_name": config.model_path,
         }
-        return OpenAI(**cfg)
+        if "3.5" in config.model_path or "gpt-4" in config.model_path:
+            return ChatOpenAI(**cfg)
+        else:
+            return OpenAI(**cfg)
     else:
         raise NotImplementedError
 
@@ -57,7 +61,11 @@ class PromptModel(MutationModel):
         self.model: LLM = get_model(self.config)
 
     def generate_programs(
-        self, prompt_dicts: list[dict[str, str]], local_scope_truncate: bool, do_trunc=True, **kwargs
+        self,
+        prompt_dicts: list[dict[str, str]],
+        local_scope_truncate: bool,
+        do_trunc=True,
+        **kwargs
     ) -> list[str]:
         """
         Generate new programs from a batch of programs.
@@ -76,11 +84,19 @@ class PromptModel(MutationModel):
         """
         prompts = [prompt_dict["prompt"] for prompt_dict in prompt_dicts]
         templates = [prompt_dict["template"] for prompt_dict in prompt_dicts]
-        results: LLMResult = self.model.generate(prompts=prompts)
+        if "3.5" in self.config.model_path or "gpt-4" in self.config.model_path:
+            results = []
+            for prompt in prompts:
+                results.append(self.model.generate([prompt]))
+            completions: list[str] = [
+                llmresult.generations[0][0].text for llmresult in results
+            ]
+        else:
+            results = self.model.generate(prompts=prompts)
+            completions = [
+                gen.text for sublist in results.generations for gen in sublist
+            ]
         # Flatten nested list of generations
-        completions: list[str] = [
-            gen.text for sublist in results.generations for gen in sublist
-        ]
 
         if do_trunc:
             trunc = functools.partial(truncate, only_local_scope=local_scope_truncate)
@@ -89,7 +105,8 @@ class PromptModel(MutationModel):
             ]
         else:
             truncations: list[str] = [
-                templates[i] + '\n    ' + completions[i] for i in range(len(completions))
+                templates[i] + "\n    " + completions[i]
+                for i in range(len(completions))
             ]
 
         return truncations
@@ -102,6 +119,7 @@ class DiffModel(PromptModel):
     def generate_programs(
         self, prompt_dicts: list[dict[str, str]], local_scope_truncate: bool, **kwargs
     ) -> list[str]:
+        # local_scope_truncate = False
         prompts = [prompt_dict["prompt"] for prompt_dict in prompt_dicts]
         templates = [prompt_dict["template"] for prompt_dict in prompt_dicts]
         results: LLMResult = self.model.generate(prompts=prompts)
@@ -222,8 +240,10 @@ class HuggingFaceLLM(LLM):
                         tokens[:, input_ids_len:, ...]
                     )
                 generations = [Generation(text=text) for text in texts]
-            # Index generations by prompt
-            for prompt, generation in zip(prompts[start_index:end_index], generations):
-                generations_dict[prompt].append(generation)
+
+            for j, prompt in enumerate(prompts[start_index:end_index]):
+                slice_start = j * self.config.num_return_sequences
+                slice_end = slice_start + self.config.num_return_sequences
+                generations_dict[prompt].extend(generations[slice_start:slice_end])
 
         return LLMResult(generations=list(generations_dict.values()))
