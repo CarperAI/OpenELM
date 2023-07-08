@@ -95,7 +95,15 @@ class Map:
         return insert_idx
 
     def insert_individual_at_depth(self, map_ix, depth, individual):
-        self.array[(depth,) + map_ix] = individual
+        indices_at_bin = (slice(None),) + map_ix
+        new_bin_individuals = np.concatenate(
+            (
+                self.array[indices_at_bin][1 : depth + 1],
+                np.array([individual]),
+                self.array[indices_at_bin][depth + 1 :],
+            )
+        )
+        self.array[indices_at_bin] = new_bin_individuals
 
     @property
     def latest(self) -> np.ndarray:
