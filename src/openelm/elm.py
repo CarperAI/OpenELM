@@ -3,7 +3,7 @@ from typing import Optional
 from hydra.core.hydra_config import HydraConfig
 
 from openelm.configs import DiffModelConfig, ELMConfig, PromptModelConfig
-from openelm.environments import QD_DICT, BaseEnvironment, load_env
+from openelm.environments import BaseEnvironment, load_algorithm, load_env
 from openelm.mutation_model import DiffModel, MutationModel, PromptModel
 
 
@@ -37,7 +37,7 @@ class ELM:
             )
         else:
             self.environment = env
-        self.qd_algorithm = QD_DICT[qd_name](
+        self.qd_algorithm = load_algorithm(qd_name)(
             env=self.environment,
             config=self.config.qd,
         )

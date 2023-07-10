@@ -7,13 +7,13 @@ from langchain.chains import LLMChain
 from transformers import pipeline
 
 from openelm.configs import PromptEnvConfig
-from openelm.environments.env_utils import (
+from openelm.environments.base import BaseEnvironment, Genotype, Phenotype
+from openelm.environments.prompt.utils import (
     AnimalPromptTask,
     AntonymPromptTask,
     COTPromptTask,
     ToyPromptTask,
 )
-from openelm.environments.environments import BaseEnvironment, Genotype, Phenotype
 from openelm.mutation_model import MutationModel
 
 
@@ -53,12 +53,14 @@ class PromptGenotype(Genotype):
     """
     Genotype wrapper for a LangChain template.
 
-    This consists of a base format for all individuals, as well as individual-specific fields which will be evolved.
+    This consists of a base format for all individuals, as well as
+    individual-specific fields which will be evolved.
     Remaining fields will be filled in at evaluation time.
 
     Args:
         prompt (PromptTemplate): The base template for all individuals.
-        fixed_inputs (dict[str, str], optional): Individual-specific fields to fill in. Defaults to None.
+        fixed_inputs (dict[str, str], optional): Individual-specific fields to
+        fill in. Defaults to None.
     """
 
     def __init__(
@@ -271,7 +273,8 @@ class PromptEvolution(BaseEnvironment[PromptGenotype]):
         Args:
             input_str: The string to rewrite.
             rewrite_instruction: String prompt template for the LLM
-            variable_name: The name of the variable in the template to replace with input_str
+            variable_name: The name of the variable in the template to replace
+            with input_str
         """
         rewrite_prompt = PromptTemplate(
             input_variables=[variable_name],
@@ -343,7 +346,8 @@ class PromptEvolution(BaseEnvironment[PromptGenotype]):
 
     def evaluate_template(self, eval_template, instruction_str, input_str, output_str):
         """
-        Evaluates a template on the log likelihood of the output_str, given the instruction_str and input_str.
+        Evaluates a template on the log likelihood of the output_str, given the
+        instruction_str and input_str.
 
         Args:
             eval_template: The template to evaluate.
@@ -352,7 +356,8 @@ class PromptEvolution(BaseEnvironment[PromptGenotype]):
             output_str: The output string.
 
         Returns:
-            The log likelihood of the tokens in the output string, given the instruction and input strings.
+            The log likelihood of the tokens in the output string, given the
+            instruction and input strings.
         """
         model = self.fitness_model.model.model
         tokenizer = self.fitness_model.model.tokenizer
@@ -361,7 +366,8 @@ class PromptEvolution(BaseEnvironment[PromptGenotype]):
         filled_prompt = partial_template.format(
             input_str=input_str, output_str=output_str
         )
-        # hack; replace the output string to figure out which token numbers correspond to the output (see APE)
+        # hack; replace the output string to figure out which token numbers
+        # correspond to the output (see APE)
         reference_prompt = partial_template.format(input_str=input_str, output_str="~")
 
         tokens_filled = tokenizer.encode(filled_prompt, return_tensors="pt")

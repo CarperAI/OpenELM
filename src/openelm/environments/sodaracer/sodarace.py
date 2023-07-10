@@ -6,7 +6,7 @@ import numpy as np
 import requests
 
 from openelm.configs import SodaraceEnvConfig
-from openelm.environments.environments import BaseEnvironment, Genotype, Phenotype
+from openelm.environments.base import BaseEnvironment, Genotype, Phenotype
 from openelm.environments.sodaracer import (
     CIRCLE,
     GALLOPER_PREREQ,

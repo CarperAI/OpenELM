@@ -1,8 +1,10 @@
+import shutil
+from pathlib import Path
+
 import numpy as np
 import pytest
-from pathlib import Path
-import shutil
 
+from openelm.algorithms.map_elites import CVTMAPElites, Map, MAPElites
 from openelm.configs import (
     CVTMAPElitesConfig,
     ImageEnvConfig,
@@ -10,13 +12,12 @@ from openelm.configs import (
     PromptModelConfig,
     StringEnvConfig,
 )
-from openelm.environments.environments import (
+from openelm.environments.base import (
     BaseEnvironment,
     FunctionOptim,
     ImageOptim,
     MatchString,
 )
-from openelm.map_elites import CVTMAPElites, Map, MAPElites
 from openelm.mutation_model import PromptModel
 
 
@@ -30,46 +31,46 @@ def test_map():
         dtype=float,
         history_length=history_length,
     )
-    fitnesses[0, 0] = -1.
-    fitnesses[0, 0] = -2.
+    fitnesses[0, 0] = -1.0
+    fitnesses[0, 0] = -2.0
 
-    fitnesses[1, 1] = 1.
-    fitnesses[1, 1] = 2.
-    fitnesses[1, 1] = 3.
-    fitnesses[1, 1] = 4.
-    fitnesses[1, 1] = 5.  # should wrap around
+    fitnesses[1, 1] = 1.0
+    fitnesses[1, 1] = 2.0
+    fitnesses[1, 1] = 3.0
+    fitnesses[1, 1] = 4.0
+    fitnesses[1, 1] = 5.0  # should wrap around
 
-    fitnesses[2, 2] = 1.
+    fitnesses[2, 2] = 1.0
 
-    fitnesses[1, 2] = 1.
-    fitnesses[1, 2] = -1.
-    fitnesses[1, 2] = 2.
-    fitnesses[1, 2] = -2.
+    fitnesses[1, 2] = 1.0
+    fitnesses[1, 2] = -1.0
+    fitnesses[1, 2] = 2.0
+    fitnesses[1, 2] = -2.0
     fitnesses[0, 2] = np.inf
 
     assert fitnesses.shape == (4, 3, 3)
     assert fitnesses.top.shape == (3, 3)
-    assert fitnesses.top[0, 0] == 1.
-    assert fitnesses.top[1, 1] == 0.
-    assert fitnesses.top[2, 2] == 0.
-    assert fitnesses.top[1, 2] == 3.
-    assert fitnesses.top[2, 1] == 3.
-    assert fitnesses.top[0, 2] == 0.
+    assert fitnesses.top[0, 0] == 1.0
+    assert fitnesses.top[1, 1] == 0.0
+    assert fitnesses.top[2, 2] == 0.0
+    assert fitnesses.top[1, 2] == 3.0
+    assert fitnesses.top[2, 1] == 3.0
+    assert fitnesses.top[0, 2] == 0.0
 
     latest = fitnesses.latest
     assert latest.shape == (3, 3)
-    assert latest[0, 0] == -2.
-    assert latest[1, 1] == 5.
-    assert latest[2, 2] == 1.
-    assert latest[1, 2] == -2.
+    assert latest[0, 0] == -2.0
+    assert latest[1, 1] == 5.0
+    assert latest[2, 2] == 1.0
+    assert latest[1, 2] == -2.0
     assert latest[2, 1] == -np.inf
     assert latest[0, 2] == np.inf
 
     assert fitnesses.min == -np.inf
-    assert fitnesses.min_finite == -2.
+    assert fitnesses.min_finite == -2.0
     assert fitnesses.max == np.inf
-    assert fitnesses.max_finite == 5.
-    assert fitnesses.mean == (-2. + 5 + 1 - 2) / 4
+    assert fitnesses.max_finite == 5.0
+    assert fitnesses.mean == (-2.0 + 5 + 1 - 2) / 4
 
 
 def test_empty_map():
@@ -91,7 +92,9 @@ def test_empty_map():
 
 def test_empty_mapelites():
     target_string = "AAA"
-    env: BaseEnvironment = MatchString(StringEnvConfig(target=target_string, batch_size=1))
+    env: BaseEnvironment = MatchString(
+        StringEnvConfig(target=target_string, batch_size=1)
+    )
     elites = MAPElites(env, MAPElitesConfig(map_grid_size=(2,), history_length=10))
     assert elites.fitnesses.min == -np.inf
     assert np.isnan(elites.fitnesses.min_finite)
@@ -103,7 +106,9 @@ def test_empty_mapelites():
 @pytest.mark.slow
 def test_cvt():
     target_string = "AAA"
-    env: BaseEnvironment = MatchString(StringEnvConfig(target=target_string, batch_size=1))
+    env: BaseEnvironment = MatchString(
+        StringEnvConfig(target=target_string, batch_size=1)
+    )
     elites = CVTMAPElites(env, CVTMAPElitesConfig(n_niches=5, history_length=100))
     result = elites.search(init_steps=10, total_steps=3000)
 
@@ -116,7 +121,9 @@ def test_cvt():
 @pytest.mark.slow
 def test_cvt2():
     target_string = "Evolve"
-    env: BaseEnvironment = MatchString(StringEnvConfig(target=target_string, batch_size=10))
+    env: BaseEnvironment = MatchString(
+        StringEnvConfig(target=target_string, batch_size=10)
+    )
     elites = CVTMAPElites(env, CVTMAPElitesConfig(n_niches=10, history_length=100))
     result = elites.search(init_steps=20, total_steps=5000)
 
@@ -128,7 +135,9 @@ def test_cvt2():
 @pytest.mark.slow
 def test_string_matching():
     target_string = "AAA"
-    env: BaseEnvironment = MatchString(StringEnvConfig(target=target_string, batch_size=1))
+    env: BaseEnvironment = MatchString(
+        StringEnvConfig(target=target_string, batch_size=1)
+    )
     elites = MAPElites(env, MAPElitesConfig(map_grid_size=(2,), history_length=10))
     result = elites.search(init_steps=100, total_steps=3000)
     elites.plot_fitness()
@@ -148,7 +157,9 @@ def test_string_matching():
 @pytest.mark.slow
 def test_string_matching2():
     target_string = "Evolve"
-    env: BaseEnvironment = MatchString(StringEnvConfig(target=target_string, batch_size=8))
+    env: BaseEnvironment = MatchString(
+        StringEnvConfig(target=target_string, batch_size=8)
+    )
     elites = MAPElites(env, MAPElitesConfig(map_grid_size=(3,), history_length=1))
     result = elites.search(init_steps=2_000, total_steps=20_000)
     elites.plot_fitness()
@@ -166,8 +177,13 @@ def test_function_optim():
 
 @pytest.mark.slow
 def test_image_optim():
-    env = ImageOptim(ImageEnvConfig(debug=False), PromptModel(PromptModelConfig(model_path="Salesforce/codegen-2B-mono", gpus=2)))
-    elites = MAPElites(env, MAPElitesConfig(map_grid_size=(2,), history_length=10, save_history=True))
+    env = ImageOptim(
+        ImageEnvConfig(debug=False),
+        PromptModel(PromptModelConfig(model_path="Salesforce/codegen-2B-mono", gpus=2)),
+    )
+    elites = MAPElites(
+        env, MAPElitesConfig(map_grid_size=(2,), history_length=10, save_history=True)
+    )
     result = elites.search(init_steps=10, total_steps=50)
 
     elites.plot_fitness()
@@ -185,17 +201,43 @@ def test_load_snapshot():
     target_string = "GaV"
 
     # run map-elites for 30 steps, while saving intermediate checkpoint
-    env: BaseEnvironment = MatchString(StringEnvConfig(target=target_string, batch_size=8))
-    elites_1 = MAPElites(env, MAPElitesConfig(map_grid_size=(3,), history_length=1, save_snapshot_interval=15, output_dir=test_dir, seed=42, save_np_rng_state=True))
+    env: BaseEnvironment = MatchString(
+        StringEnvConfig(target=target_string, batch_size=8)
+    )
+    elites_1 = MAPElites(
+        env,
+        MAPElitesConfig(
+            map_grid_size=(3,),
+            history_length=1,
+            save_snapshot_interval=15,
+            output_dir=test_dir,
+            seed=42,
+            save_np_rng_state=True,
+        ),
+    )
     result_1 = elites_1.search(init_steps=20, total_steps=30)
 
     # resume map-elites run from snapshot at step 15, then search up to step 30 as before
     snapshot_to_load = test_dir / "step_15"
-    elites_2 = MAPElites(env, MAPElitesConfig(map_grid_size=(3,), history_length=1, save_snapshot_interval=15, log_snapshot_dir=snapshot_to_load, output_dir=test_dir, load_np_rng_state=True))
+    elites_2 = MAPElites(
+        env,
+        MAPElitesConfig(
+            map_grid_size=(3,),
+            history_length=1,
+            save_snapshot_interval=15,
+            log_snapshot_dir=snapshot_to_load,
+            output_dir=test_dir,
+            load_np_rng_state=True,
+        ),
+    )
     result_2 = elites_2.search(init_steps=20, total_steps=30)
 
-    assert result_1 == result_2, f"deterministic runs lead to different results from search ({result_1}), ({result_2})"
-    assert (elites_1.fitnesses.array == elites_2.fitnesses.array).all(), "fitness map from resumed run not same as run from scratch"
+    assert (
+        result_1 == result_2
+    ), f"deterministic runs lead to different results from search ({result_1}), ({result_2})"
+    assert (
+        elites_1.fitnesses.array == elites_2.fitnesses.array
+    ).all(), "fitness map from resumed run not same as run from scratch"
 
 
 @pytest.mark.slow
@@ -208,14 +250,40 @@ def test_load_snapshot_with_history():
     target_string = "GaV"
 
     # run map-elites for 30 steps, while saving intermediate checkpoint
-    env: BaseEnvironment = MatchString(StringEnvConfig(target=target_string, batch_size=8))
-    elites_1 = MAPElites(env, MAPElitesConfig(map_grid_size=(3,), history_length=5, save_snapshot_interval=15, output_dir=test_dir, seed=42, save_np_rng_state=True))
+    env: BaseEnvironment = MatchString(
+        StringEnvConfig(target=target_string, batch_size=8)
+    )
+    elites_1 = MAPElites(
+        env,
+        MAPElitesConfig(
+            map_grid_size=(3,),
+            history_length=5,
+            save_snapshot_interval=15,
+            output_dir=test_dir,
+            seed=42,
+            save_np_rng_state=True,
+        ),
+    )
     result_1 = elites_1.search(init_steps=20, total_steps=30)
 
     # resume map-elites run from snapshot at step 15, then search up to step 30 as before
     snapshot_to_load = test_dir / "step_15"
-    elites_2 = MAPElites(env, MAPElitesConfig(map_grid_size=(3,), history_length=5, save_snapshot_interval=15, log_snapshot_dir=snapshot_to_load, output_dir=test_dir, load_np_rng_state=True))
+    elites_2 = MAPElites(
+        env,
+        MAPElitesConfig(
+            map_grid_size=(3,),
+            history_length=5,
+            save_snapshot_interval=15,
+            log_snapshot_dir=snapshot_to_load,
+            output_dir=test_dir,
+            load_np_rng_state=True,
+        ),
+    )
     result_2 = elites_2.search(init_steps=20, total_steps=30)
 
-    assert result_1 == result_2, f"deterministic runs lead to different results from search ({result_1}), ({result_2})"
-    assert (elites_1.fitnesses.array == elites_2.fitnesses.array).all(), "fitness map from resumed run not same as run from scratch"
+    assert (
+        result_1 == result_2
+    ), f"deterministic runs lead to different results from search ({result_1}), ({result_2})"
+    assert (
+        elites_1.fitnesses.array == elites_2.fitnesses.array
+    ).all(), "fitness map from resumed run not same as run from scratch"

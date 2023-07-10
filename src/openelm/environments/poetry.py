@@ -5,8 +5,8 @@ import numpy as np
 from langchain.schema import HumanMessage
 
 from openelm.configs import QDEnvConfig
-from openelm.environments.environments import BaseEnvironment, Genotype, Phenotype
-from openelm.environments.prompt_env import PromptGenotype
+from openelm.environments.base import BaseEnvironment
+from openelm.environments.prompt.prompt import PromptGenotype
 from openelm.mutation_model import MutationModel, get_model
 
 
@@ -62,7 +62,7 @@ Respond in JSON with the keys "genre" and "tone".
             self.genre = json.loads(diversity_result)["genre"]
             self.tone = json.loads(diversity_result)["tone"]
             return float(self.quality)
-        except Exception as e:
+        except Exception:
             return -np.inf
 
     def to_phenotype(self) -> Optional[np.ndarray]:

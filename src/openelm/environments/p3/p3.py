@@ -11,7 +11,7 @@ from sklearn.preprocessing import StandardScaler
 from transformers import pipeline
 
 from openelm.configs import P3ProblemEnvConfig, P3ProbSolEnvConfig
-from openelm.environments.environments import BaseEnvironment, Genotype, Phenotype
+from openelm.environments.base import BaseEnvironment, Genotype, Phenotype
 from openelm.environments.p3 import (
     P3_IMPORTS,
     P3_PROBLEM_LONG_SEED,
@@ -184,7 +184,7 @@ class P3Problem(BaseEnvironment[P3Solution]):
             prompt_str += "\n"
         else:
             prompt_str += (
-                f"\n\n# Old version of g6()" f"\n# TODO: fix bugs in the code below\n"
+                "\n\n# Old version of g6()\n# TODO: fix bugs in the code below\n"
             )
             if isinstance(code_batch, list):
                 # TODO: get nearby genotypes
@@ -235,7 +235,7 @@ class P3Problem(BaseEnvironment[P3Solution]):
                     processes=self.config.processes,
                     debug=self.config.debug,
                 )
-            except Exception as e:
+            except Exception:
                 return self.generate_programs(code_batch)
 
         results = [
@@ -482,10 +482,10 @@ class P3ProbSol(BaseEnvironment[P3ProbSolResult]):
             i_g6 = program_str.find("def g6_1(")
             lines = program_str[:i_g6].strip().split("\n")
             new_lines = []
-            for l in lines:
-                if l.strip().startswith("#") or len(l.strip()) == 0:
+            for line in lines:
+                if line.strip().startswith("#") or len(line.strip()) == 0:
                     continue
-                new_lines.append(l)
+                new_lines.append(line)
             program_str = "\n".join(new_lines) + "\n\n" + program_str[i_g6:]
             program_str = program_str.strip()
 
@@ -525,7 +525,7 @@ class P3ProbSol(BaseEnvironment[P3ProbSolResult]):
                     processes=self.config.processes,
                     debug=self.config.debug,
                 )
-            except Exception as e:
+            except Exception:
                 return self.generate_programs(code_batch)
 
         results = [
@@ -564,10 +564,10 @@ class P3ProbSol(BaseEnvironment[P3ProbSolResult]):
             debug=self.config.debug,
         )
 
-        if result[0] != True:
+        if result[0] is True:
             return -np.inf
 
-        ### Do pass@k eval ###
+        # Do pass@k eval
 
         # Get f6_2() and make it the new f6()
         problem_str = probsol.problem_func.replace("def f6_2(", "def f6(")
@@ -576,10 +576,10 @@ class P3ProbSol(BaseEnvironment[P3ProbSolResult]):
         # Remove comments with # (and remove empty lines)
         lines = problem_str.strip().split("\n")
         new_lines = []
-        for l in lines:
-            if l.strip().startswith("#") or len(l.strip()) == 0:
+        for line in lines:
+            if line.strip().startswith("#") or len(line.strip()) == 0:
                 continue
-            new_lines.append(l)
+            new_lines.append(line)
         problem_str = "\n".join(new_lines)
         # Get solution_preamble for g6()
         i_end_preamble = probsol.solution_func.find("):")
@@ -599,7 +599,7 @@ class P3ProbSol(BaseEnvironment[P3ProbSolResult]):
 
         c = 0
         for s in solutions:
-            if p3_problem.evaluate_solution(s) == True:
+            if p3_problem.evaluate_solution(s) is True:
                 c += 1
 
         pak = pass_at_k(len(solutions), c, self.config.eval_k)

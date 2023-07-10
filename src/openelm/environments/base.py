@@ -11,7 +11,7 @@ import numpy as np
 import requests
 
 from openelm.configs import EnvConfig, ImageEnvConfig, StringEnvConfig
-from openelm.environments.env_utils import NULL_SEED, get_image_target
+from openelm.environments.utils import NULL_SEED, get_image_target
 from openelm.mutation_model import MutationModel
 from openelm.utils.code_eval import pool_exec_processes
 
