@@ -13,6 +13,14 @@ We want to support users with many different compute profiles!
 # Install
 `pip install openelm`
 
+To use the sodarace environment, you must first `pip install swig`.
+
+Then:
+
+`pip install openelm[sodaracer]`
+
+See the pyproject.toml for further install options.
+
 # Features
 
 ### LLM integration with evolutionary algorithms
