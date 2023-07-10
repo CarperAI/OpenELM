@@ -86,4 +86,8 @@ triton = [
     "tritonclient[all]",
 ]
 notebook = ["ipython"]
-sodaracer = ["pygame"]
+sodaracer = [
+    "swig>=4.1.0",
+    "box2d-py==2.3.8",
+    "pygame"
+]
