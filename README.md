@@ -53,3 +53,6 @@ To use the code execution sandbox, see the [sandboxing readme](https://github.co
 
 ## Triton
 We also have code available to run models in Nvidia's Triton Inference Server. See the [Triton Readme](https://github.com/CarperAI/OpenELM/blob/main/src/openelm/codegen/triton_utils/readme.md) to get started
+
+# Contributing
+If you'd like to contribute or have questions, go to the #openelm channel on the [CarperAI discord](https://discord.gg/canadagoose)!
