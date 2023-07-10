@@ -139,7 +139,7 @@ Winds whisper; normality reigns.
         results = []
         for prompt in prompt_list:
             results.append(
-                self.mutation_model([HumanMessage(content=prompt["prompt"])]).content
+                self.mutation_model(HumanMessage(content=prompt["prompt"]).content)
             )
         return [PoetryGenotype(poem=c) for c in results]
 
@@ -148,7 +148,7 @@ Winds whisper; normality reigns.
         results = []
         for prompt in prompt_list:
             results.append(
-                self.mutation_model([HumanMessage(content=prompt["prompt"])]).content
+                self.mutation_model(HumanMessage(content=prompt["prompt"]).content)
             )
         return [PoetryGenotype(poem=c) for c in results]
 

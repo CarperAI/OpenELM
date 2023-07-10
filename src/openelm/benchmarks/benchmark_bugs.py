@@ -26,7 +26,7 @@ class BenchmarkBugsConfig(BaseConfig):
             "run": {"dir": "logs/benchmarks/bugs/${hydra.job.override_dirname}"}
         }
     )
-    model_path: str = "/fsx/diff_models/diff_16b_prelim"
+    model_path: str = "CarperAI/diff-codegen-2b-v2"
     bugs_data_path: str = "/fsx/shared/diff_benchmark.json"
     mode: str = "diff"
     seed: Optional[int] = None
@@ -40,12 +40,12 @@ class BenchmarkBugsConfig(BaseConfig):
     top_p: float = 0.95
     gen_max_len: int = 256
     batch_size: int = 32
-    n_trials: int = 3200
+    n_trials: int = 500
     n_bugs_trials: int = 100
     timeout: float = 5.0
     verbose: bool = True
-    tasks: list[str] = field(default_factory=lambda: ["bugs"])
-    n_bugs: list[int] = field(default_factory=lambda: [1, 2, 3, 4, 5])
+    tasks: list[str] = field(default_factory=lambda: ["parity"])
+    n_bugs: list[int] = field(default_factory=lambda: [1])
     temp_samples: list[float] = field(default_factory=lambda: [0.8])
     sweep: bool = False
 
@@ -95,6 +95,7 @@ class BenchmarkBugs:
             elif self.cfg.mode == "diff":
                 eval_results = []
                 for text in completions:
+                    # print(text)
                     # split the diff text according to <NME>, <BEF>, <MSG>, <DFF>.
                     parsed: dict = split_diff(text)
                     # truncate the diff hunk at the first line not starting with
@@ -108,6 +109,7 @@ class BenchmarkBugs:
                         #   2. it ignores invalid lines (not starting with " ",
                         #   "+" or "-" and not being "@@ ... @@").
                         eval_results.append(apply_diff(function_str, diff_hunk))
+                        # print("Patched!")
                     else:
                         # Invalid format. No patching.
                         eval_results.append(function_str)

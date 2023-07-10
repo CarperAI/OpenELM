@@ -1,16 +1,61 @@
-from typing import Optional
+from typing import Any, Optional
 
 from hydra.core.hydra_config import HydraConfig
 
 from openelm.configs import DiffModelConfig, ELMConfig, PromptModelConfig
-from openelm.environments import BaseEnvironment, load_algorithm, load_env
 from openelm.mutation_model import DiffModel, MutationModel, PromptModel
 
 
+def load_env(env_name: str) -> Any:
+    if env_name == "sodarace":
+        from openelm.environments.sodaracer.sodarace import Sodarace
+
+        return Sodarace
+    elif env_name == "image_evolution":
+        from openelm.environments.base import ImageOptim
+
+        return ImageOptim
+    elif env_name == "match_string":
+        from openelm.environments.base import MatchString
+
+        return MatchString
+    elif env_name == "function_optim":
+        from openelm.environments.base import FunctionOptim
+
+        return FunctionOptim
+    elif env_name == "p3_probsol":
+        from openelm.environments.p3.p3 import P3ProbSol
+
+        return P3ProbSol
+    elif env_name == "p3_problem":
+        from openelm.environments.p3.p3 import P3Problem
+
+        return P3Problem
+    elif env_name == "prompt_evolution":
+        from openelm.environments.prompt.prompt import PromptEvolution
+
+        return PromptEvolution
+    elif env_name == "qdaif":
+        from openelm.environments.poetry import PoetryEvolution
+
+        return PoetryEvolution
+    else:
+        raise ValueError(f"Unknown environment {env_name}")
+
+
+def load_algorithm(algorithm_name: str) -> Any:
+    if algorithm_name == "mapelites":
+        from openelm.algorithms.map_elites import MAPElites
+
+        return MAPElites
+    elif algorithm_name == "cvtmapelites":
+        from openelm.algorithms.map_elites import CVTMAPElites
+
+        return CVTMAPElites
+
+
 class ELM:
-    def __init__(
-        self, config: ELMConfig, env: Optional[BaseEnvironment] = None
-    ) -> None:
+    def __init__(self, config: ELMConfig, env: Optional[Any] = None) -> None:
         """
         The main class of ELM.
 
