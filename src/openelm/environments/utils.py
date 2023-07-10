@@ -7,7 +7,7 @@ def get_image_target(name: str) -> np.ndarray:
         for y in range(32):
             for x in range(32):
                 if (y - 16) ** 2 + (x - 16) ** 2 <= 100:  # a radius-10 circle
-                    target[y, x] = np.array([1, 1, 0])
+                    target[y, x] = np.array([255, 255, 0])
     else:
         raise NotImplementedError(f"Image target {name} not implemented")
     return target
@@ -21,3 +21,5 @@ def draw():
 \t\t\tpic[x, y] = np.array([0, 0, 255])
 \treturn pic
 """
+
+NULL_SEED: str = ""

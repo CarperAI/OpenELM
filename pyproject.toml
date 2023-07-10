@@ -89,3 +89,4 @@ triton = [
     "tritonclient[all]",
 ]
 notebook = ["ipython"]
+sodaracer = ["pygame"]

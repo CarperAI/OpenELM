@@ -16,6 +16,7 @@ from typing import Any
 import numpy as np
 from Box2D import Box2D as b2
 
+from openelm.environments.sodaracer.box2d_examples.framework import Framework, main
 from openelm.environments.sodaracer.helpers import (
     Bone,
     DistanceAccessor,
@@ -24,10 +25,13 @@ from openelm.environments.sodaracer.helpers import (
 )
 
 
-class IESoRWorld:
+class IESoRWorld(Framework):
     """Class for the Sodarace simulation."""
 
-    def __init__(self, canvas_size: tuple[int, int] = (200, 150)):
+    name: "IESoRWorld"
+
+    def __init__(self, canvas_size: tuple[int, int] = (150, 200)):
+        # super(IESoRWorld, self).__init__()
         """
         Initialize the world.
 
@@ -51,15 +55,16 @@ class IESoRWorld:
         self.bone_list: list = []
         self.muscle_list: list = []
 
-        self.gravity = b2.b2Vec2(0.0, -15.0)  # ??? Magic numbers.
+        self.gravity = b2.b2Vec2(0.0, -25.0)  # ??? Magic numbers.
         # Construct a world object, which will hold and simulate the rigid bodies.
 
+        # self.world.gravity = self.gravity
         self.world: b2.b2World = b2.b2World(self.gravity)
         self.world.autoClearForces = False
 
         self.groundBodyDef: b2.b2BodyDef = b2.b2BodyDef()
         self.groundBodyDef.type = b2.b2_staticBody
-        self.groundBodyDef.position = b2.b2Vec2(0.0, -18.0)
+        self.groundBodyDef.position = b2.b2Vec2(0.0, -100.0)
 
         # Add ground body to the world
         self.groundBody: b2.b2Body = self._add_body_to_world(
@@ -68,7 +73,7 @@ class IESoRWorld:
         # Define the ground box shape.
         self.groundBox: b2.b2PolygonShape = b2.b2PolygonShape()
         # The extents are the half-widths of the box.
-        self.groundBox.SetAsBox(350.0, 10.0)
+        self.groundBox.SetAsBox(3500.0, 10.0)
         # Add the ground fixture to the ground body.
         self._add_shape_to_body(self.groundBody, self.groundBox)
 
@@ -200,11 +205,9 @@ class IESoRWorld:
                 # Fetch the original length of the distance joint, and add some
                 # fraction of that amount to the length, depending on the current
                 # location in the muscle cycle
-                length_calc: float = (
-                    1.0
-                    + muscle.amplitude
+                length_calc = muscle.original_length + (
+                    muscle.amplitude
                     * math.cos(self.radians + muscle.phase * 2 * math.pi)
-                    * muscle.original_length
                 )
                 # Set our length as the calculate value for this joint
                 DistanceAccessor.setLength(distance_joint, length_calc)
@@ -629,8 +632,12 @@ class SodaraceSimulator:
                 + [muscle.joint.bodyA.position[0] for muscle in self.world.muscle_list]
             )
             return abs(end + self.morphology["offsetX"])
-        except Exception as e:
-            print(e)
+        except Exception:
+            # print(e)
             # print(self.world.bone_list)
             # print(self.world.muscle_list)
             return -np.inf
+
+
+if __name__ == "__main__":
+    main(IESoRWorld)

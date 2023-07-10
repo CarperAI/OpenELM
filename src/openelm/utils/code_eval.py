@@ -150,26 +150,36 @@ def quadratic(a, b, c, x):
 
 def pass_at_k(n, c, k):
     """
+    Adapted from "Evaluating Large Language Models Trained on Code" (https://arxiv.org/abs/2107.03374)
+
     :param n: total number of samples
     :param c: number of correct samples
     :param k: k in pass@k
     """
-    if n - c < k: return 1.0
+    assert n >= k
+    if n - c < k:
+        return 1.0
     return 1.0 - np.prod(1.0 - k / np.arange(n - c + 1, n + 1))
+
 
 def type_check(typ, obj):
     """
-    Checks the object is the correct type. Supports only bool, int, float, str, and (possibly nested) lists of these
+    Checks the object is the correct type. Supports only bool, int, float, str,
+    and (possibly nested) lists of these
 
     From: https://github.com/microsoft/PythonProgrammingPuzzles/blob/v0.2/puzzle_generator.py
     """
     type_s = type_str(typ)  # convert to string if necessary
 
     nest_depth = type_s.count("List")
-    assert type_s.count("[") == nest_depth, "type_check only supports List for now, no Sets, Dicts, Tuples, ..."
+    assert (
+        type_s.count("[") == nest_depth
+    ), "type_check only supports List for now, no Sets, Dicts, Tuples, ..."
 
     assert type_s.startswith("List[" * nest_depth) and type_s.endswith("]" * nest_depth)
-    base_type = {"bool": bool, "int": int, "float": float, "str": str}[type_s[5 * nest_depth:len(type_s) - nest_depth]]
+    base_type = {"bool": bool, "int": int, "float": float, "str": str}[
+        type_s[5 * nest_depth : len(type_s) - nest_depth]
+    ]
 
     def helper(depth, o):
         if depth == 0:
@@ -178,6 +188,7 @@ def type_check(typ, obj):
             return type(o) is list and all(helper(depth - 1, i) for i in o)
 
     return helper(nest_depth, obj)
+
 
 def type_str(ty: type) -> str:
     """

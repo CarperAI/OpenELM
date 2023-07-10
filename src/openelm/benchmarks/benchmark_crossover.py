@@ -14,10 +14,9 @@ from hydra.core.config_store import ConfigStore
 from omegaconf import OmegaConf
 from tqdm import trange
 
+from openelm.algorithms.map_elites import MAPElites
 from openelm.codegen import model_setup, sample, truncate
-from openelm.configs import BaseConfig
-from openelm.environments import SQUARE_SEED
-from openelm.environments.environments import Sodarace, Sodaracer
+from openelm.configs import BaseConfig, MAPElitesConfig
 from openelm.environments.sodaracer import (
     CIRCLE,
     CPPN_FIXED,
@@ -33,8 +32,8 @@ from openelm.environments.sodaracer import (
     SQUARE_PREREQ,
     WHEEL,
 )
+from openelm.environments.sodaracer.sodarace import Sodarace, Sodaracer
 from openelm.environments.sodaracer.walker import Walker
-from openelm.map_elites import MAPElites
 from openelm.utils.code_eval import pool_exec_processes
 
 INSTRUCTIONS = {
@@ -126,12 +125,14 @@ class CrossoverBenchmark:
         ).to(self.device)
 
         sodarace_env = Sodarace(
-            seed=SQUARE_SEED,
+            seed=SEEDS_DICT["square"],
             config=self.cfg,
             diff_model=self.model,
             eval_ms=self.cfg.eval_ms,
         )
-        map_elites = MAPElites(env=sodarace_env, n_bins=12)
+        map_elites = MAPElites(
+            env=sodarace_env, config=MAPElitesConfig(map_grid_size=(12,))
+        )
 
         results: list[int] = []
         valid_fitnesses: list[float] = []
