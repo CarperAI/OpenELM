@@ -77,6 +77,32 @@ class Map:
             self.top[map_ix] = top_val
             self.array[(self.top[map_ix], *map_ix)] = value
 
+    def assign_fitness_in_depth(self, map_ix, value: float) -> int:
+        indices_at_bin = (slice(None),) + map_ix
+        # expecting a non-empty index, only calling this method when we know
+        # current fitness can be placed somewhere
+        insert_idx = np.where(self.array[indices_at_bin] < value)[0][-1]
+        new_bin_fitnesses = np.concatenate(
+            (
+                self.array[indices_at_bin][1 : insert_idx + 1],
+                np.array([value]),
+                self.array[indices_at_bin][insert_idx + 1 :],
+            )
+        )
+        self.array[indices_at_bin] = new_bin_fitnesses
+        return insert_idx
+
+    def insert_individual_at_depth(self, map_ix, depth, individual):
+        indices_at_bin = (slice(None),) + map_ix
+        new_bin_individuals = np.concatenate(
+            (
+                self.array[indices_at_bin][1 : depth + 1],
+                np.array([individual]),
+                self.array[indices_at_bin][depth + 1 :],
+            )
+        )
+        self.array[indices_at_bin] = new_bin_individuals
+
     @property
     def latest(self) -> np.ndarray:
         """Returns the latest values in the history buffer."""
@@ -351,52 +377,31 @@ class MAPElitesBase:
             else:
                 # Randomly select a batch of elites from the map.
                 batch: list[Genotype] = []
-                for _ in range(self.env.batch_size):
-                    map_ix = self.random_selection()
-                    batch.append(self.genomes[map_ix])
+                if self.config.crossover:
+                    crossover_parents = []
+                    previous_ix = None
+                    for i in range(self.config.crossover_parents):
+                        map_ix = self.random_selection()
+                        if map_ix != previous_ix:
+                            crossover_parents.append(self.genomes[map_ix])
+                            previous_ix = map_ix
+                    batch.append(crossover_parents)
+                else:
+                    for _ in range(self.env.batch_size):
+                        map_ix = self.random_selection()
+                        batch.append(self.genomes[map_ix])
                 # Mutate the elite.
                 new_individuals = self.env.mutate(batch)
 
-            # `new_individuals` is a list of generation/mutation. We put them
-            # into the behavior space one-by-one.
-            # TODO: account for the case where multiple new individuals are
-            # placed in the same niche, for saving histories.
-            for individual in new_individuals:
-                fitness = self.env.fitness(individual)
-                if np.isinf(fitness):
-                    continue
-                map_ix = self.to_mapindex(individual.to_phenotype())
-                # if the return is None, the individual is invalid and is thrown
-                # into the recycle bin.
-                if map_ix is None:
-                    self.recycled[self.recycled_count % len(self.recycled)] = individual
-                    self.recycled_count += 1
-                    continue
-
-                if self.save_history:
-                    # TODO: thresholding
-                    self.history[map_ix].append(individual)
-                self.nonzero[map_ix] = True
-
-                # If new fitness greater than old fitness in niche, replace.
-                if fitness > self.fitnesses[map_ix]:
-                    self.fitnesses[map_ix] = fitness
-                    self.genomes[map_ix] = individual
-                # If new fitness is the highest so far, update the tracker.
-                if fitness > max_fitness:
-                    max_fitness = fitness
-                    max_genome = individual
-
-                    tbar.set_description(f"{max_fitness=:.4f}")
-                # Stop if best fitness is within atol of maximum possible fitness.
-                if np.isclose(max_fitness, self.env.max_fitness, atol=atol):
-                    break
+            max_genome, max_fitness = self.update_map(
+                new_individuals, max_genome, max_fitness
+            )
+            tbar.set_description(f"{max_fitness=:.4f}")
 
             self.fitness_history["max"].append(self.max_fitness())
             self.fitness_history["min"].append(self.min_fitness())
             self.fitness_history["mean"].append(self.mean_fitness())
             self.fitness_history["qd_score"].append(self.qd_score())
-            self.fitness_history["niches_filled"].append(self.niches_filled())
 
             if (
                 self.save_snapshot_interval is not None
@@ -409,6 +414,53 @@ class MAPElitesBase:
         self.save_results(step=n_steps)
         self.visualize()
         return str(max_genome)
+
+    def update_map(self, new_individuals, max_genome, max_fitness):
+        """
+        Update the map if new individuals achieve better fitness scores.
+
+        Args:
+            new_individuals (list[Genotype]) : List of new solutions
+            max_fitness : current maximum fitness
+
+        Returns:
+            max_genome : updated maximum genome
+            max_fitness : updated maximum fitness
+
+        """
+        # `new_individuals` is a list of generation/mutation. We put them
+        # into the behavior space one-by-one.
+        for individual in new_individuals:
+            fitness = self.env.fitness(individual)
+            if np.isinf(fitness):
+                continue
+            phenotype = individual.to_phenotype()
+            map_ix = self.to_mapindex(phenotype)
+
+            # if the return is None, the individual is invalid and is thrown
+            # into the recycle bin.
+            if map_ix is None:
+                self.recycled[self.recycled_count % len(self.recycled)] = individual
+                self.recycled_count += 1
+                continue
+
+            if self.save_history:
+                # TODO: thresholding
+                self.history[map_ix].append(individual)
+
+            self.nonzero[map_ix] = True
+
+            # If new fitness greater than old fitness in niche, replace.
+            if fitness > self.fitnesses[map_ix]:
+                self.fitnesses[map_ix] = fitness
+                self.genomes[map_ix] = individual
+
+            # update if new fitness is the highest so far.
+            if fitness > max_fitness:
+                max_fitness = fitness
+                max_genome = individual
+
+        return max_genome, max_fitness
 
     def niches_filled(self):
         """Get the number of niches that have been explored in the map."""
@@ -445,8 +497,11 @@ class MAPElitesBase:
             "nonzero": self.nonzero.array,
         }
         # Save maps as pickle file
-        with open((output_folder / "maps.pkl"), "wb") as f:
-            pickle.dump(maps, f)
+        try:
+            with open((output_folder / "maps.pkl"), "wb") as f:
+                pickle.dump(maps, f)
+        except Exception:
+            pass
         if self.save_history:
             with open((output_folder / "history.pkl"), "wb") as f:
                 pickle.dump(self.history, f)
@@ -481,18 +536,19 @@ class MAPElitesBase:
         plt.plot(self.fitness_history["min"], label="Min fitness")
         plt.legend()
         plt.savefig(f"{save_path}/MAPElites_fitness_history.png")
+        plt.close("all")
 
         plt.figure()
         plt.plot(self.fitness_history["qd_score"], label="QD score")
         plt.legend()
         plt.savefig(f"{save_path}/MAPElites_qd_score.png")
+        plt.close("all")
 
         plt.figure()
         plt.plot(self.fitness_history["niches_filled"], label="Niches filled")
         plt.legend()
         plt.savefig(f"{save_path}/MAPElites_niches_filled.png")
-
-        # self.visualize_individuals()
+        plt.close("all")
 
         if len(self.map_dims) > 1:
             if len(self.fitnesses.dims) == 2:
@@ -512,8 +568,8 @@ class MAPElitesBase:
 
             plt.figure()
             plt.pcolor(map2d, cmap="inferno")
-            plt.colorbar()
             plt.savefig(f"{save_path}/MAPElites_vis.png")
+        plt.close("all")
 
     def visualize_individuals(self):
         """Visualize the genes of the best performing solution."""

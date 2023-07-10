@@ -31,7 +31,7 @@ class IESoRWorld(Framework):
     name: "IESoRWorld"
 
     def __init__(self, canvas_size: tuple[int, int] = (150, 200)):
-        super(IESoRWorld, self).__init__()
+        # super(IESoRWorld, self).__init__()
         """
         Initialize the world.
 
@@ -58,8 +58,8 @@ class IESoRWorld(Framework):
         self.gravity = b2.b2Vec2(0.0, -25.0)  # ??? Magic numbers.
         # Construct a world object, which will hold and simulate the rigid bodies.
 
-        self.world.gravity = self.gravity
-        # self.world: b2.b2World = b2.b2World(self.gravity)
+        # self.world.gravity = self.gravity
+        self.world: b2.b2World = b2.b2World(self.gravity)
         self.world.autoClearForces = False
 
         self.groundBodyDef: b2.b2BodyDef = b2.b2BodyDef()
@@ -632,8 +632,8 @@ class SodaraceSimulator:
                 + [muscle.joint.bodyA.position[0] for muscle in self.world.muscle_list]
             )
             return abs(end + self.morphology["offsetX"])
-        except Exception as e:
-            print(e)
+        except Exception:
+            # print(e)
             # print(self.world.bone_list)
             # print(self.world.muscle_list)
             return -np.inf

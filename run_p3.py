@@ -3,7 +3,6 @@ import logging
 import pathlib
 import time
 from collections import Counter
-from typing import List
 
 import hydra
 import requests
@@ -11,11 +10,9 @@ from hydra.core.hydra_config import HydraConfig
 from omegaconf import OmegaConf
 
 from openelm.codegen.codegen_utilities import set_seed
-from openelm.environments import P3Problem, P3ProbSol
-from openelm.mutation_model import DiffModel, MutationModel, PromptModel
 from openelm.configs import P3Config
-from openelm.environments import P3Problem, p3_long_init_args, p3_med_init_args
-from openelm.mutation_model import DiffModel, MutationModel, PromptModel
+from openelm.environments.p3.p3 import P3Problem, P3ProbSol
+from openelm.mutation_model import MutationModel, PromptModel
 from openelm.sandbox.server.sandbox_codex_execute import ExecResult
 from openelm.utils.code_eval import pass_at_k
 
@@ -30,6 +27,7 @@ Example usage with mutating problem+solution pairs a.k.a "probsol", along with o
 python run_p3.py probsol=True model.model_path=Salesforce/codegen-2B-mono env.batch_size=8 iterations_per_puzzle=16
 """
 
+
 class P3:
     def __init__(self, config: P3Config) -> None:
         """
@@ -38,13 +36,12 @@ class P3:
         self.config: P3Config = config
 
         # Model
-        if self.config.model.model_name == 'prompt':
+        if self.config.model.model_name == "prompt":
             self.mutation_model: MutationModel = PromptModel(self.config.model)
         # elif self.config.model.model_name == 'diff':
         #     self.mutation_model: MutationModel = DiffModel(self.config.model)
 
         self.log_dir = self.cfg.output_dir
-
 
     def run(self):
         """
@@ -52,26 +49,34 @@ class P3:
             self.config.probsol=False: solutions to given programming puzzle problems
             self.config.probsol=True:  new problem+solution pairs
         """
-        puzzles = requests.get("https://raw.githubusercontent.com/microsoft/PythonProgrammingPuzzles/v0.2/puzzles/puzzles.json").json()
+        puzzles = requests.get(
+            "https://raw.githubusercontent.com/microsoft/PythonProgrammingPuzzles/v0.2/puzzles/puzzles.json"
+        ).json()
         run_start_time = time.time()
         for puzzle_id in self.config.starting_seeds:
             self.config.env.starting_seed = puzzle_id
 
             puzzle = puzzles[puzzle_id]
             puzzle_start_time = time.time()
-            puzzle_dict = {'name': puzzle['name']}
-            logging.info(puzzle['name'])
+            puzzle_dict = {"name": puzzle["name"]}
+            logging.info(puzzle["name"])
 
             if self.config.probsol:
-                env = P3ProbSol(config=self.config.env, mutation_model=self.mutation_model)
+                env = P3ProbSol(
+                    config=self.config.env, mutation_model=self.mutation_model
+                )
             else:
-                env = P3Problem(config=self.config.env, mutation_model=self.mutation_model)
+                env = P3Problem(
+                    config=self.config.env, mutation_model=self.mutation_model
+                )
 
             # Run
             solutions = []
             assert self.config.iterations_per_puzzle >= self.config.env.batch_size
-            for i in range(self.config.iterations_per_puzzle // self.config.env.batch_size):
-                set_seed(i) # Change seed for each query
+            for i in range(
+                self.config.iterations_per_puzzle // self.config.env.batch_size
+            ):
+                set_seed(i)  # Change seed for each query
 
                 solutions += env.random()
 
@@ -79,37 +84,38 @@ class P3:
             res_sols_list = []
             solved = False
             for sol in solutions:
-                res_sol_dict = {'program_str': sol.program_str}
+                res_sol_dict = {"program_str": sol.program_str}
                 if self.config.save_result_obj is not None:
                     if isinstance(sol.result_obj, ExecResult):
-                        res_sol_dict['result_obj'] = sol.result_obj.name
+                        res_sol_dict["result_obj"] = sol.result_obj.name
                     else:
-                        res_sol_dict['result_obj'] = sol.result_obj
+                        res_sol_dict["result_obj"] = sol.result_obj
 
                 fitness = env.fitness(sol)
 
                 res_sol_dict["fitness"] = fitness
                 res_sols_list.append(res_sol_dict)
                 if fitness == 1.0:
-                    solved = True # just want to save if the current problem is solved by any attempt
+                    solved = True  # just want to save if the current problem is solved by any attempt
 
-            puzzle_dict['config'] = OmegaConf.to_container(self.config)
-            puzzle_dict['solutions'] = res_sols_list
-            puzzle_dict['solved'] = solved
-            puzzle_dict['time_elapsed'] = time.time() - puzzle_start_time
+            puzzle_dict["config"] = OmegaConf.to_container(self.config)
+            puzzle_dict["solutions"] = res_sols_list
+            puzzle_dict["solved"] = solved
+            puzzle_dict["time_elapsed"] = time.time() - puzzle_start_time
 
             # Save results
             if self.config.save_results:
                 dir = f'{self.log_dir}/{puzzle_dict["name"]}/{run_start_time}'
                 pathlib.Path(dir).mkdir(parents=True, exist_ok=True)
 
-                with open(f'{dir}/results.json', 'w') as file:
+                with open(f"{dir}/results.json", "w") as file:
                     file.write(json.dumps(puzzle_dict))
 
-        logging.info(f'Successfully ran on {len(self.config.starting_seeds)}' +
-                        f'/{len(self.config.starting_seeds)}' +
-                        f' puzzles and saved any results to {self.log_dir}')
-
+        logging.info(
+            f"Successfully ran on {len(self.config.starting_seeds)}"
+            + f"/{len(self.config.starting_seeds)}"
+            + f" puzzles and saved any results to {self.log_dir}"
+        )
 
     def eval_pass_at_k(self, timestamp: str, k: int):
         """
@@ -122,7 +128,7 @@ class P3:
         """
 
         path = pathlib.Path(self.log_dir)
-        puzzle_paths = sorted(list(path.iterdir())) # Get all logged puzzles
+        puzzle_paths = sorted(list(path.iterdir()))  # Get all logged puzzles
         paks = []
         for p in puzzle_paths:
             n = 0
@@ -131,7 +137,7 @@ class P3:
             if len(timestamp) == 0:
                 # Get latest run
                 path = pathlib.Path(p)
-                run_paths = sorted(list(path.iterdir())) # Get all the runs per puzzle
+                run_paths = sorted(list(path.iterdir()))  # Get all the runs per puzzle
                 run_path = run_paths[-1]
             else:
                 # Get 'timestamp' run

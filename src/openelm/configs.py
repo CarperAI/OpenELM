@@ -52,6 +52,8 @@ class QDConfig(BaseConfig):
     seed: Optional[int] = 42
     save_np_rng_state: bool = False
     load_np_rng_state: bool = False
+    crossover: bool = False
+    crossover_parents: int = 2
 
 
 @dataclass
@@ -155,7 +157,7 @@ class PromptEnvConfig(EnvConfig):
 defaults_elm = [
     {"model": "prompt"},
     {"qd": "mapelites"},
-    {"env": "qdaif"},
+    {"env": "sodarace"},
     "_self_",
 ]
 

@@ -10,6 +10,9 @@ We want to support users with many different compute profiles!
 3. Provide a simple interface to a range of example environments for evolutionary search, to let users adapt these easily for their domain.
 4. Demonstrate the potential of evolution with LLMs.
 
+# Install
+`pip install openelm`
+
 # Features
 
 ### LLM integration with evolutionary algorithms
@@ -43,7 +46,7 @@ Roughly, ELM consists of a pipeline of different components:
 All options for these classes are defined in `configs.py`, via dataclasses which are registered as a `hydra` config, and can be overriden via the command line when running one of the example scripts such as `run_elm.py`.
 
 ## Running ELM
-`python run_elm.py` will start an ELM evolutionary search using the defaults listed in `configs.py`. These can be overriden via the command line.
+`python run_elm.py` will start an ELM evolutionary search using the defaults listed in `configs.py`. These can be overriden via the command line. For example, you can use `run_elm.py env=image_evolution` to run the Image Evolution environment.
 
 ## Sandbox
 To use the code execution sandbox, see the [sandboxing readme](https://github.com/CarperAI/OpenELM/blob/main/src/openelm/sandbox/README.md) for instructions to set it up in a Docker container with the gVisor runtime.
