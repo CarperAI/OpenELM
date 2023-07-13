@@ -6,6 +6,7 @@ import warnings
 from abc import ABC, abstractmethod
 from copy import deepcopy
 from typing import Generic, Optional, Type, TypeVar, Union, Any
+from collections import deque
 
 import random
 import warnings
@@ -68,7 +69,6 @@ from openelm.sandbox.server.sandbox_codex_execute import ExecResult
 
 from aleph_alpha_client import (
     Client,
-    CompletionRequest,
     Prompt,
     EvaluationRequest,
     SemanticEmbeddingRequest,
@@ -1433,6 +1433,7 @@ class LMXGenerationEnvironment(BaseEnvironment[LMXGeneration]):
             mutation_model: Language Model API.
             num_fewshot: number of few shot prompts that for the meta prompt
         """
+
         self.config: LMXGenerationEnvConfig = config
         self.genotype_ndim = len(self.config.ai_feedback_entries.keys())
         self.genotype_space = np.repeat([[0, 1]], self.genotype_ndim, axis=0).T
@@ -1441,17 +1442,18 @@ class LMXGenerationEnvironment(BaseEnvironment[LMXGeneration]):
         self.solution_init_method = self.config.solution_init_method
         self.init_prompt_template = self.config.few_shot_template
         self.batch_size = self.config.batch_size
-        self.max_len_history = self.config.max_len_history
-        self.init_size = self.config.init_size
+        self.max_prompt_pool_size = self.config.max_prompt_pool_size
+        self.init_size_prompt_pool = self.config.init_size_prompt_pool
         self.latest_genomes = None
         self.num_generations = 0
         self.behavior_measure = self.config.behavior_measure
+        self.mutation_method = self.config.mutation_method
 
         with open(self.config.api_token_file, "r") as file:
             self.api_token = file.read().strip()
         self.aa_client = Client(token=self.api_token)
 
-        self.init_prompt_pool()
+        self._init_prompt_pool()
 
         if self.config.fitness_method == "ai_feedback":
             self.quality_ai_feedback = AIFeedback(
@@ -1465,14 +1467,27 @@ class LMXGenerationEnvironment(BaseEnvironment[LMXGeneration]):
                 aa_client=self.aa_client,
             )
 
-    def init_prompt_pool(self):
+    def _init_prompt_pool(self):
+        self.prompt_pool = deque(maxlen=self.max_prompt_pool_size)
+
         # prompt pool to sample few shot prompt from, when using 'replace'
         if self.solution_init_method == "generated":
-            self.prompt_pool = []
+            assert (
+                self.init_size_prompt_pool >= self.num_fewshot
+            ), f"{self.init_size_prompt_pool} should be greater than the number of fewshots to generate a valid pool"
+            for _ in range(self.init_size_prompt_pool):
+                completion = self.generate_completion(
+                    self.init_prompt_template, is_init=True
+                )
+                self.prompt_pool.append(completion)
         elif self.solution_init_method == "seed":
             try:
                 with open(self.config.prompt_pool_path) as file:
-                    self.prompt_pool = file.read().splitlines()
+                    seed_prompts = file.read().splitlines()
+                assert (
+                    len(seed_prompts) >= self.num_fewshot
+                ), f"number of seed examples in the pool should be equal to or greater than the number of few shots"
+                self.prompt_pool.extend(seed_prompts)
             except FileExistsError:
                 print(f"file {self.config.prompt_pool_path} does not exist")
 
@@ -1502,51 +1517,24 @@ class LMXGenerationEnvironment(BaseEnvironment[LMXGeneration]):
                 return completion
 
     def random(self) -> list[LMXGeneration]:
-        list_of_reviews = []
-        if self.solution_init_method == "generated":
-            for i in range(self.init_size):
-                completion = self.generate_completion(
-                    self.init_prompt_template, is_init=True
+        list_of_generations = []
+        for _ in range(self.batch_size):
+            init_fewshot = random.sample(self.prompt_pool, k=self.num_fewshot)
+            completion, prompt_metadata = self.make_prompt_and_completion(
+                init_fewshot, is_init=True
+            )
+            list_of_generations.append(
+                LMXGeneration(
+                    prompt_metadata=prompt_metadata,
+                    generated_completion=completion,
+                    behavior_measure=self.behavior_measure,
+                    classifier_model=self.config.classifier_model,
+                    ai_feedback_entries=self.config.ai_feedback_entries,
+                    aa_client=self.aa_client,
                 )
-                self.prompt_pool.append(completion)
+            )
 
-            for _ in range(self.batch_size):
-                init_fewshot = random.sample(self.prompt_pool, k=self.num_fewshot)
-                completion, prompt_metadata = self.make_prompt_and_completion(
-                    init_fewshot, is_init=True
-                )
-                list_of_reviews.append(
-                    LMXGeneration(
-                        prompt_metadata=prompt_metadata,
-                        generated_completion=completion,
-                        behavior_measure=self.behavior_measure,
-                        classifier_model=self.config.classifier_model,
-                        ai_feedback_entries=self.config.ai_feedback_entries,
-                        aa_client=self.aa_client,
-                    )
-                )
-
-            return list_of_reviews
-        elif self.solution_init_method == "seed":
-            for _ in range(self.batch_size):
-                init_fewshot = random.sample(self.prompt_pool, k=self.num_fewshot)
-                completion, prompt_metadata = self.make_prompt_and_completion(
-                    init_fewshot, is_init=True
-                )
-                list_of_reviews.append(
-                    LMXGeneration(
-                        prompt_metadata=prompt_metadata,
-                        generated_completion=completion,
-                        behavior_measure=self.behavior_measure,
-                        classifier_model=self.config.classifier_model,
-                        ai_feedback_entries=self.config.ai_feedback_entries,
-                        aa_client=self.aa_client,
-                    )
-                )
-
-            return list_of_reviews
-        else:
-            raise NotImplementedError
+        return list_of_generations
 
     def make_prompt_and_completion(
         self, init_fewshot: list[str], is_init: bool = False
@@ -1572,11 +1560,11 @@ class LMXGenerationEnvironment(BaseEnvironment[LMXGeneration]):
                 fewshot_items = genotype_object.prompt_metadata["fewshot_items"]
                 idx_to_replace = random.choice(range(len(fewshot_items)))
                 fewshot_items[idx_to_replace] = random.choice(self.prompt_pool)
-                if len(self.prompt_pool) > self.max_len_history:
-                    # remove oldest
-                    self.prompt_pool.pop(0)  # oldest in history
             elif self.config.mutation_method == "lmx_near":
                 # original formula ref in colab: https://colab.research.google.com/drive/1SXrq-YGffg6M725hgKXY1lqxTMsa1wLl?usp=sharing
+                assert (
+                    len(np.where(self.latest_genomes != 0)[0]) >= self.num_fewshot
+                ), f"fewer than expected items in latest_genomes ({len(np.where(self.latest_genomes != 0)[0])})"
                 fewshot_items = []
                 orig_idx = np.array(
                     genotype_bin_idx

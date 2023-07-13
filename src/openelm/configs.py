@@ -109,12 +109,38 @@ class MAPElitesConfig(QDConfig):
 class LMXMapElitesConfig(QDConfig):
     qd_name: str = "lmx_mapelites"
     map_grid_size: tuple[int, ...] = field(default_factory=lambda: (20,))
-    pass_latest_genomes_to_env: bool = True
     write_all_individuals_to_jsonl: bool = True
     append_bin_idx_to_batch: bool = True
-    add_prompt_pool: bool = True
-    filter_prompt_pool: bool = True
     use_alt_depth_method: bool = True
+    custom_ticks: Optional[list[float]] = field(
+        default_factory=lambda: [
+            0.005,
+            0.01,
+            0.015,
+            0.02,
+            0.03,
+            0.04,
+            0.05,
+            0.10,
+            0.20,
+            0.50,
+            0.80,
+            0.90,
+            0.95,
+            0.96,
+            0.97,
+            0.98,
+            0.985,
+            0.99,
+            0.995,
+        ]
+    )
+
+    def __post_init__(self):
+        if self.custom_ticks:
+            assert self.map_grid_size[0] - 1 == len(
+                self.custom_ticks
+            ), f"the number of custom ticks {len(self.custom_ticks)} should be the number of bins {self.map_grid_size[0]} - 1"
 
 
 @dataclass
@@ -204,23 +230,21 @@ class LMXGenerationEnvConfig(EnvConfig):
     behavior_measure: str = "ai_feedback"
     solution_init_method: str = "seed"  # seed, generated
     mutation_method: str = "lmx_near"  # replace, lmx_near
-    max_len_history: int = (
-        100  # for storage of few-shot pool, based on accepted fit solutions
-    )
     fitness_query: str = "A fantasy story about a suspicious spy and a rich politician"
     few_shot_template: str = "Here is a random example of a fantasy story about a suspicious spy and a rich politician:"
     instruction_prompt: str = "Determine the sentiment of the text by writing 'positive' or 'negative' in in the output."
     quality_feedback_prompt = """Determine if the input text contains a high-quality short story containing two characters, a suspicious spy, and a rich politician. Answer "yes" if the input contains a high-quality short story about a suspicious spy and a rich politician, otherwise answer "no"."""
-    init_size: int = (
+    max_prompt_pool_size: int = 100  # for storage of few-shot pool, based on accepted fit solutions set to 3*map size for depth search
+    init_size_prompt_pool: int = (
         5  # with generated init method, should be slightly more than few-shot size
     )
     prompt_pool_path: str = (
         "src/openelm/environments/lmx_seed_pools/short_story_seed_pool.txt"
     )
+    add_only_improved_completions_to_prompt_pool: bool = True
     classifier_model: str = "luminous-supreme-qdaif"
     api_token_file: str = "aa_client_token.txt"
     fitness_method: str = "ai_feedback"
-    use_alt_depth_method: bool = True
 
     def __post_init__(self):
         # assert valid config values

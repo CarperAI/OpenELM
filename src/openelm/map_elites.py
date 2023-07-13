@@ -11,9 +11,15 @@ import numpy as np
 from sklearn.cluster import KMeans
 from tqdm import trange
 
-from openelm.configs import CVTMAPElitesConfig, MAPElitesConfig, QDConfig
-from openelm.environments import BaseEnvironment, Genotype
+from openelm.configs import (
+    CVTMAPElitesConfig,
+    MAPElitesConfig,
+    QDConfig,
+    LMXMapElitesConfig,
+)
+from openelm.environments import BaseEnvironment, Genotype, LMXGenerationEnvironment
 from openelm.utils.utils import safe_open_w
+from collections import deque
 
 Phenotype = Optional[np.ndarray]
 MapIndex = Optional[tuple]
@@ -81,6 +87,7 @@ class Map:
             self.array[(self.top[map_ix], *map_ix)] = value
 
     def assign_fitness_in_depth(self, map_ix, value: float) -> int:
+        self.empty = False
         indices_at_bin = (slice(None),) + map_ix
         # expecting a non-empty index, only calling this method when we know current fitness can be placed somewhere
         insert_idx = np.where(self.array[indices_at_bin] < value)[0][-1]
@@ -95,6 +102,7 @@ class Map:
         return insert_idx
 
     def insert_individual_at_depth(self, map_ix, depth, individual):
+        self.empty = False
         indices_at_bin = (slice(None),) + map_ix
         new_bin_individuals = np.concatenate(
             (
@@ -495,7 +503,7 @@ class MAPElitesBase:
             with open((output_folder / "history.pkl"), "wb") as f:
                 pickle.dump(self.history, f)
 
-        with open((output_folder / "fitness_history.pkl"), "wb") as f:
+        with safe_open_w((output_folder / "fitness_history.pkl"), "wb") as f:
             pickle.dump(self.fitness_history, f)
 
         # save numpy rng state to load if resuming from deterministic snapshot
@@ -861,41 +869,56 @@ class CVTMAPElites(MAPElitesBase):
 
 class LMXMapElites(MAPElites):
     """
-    Class implementing Map-Elites for Language model Crossover.
+    Class implementing Map-Elites for Language Model Crossover.
     """
 
-    def __init__(self, env, config: MAPElitesConfig, *args, **kwargs):
+    def __init__(
+        self, env: LMXGenerationEnvironment, config: LMXMapElitesConfig, *args, **kwargs
+    ):
         super().__init__(env, config, *args, **kwargs)
 
+        if config.use_alt_depth_method:
+            assert (
+                config.history_length > 1
+            ), f"history length needs to be greater than 1 if we use use_alt_depth_method"
         assert (
-            self.env.config.env_name == "lmx_generation"
-        ), "use lmx_generation environment with the LMX Map elites"
+            env.config.env_name == "lmx_generation"
+        ), "LMX Map elites currently only supports lmx_generation environment"
 
         # custom options for utilities - make easier to run gen, lmx_near, extended logging
-        self.pass_latest_genomes_to_env = self.config.pass_latest_genomes_to_env
-        self.append_bin_idx_to_batch = self.config.append_bin_idx_to_batch
-        self.write_all_individuals_to_jsonl = self.config.write_all_individuals_to_jsonl
+        self.append_bin_idx_to_batch = config.append_bin_idx_to_batch
+        self.write_all_individuals_to_jsonl = config.write_all_individuals_to_jsonl
+        self.use_alt_depth_method = config.use_alt_depth_method
+        self.add_only_improved_completions_to_prompt_pool = (
+            env.config.add_only_improved_completions_to_prompt_pool
+        )
         if self.write_all_individuals_to_jsonl:
             self.individual_entries_list = []
 
-        self.__init_prompt_pool()
+        self._init_prompt_pool()
 
-    def __init_prompt_pool(self):
+    def _init_prompt_pool(self):
         # load prompt pool from a checkpoint or intermediate state of search
 
         log_path = Path(self.config.log_snapshot_dir)
-        if (
-            self.config.add_prompt_pool
-            and self.config.log_snapshot_dir
-            and os.path.isdir(log_path)
-        ):
+        if self.config.log_snapshot_dir and os.path.isdir(log_path):
             try:
                 with open((log_path / "prompt_pool.pkl"), "rb") as f:
-                    self.env.prompt_pool = pickle.load(f)
+                    loaded_prompts = pickle.load(f)
+                self.env.promt_pool.extend(loaded_prompts)
             except FileExistsError:
                 print(
                     f'file {log_path / "prompt_pool.pkl"} for loading the prompt pool was not found.'
                 )
+
+    def _init_discretization(self):
+        """Set up the discrete behaviour space for the algorithm."""
+        # TODO: make this work for any number of dimensions
+        if self.config.custom_ticks is not None:
+            intervals = np.array(self.config.custom_ticks)
+            self.bins = np.tile(intervals, (self.env.genotype_ndim, 1))
+        else:
+            self.bins = np.linspace(*self.env.behavior_space, self.map_grid_size[0] + 1)[1:-1].T  # type: ignore
 
     def search(self, init_steps: int, total_steps: int, atol: float = 1.0) -> str:
         """
@@ -950,7 +973,7 @@ class LMXMapElites(MAPElites):
                 new_individuals = self.env.mutate(batch)
 
             max_genome, max_fitness = self.update_map(
-                new_individuals, max_genome, max_fitness
+                new_individuals, max_genome, max_fitness, n_steps, init_steps
             )
             tbar.set_description(f"{max_fitness=:.4f}")
 
@@ -968,7 +991,7 @@ class LMXMapElites(MAPElites):
 
         self.current_max_genome = max_genome
         if self.write_all_individuals_to_jsonl:
-            with open(
+            with safe_open_w(
                 Path(self.config.output_dir) / "history.jsonl", "a+", encoding="UTF-8"
             ) as f:
                 for i in range(len(self.individual_entries_list)):
@@ -978,13 +1001,16 @@ class LMXMapElites(MAPElites):
         self.visualize()
         return str(max_genome)
 
-    def update_map(self, new_individuals, max_genome, max_fitness):
+    def update_map(self, new_individuals, max_genome, max_fitness, n_steps, init_steps):
         """
         Update the map if new individuals achieve better fitness scores.
 
         Args:
             new_individuals (list[Genotype]) : List of new solutions
+            max_genome : updated maximum genome
             max_fitness : current maximum fitness
+            n_steps : used to check if we want to update prompt pool with replace mutation operator
+            init_steps : used to check if we want to update prompt pool with replace mutation operator
 
         Returns:
             max_genome : updated maximum genome
@@ -1026,47 +1052,56 @@ class LMXMapElites(MAPElites):
 
             self.nonzero[map_ix] = True
 
-            # If new fitness greater than old fitness in niche, replace.
-            if fitness > self.fitnesses[map_ix]:
-                if self.config.add_prompt_pool and self.config.filter_prompt_pool:
-                    # add to prompt pool for lmx env, filtered
+            # Original depth assignment method: If new fitness greater than old fitness in niche, replace.
+            if not self.use_alt_depth_method and fitness > self.fitnesses[map_ix]:
+                self.fitnesses[map_ix] = fitness
+                self.genomes[map_ix] = individual
+                if (
+                    self.env.config.mutation_method == "replace"
+                    and self.add_only_improved_completions_to_prompt_pool
+                    and n_steps > init_steps
+                ):
                     self.env.prompt_pool.append(individual.generated_completion)
-                if self.pass_latest_genomes_to_env:
+
+                # pass latest genomes to be able to carry out lmx near in environment
+                elif self.env.config.mutation_method == "lmx_near":
                     self.env.latest_genomes = self.genomes.latest
-                # use old assignment of solution to bin
-                if not self.config.use_alt_depth_method or self.history_length == 1:
-                    self.fitnesses[map_ix] = fitness
-                    self.genomes[map_ix] = individual
-            # if the new fitness is greater than lowest fitness solution currently in bin with history depth
-            if (
-                self.config.use_alt_depth_method
-                and self.history_length > 1
+
+            # Alt depth assignment method: If the new fitness is greater than lowest fitness solution currently in bin with history depth
+            elif (
+                self.use_alt_depth_method
                 and fitness > self.fitnesses.array[(0,) + map_ix]
             ):
+                # update fitnesses map and genomes map
                 placed_depth = self.fitnesses.assign_fitness_in_depth(map_ix, fitness)
                 self.genomes.insert_individual_at_depth(
                     map_ix, placed_depth, individual
                 )
+                if (
+                    self.env.config.mutation_method == "replace"
+                    and self.add_only_improved_completions_to_prompt_pool
+                    and n_steps > init_steps
+                ):
+                    self.update_prompt_pool_in_depth()
 
-            # add to prompt pool for lmx env, unfiltered
-            if self.config.add_prompt_pool and not self.config.filter_prompt_pool:
+                # pass latest genomes to be able to carry out lmx near in environment
+                elif self.env.config.mutation_method == "lmx_near":
+                    self.env.latest_genomes = self.genomes.latest
+
+            # the new fitness is worse but we still want to add the generation to the prompt pool
+            if (
+                self.env.config.mutation_method == "replace"
+                and not self.add_only_improved_completions_to_prompt_pool
+            ):
                 self.env.prompt_pool.append(individual.generated_completion)
 
             if self.write_all_individuals_to_jsonl:
-                if phenotype.shape[0] == 1:
-                    individual_dict = {
-                        "genotype": str(individual),
-                        "phenotype": phenotype[0],
-                        "fitness": fitness,
-                        "num_gens_current": num_gens,
-                    }
-                else:
-                    individual_dict = {
-                        "genotype": str(individual),
-                        "phenotype": list(phenotype),
-                        "fitness": fitness,
-                        "num_gens_current": num_gens,
-                    }
+                individual_dict = {
+                    "genotype": str(individual),
+                    "phenotype": list(phenotype),
+                    "fitness": fitness,
+                    "num_gens_current": num_gens,
+                }
                 self.individual_entries_list.append(individual_dict)
 
             # If new fitness is the highest so far, update the tracker.
@@ -1074,7 +1109,26 @@ class LMXMapElites(MAPElites):
                 max_fitness = fitness
                 max_genome = individual
 
-            return max_genome, max_fitness
+        return max_genome, max_fitness
+
+    def update_prompt_pool_in_depth(self):
+        temp_prompt_pool = deque(maxlen=self.env.max_prompt_pool_size)
+        if self.env.config.solution_init_method == "seed":
+            try:
+                with open(self.env.config.prompt_pool_path) as file:
+                    seed_prompts = file.read().splitlines()
+            except FileExistsError:
+                print(f"file {self.config.prompt_pool_path} does not exist")
+            temp_prompt_pool.extend(seed_prompts)
+        # fill prompt pool from top 3 fittest generations given non-empty indices
+        for cell_idx in np.ndindex(self.genomes.array.shape[1:]):
+            for depth_index in range(-1, -4, -1):
+                fit_individual = self.genomes.array[(depth_index,) + cell_idx]
+                if fit_individual != 0:
+                    temp_prompt_pool.append(fit_individual.generated_completion)
+        # if enough items are collected, use updated pool
+        if len(temp_prompt_pool) > self.env.num_fewshot:
+            self.env.prompt_pool = temp_prompt_pool
 
     def save_results(self, step: int):
         # create folder for dumping results and metadata
@@ -1108,7 +1162,7 @@ class LMXMapElites(MAPElites):
 
         with open((output_folder / "config.json"), "w") as f:
             json.dump(tmp_config, f)
-        if self.config.add_prompt_pool:
-            with safe_open_w((output_folder / "prompt_pool.pkl"), "wb") as f:
-                pickle.dump(self.env.prompt_pool, f)
+
+        with safe_open_w((output_folder / "prompt_pool.pkl"), "wb") as f:
+            pickle.dump(self.env.prompt_pool, f)
         f.close()

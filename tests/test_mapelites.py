@@ -4,12 +4,9 @@ from pathlib import Path
 import shutil
 
 from openelm.configs import (
-    APIModelConfig,
     CVTMAPElitesConfig,
     ImageEnvConfig,
     MAPElitesConfig,
-    LMXMapElitesConfig,
-    LMXGenerationEnvConfig,
     PromptModelConfig,
     StringEnvConfig,
 )
@@ -18,10 +15,9 @@ from openelm.environments.environments import (
     FunctionOptim,
     ImageOptim,
     MatchString,
-    LMXGenerationEnvironment,
 )
-from openelm.map_elites import CVTMAPElites, Map, MAPElites, LMXMapElites
-from openelm.mutation_model import AlephAlphaLLM, PromptModel
+from openelm.map_elites import CVTMAPElites, Map, MAPElites
+from openelm.mutation_model import PromptModel
 
 
 def test_map():
@@ -192,64 +188,6 @@ def test_image_optim():
     elites.plot_fitness()
     elites.visualize_individuals()
     print(f"Best image\n{result}")
-
-
-@pytest.mark.slow
-def test_lmx_environment():
-    env = LMXGenerationEnvironment(
-        LMXGenerationEnvConfig(),
-        AlephAlphaLLM(APIModelConfig(model_used="luminous-base")),
-    )
-    elites = LMXMapElites(
-        env,
-        LMXMapElitesConfig(map_grid_size=(50,), history_length=100, save_history=True),
-    )
-    result = elites.search(init_steps=1, total_steps=100)
-
-
-def test_prompt_pool_initialization():
-    env = LMXGenerationEnvironment(
-        LMXGenerationEnvConfig(solution_init_method="generated"),
-        AlephAlphaLLM(APIModelConfig(model_used="luminous-base")),
-    )
-    assert (
-        env.prompt_pool == []
-    ), "prompt pool should be empty for init method generated"
-    env = LMXGenerationEnvironment(
-        LMXGenerationEnvConfig(
-            solution_init_method="seed",
-            prompt_pool_path="tests/test_data/test_seed_pool.txt",
-        ),
-        AlephAlphaLLM(APIModelConfig(model_used="luminous-base")),
-    )
-    assert (
-        env.prompt_pool[0] == "test test test"
-    ), "prompt pool should be 'test test test' for init method seed"
-
-
-def test_invalid_config_args():
-    # Test failure cases for values of LMXGenerationEnvConfig
-    with pytest.raises(AssertionError):
-        env = LMXGenerationEnvironment(
-            LMXGenerationEnvConfig(classifier_model="luminous-base"),
-            AlephAlphaLLM(APIModelConfig(model_used="luminous-base")),
-        )
-    with pytest.raises(AssertionError):
-        env = LMXGenerationEnvironment(
-            LMXGenerationEnvConfig(solution_init_method="random"),
-            AlephAlphaLLM(APIModelConfig(model_used="luminous-base")),
-        )
-    with pytest.raises(AssertionError):
-        env = LMXGenerationEnvironment(
-            LMXGenerationEnvConfig(mutation_method="random"),
-            AlephAlphaLLM(APIModelConfig(model_used="luminous-base")),
-        )
-    # Test failure cases for values of APIModelConfig
-    with pytest.raises(AssertionError):
-        env = LMXGenerationEnvironment(
-            LMXGenerationEnvConfig(),
-            AlephAlphaLLM(APIModelConfig(model_used="luminous-tiny")),
-        )
 
 
 @pytest.mark.slow
