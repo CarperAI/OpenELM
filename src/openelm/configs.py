@@ -77,11 +77,19 @@ class SodaraceEnvConfig(EnvConfig):
     crossover: bool = False
 
 
+defaults_image = [
+    {"model": "prompt"},
+    # {"env": "ImageEnvConfig"},
+    "_self_",
+]
+
+
 @dataclass
 class ImageEnvConfig(EnvConfig):
     env_name: str = "image_evolution"
     behavior_mode: str = "3-channel"
     target: str = "circle"
+    defaults: list[Any] = field(default_factory=lambda: defaults_image)
 
 
 @dataclass
@@ -151,6 +159,7 @@ def register_configstore() -> ConfigStore:
     cs.store(group="model", name="diff", node=DiffModelConfig)
     cs.store(name="elmconfig", node=ELMConfig)
     cs.store(name="p3config", node=P3Config)
+    cs.store(name="image_evolution", node=ImageEnvConfig)
     return cs
 
 
