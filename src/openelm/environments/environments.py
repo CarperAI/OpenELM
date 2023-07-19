@@ -1448,8 +1448,8 @@ class LMXGenerationEnvironment(BaseEnvironment[LMXGeneration]):
         self.num_generations = 0
         self.behavior_measure = self.config.behavior_measure
         self.mutation_method = self.config.mutation_method
-
-        with open(self.config.api_token_file, "r") as file:
+        
+        with open(self.mutation_model.api_token_file, "r") as file:
             self.api_token = file.read().strip()
         self.aa_client = Client(token=self.api_token)
 

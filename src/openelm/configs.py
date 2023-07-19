@@ -243,7 +243,6 @@ class LMXGenerationEnvConfig(EnvConfig):
     )
     add_only_improved_completions_to_prompt_pool: bool = True
     classifier_model: str = "luminous-supreme-qdaif"
-    api_token_file: str = "aa_client_token.txt"
     fitness_method: str = "ai_feedback"
 
     def __post_init__(self):
