@@ -243,7 +243,6 @@ class LMXGenerationEnvConfig(EnvConfig):
     )
     add_only_improved_completions_to_prompt_pool: bool = True
     classifier_model: str = "luminous-supreme-qdaif"
-    api_token_file: str = "aa_client_token.txt"
     fitness_method: str = "ai_feedback"
 
     def __post_init__(self):
@@ -274,7 +273,7 @@ class LMXGenerationEnvConfig(EnvConfig):
                     f"{extra_prefix}positive",
                     f"{extra_prefix}negative",
                 ],
-                "feedback_prompt_template": f"### Instruction:\n{self.instruction_prompt}{extra_suffix}\n\n### Input:{{genotype}}\n\n### Response:",
+                "feedback_prompt_template": f"### Instruction:\n{self.instruction_prompt}{extra_suffix}\n\n### Input:\n{{genotype}}\n\n### Response:",
             },
         }
         self.quality_ai_feedback_entries = {
@@ -283,7 +282,7 @@ class LMXGenerationEnvConfig(EnvConfig):
                     f"{extra_prefix}yes",
                     f"{extra_prefix}no",
                 ],
-                "feedback_prompt_template": f"### Instruction:\n{self.quality_feedback_prompt}{extra_suffix}\n\n### Input:{{genotype}}\n\n### Response:",
+                "feedback_prompt_template": f"### Instruction:\n{self.quality_feedback_prompt}{extra_suffix}\n\n### Input:\n{{genotype}}\n\n### Response:",
             },
         }
 

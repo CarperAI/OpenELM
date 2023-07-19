@@ -248,6 +248,7 @@ class AlephAlphaLLM(MutationModel):
             print(f"Could not find file {self.config.api_token_file}")
         self.client = Client(token=api_token)
         self.model_used = self.config.model_used
+        self.api_token_file = self.config.api_token_file
 
     def generate_programs(self, prompt: str, **kwargs) -> str:
         """
