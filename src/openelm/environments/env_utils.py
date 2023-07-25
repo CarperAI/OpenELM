@@ -240,14 +240,14 @@ class AIFeedback:
         self.aa_client = aa_client
 
     def evaluate(self, generation_text):
-        eval_requests = []
-        client_responses = []
-        response_logprobs = []
-        probability_fields = {}
         prompt = self.feedback_template.format(**generation_text)
         try:
             while True:
                 try:
+                    eval_requests = []
+                    client_responses = []
+                    response_logprobs = []
+                    probability_fields = {}
                     for eval_answer in self.label_options:
                         request = EvaluationRequest(
                             prompt=Prompt.from_text(prompt),
