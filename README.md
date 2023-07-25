@@ -13,10 +13,11 @@ SOLUTION_INIT_METHOD: method to create an initial population for the map, suppor
 Necessary config arguments for the generation domain (default values are set to reproduce the short story experiments):
 Below we will provide example config arguments for our three experiment domains: short story, movie review and opinion piece
 ```
-    "fitness_query": string that is compared to the generation to compute the fitness
     "prompt_template": string used in the prompt to create a repeating few-shot pattern
     "prompt_pool_path": Path to a file with example prompts for the choosen domain 
     "gen_max_len": max token limit for output from API
+    "instruction_prompt": used in the diversity AI feedback prompt to evaluate the attribute of generations along an axis
+    "quality_feedback_prompt": used in the quality AI feedback prompt to measure how closely generation aligns with desired qualities
 ```
 
 Pseudocode:
@@ -48,29 +49,20 @@ if added_to_archive_successfully(new_individual):
 Example config arguments for reproducing LMX experiments:
 Short Story:
 ```python
-"fitness_query": "A fantasy story about a suspicious spy and a rich politician"
 "prompt_template": 'Here is a random example of a fantasy story about a suspicious spy and a rich politician:'
 "prompt_pool_path": "src/openelm/environments/lmx_seed_pools/short_story_seed_pool.txt"
 "gen_max_len": 100
-"instruction_prompt" : "You are given an input text containing a short story. Determine if the story uses language that is easy to read for toddlers. Write \"easy\" if the text is easy to read for toddlers, otherwise answer \"hard\" if it is hard to read for toddlers."
-```
-
-Movie Review: 
-```python
-"fitness_query": "Movie review for the film \"Die Hard\""
-"prompt_template": 'Here is a random example of a review for the movie "Die Hard":'
-"prompt_pool_path": "src/openelm/environments/lmx_seed_pools/movie_seed_pool.txt"
-"gen_max_len": 50
-"instruction_prompt" : "Determine the sentiment of the text by writing 'positive' or 'negative' in in the output."
+"instruction_prompt": "You are given an input text of a short story involving multiple characters. Determine if the characters in this story primarily experience a conflict, or have a friendship. Write \"conflict\" if a conflict between characters is present in the story, otherwise answer \"friendship\" if a friendship between characters is present in the story."
+"quality_feedback_prompt": "Determine if the input text contains a high-quality short story containing two characters, a suspicious spy, and a rich politician. For example, a high-quality short story would have good flow, interesting plot, and not repeat similar sentences or undesired items such as titles and URLs. Answer \"yes\" if the input contains a high-quality short story about a suspicious spy and a rich politician, otherwise answer \"no\"."
 ```
 
 Opinion Piece:
 ```python
-"fitness_query": "An opinion piece about eating vegetables and plant-based foods"
 "prompt_template": 'Here is a random opinion piece about eating vegetables and plant-based foods:'
 "prompt_pool_path": "src/openelm/environments/lmx_seed_pools/opinion_piece_seed_pool.txt"
 "gen_max_len": 50
-"instruction_prompt" : "Determine the sentiment of the given opinion on eating vegetables and plant-based foods (from the input text) by writing 'positive' or 'negative' in in the output."
+"instruction_prompt": "Determine the sentiment of the given opinion on eating vegetables and plant-based foods (from the input text) by writing \"positive\" or \"negative\" in the output."
+"quality_feedback_prompt": "Determine whether or not the input text is closely related to the following topic: \"someone talking about whether or not they like to eat vegetables and plant-based foods as well as an explanation for their preferences\". Answer \"yes\" if it is about the topic, or \"no\" if it is not about the topic."
 ```
 
 AI feedback for a single dimension is shown as an example in `__post_init__` of `LMXGenerationEnvConfig`:
