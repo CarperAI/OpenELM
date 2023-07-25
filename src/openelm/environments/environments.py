@@ -1497,10 +1497,10 @@ class LMXGenerationEnvironment(BaseEnvironment[LMXGeneration]):
     def set_rng_state(self, rng_state: Optional[np.random._generator.Generator]):
         pass
 
-    def construct_prompt(self, list_of_fewshot_reviews: list[str]) -> str:
-        prompt = self.init_prompt_template + list_of_fewshot_reviews[0]
-        for i in range(1, len(list_of_fewshot_reviews)):
-            prompt += "\n###\n" + self.init_prompt_template + list_of_fewshot_reviews[i]
+    def construct_prompt(self, list_of_fewshot_generations: list[str]) -> str:
+        prompt = self.init_prompt_template + list_of_fewshot_generations[0]
+        for i in range(1, len(list_of_fewshot_generations)):
+            prompt += "\n###\n" + self.init_prompt_template + list_of_fewshot_generations[i]
         prompt += "\n###\n" + self.init_prompt_template
         return prompt
 
@@ -1547,7 +1547,7 @@ class LMXGenerationEnvironment(BaseEnvironment[LMXGeneration]):
     def mutate(
         self, x: Union[list[LMXGeneration], list[LMXGeneration, int]]
     ) -> list[LMXGeneration]:  # during default search, this could return none
-        list_of_reviews = []
+        list_of_generations = []
         for i in range(self.batch_size):
             x_individual = x[i]
             if type(x_individual) is tuple:
@@ -1593,7 +1593,7 @@ class LMXGenerationEnvironment(BaseEnvironment[LMXGeneration]):
                     fewshot_items.append(example.generated_completion)
             # gather chosen few-shot items and generate completion (crossover)
             completion, prompt_metadata = self.make_prompt_and_completion(fewshot_items)
-            list_of_reviews.append(
+            list_of_generations.append(
                 LMXGeneration(
                     prompt_metadata=prompt_metadata,
                     generated_completion=completion,
@@ -1604,7 +1604,7 @@ class LMXGenerationEnvironment(BaseEnvironment[LMXGeneration]):
                 )
             )
 
-        return list_of_reviews
+        return list_of_generations
 
     def fitness(self, x: LMXGeneration) -> float:
         if x.generated_completion == "":
