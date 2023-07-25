@@ -375,7 +375,7 @@ class MAPElitesBase:
         else:  # take max fitness in case of filled loaded snapshot
             max_fitness = self.max_fitness()
             max_index = np.where(self.fitnesses.latest == max_fitness)
-            max_genome = self.genomes[max_index]
+            max_genome = self.genomes.latest[max_index].item()
         if self.save_history:
             self.history = defaultdict(list)
 
@@ -905,7 +905,7 @@ class LMXMapElites(MAPElites):
             try:
                 with open((log_path / "prompt_pool.pkl"), "rb") as f:
                     loaded_prompts = pickle.load(f)
-                self.env.promt_pool.extend(loaded_prompts)
+                self.env.prompt_pool.extend(loaded_prompts)
             except FileExistsError:
                 print(
                     f'file {log_path / "prompt_pool.pkl"} for loading the prompt pool was not found.'
@@ -946,9 +946,12 @@ class LMXMapElites(MAPElites):
         else:  # take max fitness in case of filled loaded snapshot
             max_fitness = self.max_fitness()
             max_index = np.where(self.fitnesses.latest == max_fitness)
-            max_genome = self.genomes[max_index]
+            max_genome = self.genomes.latest[max_index].item()
         if self.save_history:
             self.history = defaultdict(list)
+        # initialize in case of edge case where this is can't be read during first search step if load from snapshot
+        if self.env.config.mutation_method == "lmx_near":
+            self.env.latest_genomes = self.genomes.latest
 
         for n_steps in tbar:
             need_more_elites_for_lmx_near = (
