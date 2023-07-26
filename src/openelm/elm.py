@@ -1,12 +1,13 @@
-from typing import Any, Optional
+from typing import Any, Optional, Type
 
 from hydra.core.hydra_config import HydraConfig
 
 from openelm.configs import DiffModelConfig, ELMConfig, PromptModelConfig
 from openelm.mutation_model import DiffModel, MutationModel, PromptModel
+from openelm.environments.base import BaseEnvironment
 
 
-def load_env(env_name: str) -> Any:
+def load_env(env_name: str) -> Type[BaseEnvironment]:
     if env_name == "sodarace":
         from openelm.environments.sodaracer.sodarace import Sodarace
 
@@ -80,8 +81,15 @@ class ELM:
                 config=self.config.env,
                 mutation_model=self.mutation_model,
             )
-        else:
+        elif isinstance(env, type(BaseEnvironment)):
+            self.environment = env(
+                config=self.config.env,
+                mutation_model=self.mutation_model,
+            )
+        elif isinstance(env, BaseEnvironment):
             self.environment = env
+        else:
+            raise ValueError(f"Unknown environment {env.__name__}")
         self.qd_algorithm = load_algorithm(qd_name)(
             env=self.environment,
             config=self.config.qd,
