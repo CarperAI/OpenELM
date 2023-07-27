@@ -68,7 +68,9 @@ class ELM:
             env (Optional): An optional environment to pass in. Defaults to None.
         """
         self.config: ELMConfig = config
-        self.config.qd.output_dir = HydraConfig.get().runtime.output_dir
+        hydra_conf = HydraConfig.instance()
+        if hydra_conf.cfg is not None:
+            self.config.qd.output_dir = HydraConfig.get().runtime.output_dir
         env_name: str = self.config.env.env_name
         qd_name: str = self.config.qd.qd_name
         if isinstance(self.config.model, PromptModelConfig):
