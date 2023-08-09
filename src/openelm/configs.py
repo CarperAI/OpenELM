@@ -27,6 +27,8 @@ class ModelConfig(BaseConfig):
     do_sample: bool = True
     num_return_sequences: int = 1
     trust_remote_code: bool = True  # needed for mosaicml/mpt-7b-instruct
+    load_in_8bit: bool = False  # need to install bitsandbytes
+    load_in_4bit: bool = False
 
 
 @dataclass
