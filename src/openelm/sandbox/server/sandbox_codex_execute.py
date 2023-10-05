@@ -38,10 +38,6 @@ class ExecResult(Enum):
     EXCEPTION = 5
 
 
-def isgenerator(iterable):
-    return hasattr(iterable, "__iter__") and not hasattr(iterable, "__len__")
-
-
 def unsafe_execute(
     code_str: str,
     func_name: Optional[str] = None,
@@ -78,7 +74,7 @@ def unsafe_execute(
                     # (in utils.code_eval.pool_exec_processes())
                     # cannot return 'generators'
                     # (this may not catch all 'invalid' generator uses)
-                    if isinstance(result, range) or isgenerator(result):
+                    if isinstance(result, range):
                         result = list(result)
 
                     return result

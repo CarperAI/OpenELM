@@ -7,8 +7,8 @@ from typing import Any, Optional
 
 import numpy as np
 import torch
-from langchain.chat_models import ChatOpenAI
 from langchain.llms import OpenAI
+from langchain.chat_models import ChatOpenAI
 from langchain.llms.base import LLM
 from langchain.schema import Generation, LLMResult
 from pydantic import Extra, root_validator
@@ -22,17 +22,18 @@ from openelm.utils.diff_eval import apply_diff, split_diff
 def get_model(config: ModelConfig):
     if config.model_type == "hf":
         return HuggingFaceLLM(config=config)
-    elif config.model_type == "openai":
+    elif config.model_type == "oai":
         # Adapt config here
         cfg: dict = {
             "max_tokens": config.gen_max_len,
             "temperature": config.temp,
             "top_p": config.top_p,
+            # "batch_size": config.batch_size,
             # TODO: rename config option?
             "model_name": config.model_path,
         }
         if "3.5" in config.model_path or "gpt-4" in config.model_path:
-            return ChatOpenAI(**cfg)
+            return ChatOpenAI(openai_api_key="key", **cfg)
         else:
             return OpenAI(**cfg)
     else:
@@ -61,11 +62,7 @@ class PromptModel(MutationModel):
         self.model: LLM = get_model(self.config)
 
     def generate_programs(
-        self,
-        prompt_dicts: list[dict[str, str]],
-        local_scope_truncate: bool,
-        do_trunc=True,
-        **kwargs
+        self, prompt_dicts: list[dict[str, str]], local_scope_truncate: bool, **kwargs
     ) -> list[str]:
         """
         Generate new programs from a batch of programs.
@@ -98,17 +95,10 @@ class PromptModel(MutationModel):
             ]
         # Flatten nested list of generations
 
-        if do_trunc:
-            trunc = functools.partial(truncate, only_local_scope=local_scope_truncate)
-            truncations: list[str] = [
-                templates[i] + trunc(completions[i]) for i in range(len(completions))
-            ]
-        else:
-            truncations: list[str] = [
-                templates[i] + "\n    " + completions[i]
-                for i in range(len(completions))
-            ]
-
+        trunc = functools.partial(truncate, only_local_scope=local_scope_truncate)
+        truncations: list[str] = [
+            templates[i] + trunc(completions[i]) for i in range(len(completions))
+        ]
         return truncations
 
 
@@ -119,7 +109,6 @@ class DiffModel(PromptModel):
     def generate_programs(
         self, prompt_dicts: list[dict[str, str]], local_scope_truncate: bool, **kwargs
     ) -> list[str]:
-        # local_scope_truncate = False
         prompts = [prompt_dict["prompt"] for prompt_dict in prompt_dicts]
         templates = [prompt_dict["template"] for prompt_dict in prompt_dicts]
         results: LLMResult = self.model.generate(prompts=prompts)

@@ -1,6 +1,8 @@
 import functools
 import json
 import os
+
+os.environ["TRANSFORMERS_CACHE"] = "/fsx/hyperion/hf_cache"
 import time
 from dataclasses import asdict, dataclass, field
 from itertools import permutations
@@ -14,9 +16,10 @@ from hydra.core.config_store import ConfigStore
 from omegaconf import OmegaConf
 from tqdm import trange
 
-from openelm.algorithms.map_elites import MAPElites
 from openelm.codegen import model_setup, sample, truncate
 from openelm.configs import BaseConfig, MAPElitesConfig
+from openelm.environments import SQUARE_SEED
+from openelm.environments.environments import Sodarace, Sodaracer
 from openelm.environments.sodaracer import (
     CIRCLE,
     CPPN_FIXED,
@@ -32,8 +35,8 @@ from openelm.environments.sodaracer import (
     SQUARE_PREREQ,
     WHEEL,
 )
-from openelm.environments.sodaracer.sodarace import Sodarace, Sodaracer
 from openelm.environments.sodaracer.walker import Walker
+from openelm.map_elites import MAPElites
 from openelm.utils.code_eval import pool_exec_processes
 
 INSTRUCTIONS = {
@@ -125,7 +128,7 @@ class CrossoverBenchmark:
         ).to(self.device)
 
         sodarace_env = Sodarace(
-            seed=SEEDS_DICT["square"],
+            seed=SQUARE_SEED,
             config=self.cfg,
             diff_model=self.model,
             eval_ms=self.cfg.eval_ms,

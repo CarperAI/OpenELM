@@ -8,6 +8,7 @@ from typing import Optional
 import numpy as np
 from sklearn.cluster import KMeans
 from tqdm import trange
+from openelm.constants import PROJECT_PATH
 
 from openelm.configs import CVTMAPElitesConfig, MAPElitesConfig, QDConfig
 from openelm.environments import BaseEnvironment, Genotype
@@ -77,32 +78,6 @@ class Map:
             self.top[map_ix] = top_val
             self.array[(self.top[map_ix], *map_ix)] = value
 
-    def assign_fitness_in_depth(self, map_ix, value: float) -> int:
-        indices_at_bin = (slice(None),) + map_ix
-        # expecting a non-empty index, only calling this method when we know
-        # current fitness can be placed somewhere
-        insert_idx = np.where(self.array[indices_at_bin] < value)[0][-1]
-        new_bin_fitnesses = np.concatenate(
-            (
-                self.array[indices_at_bin][1 : insert_idx + 1],
-                np.array([value]),
-                self.array[indices_at_bin][insert_idx + 1 :],
-            )
-        )
-        self.array[indices_at_bin] = new_bin_fitnesses
-        return insert_idx
-
-    def insert_individual_at_depth(self, map_ix, depth, individual):
-        indices_at_bin = (slice(None),) + map_ix
-        new_bin_individuals = np.concatenate(
-            (
-                self.array[indices_at_bin][1 : depth + 1],
-                np.array([individual]),
-                self.array[indices_at_bin][depth + 1 :],
-            )
-        )
-        self.array[indices_at_bin] = new_bin_individuals
-
     @property
     def latest(self) -> np.ndarray:
         """Returns the latest values in the history buffer."""
@@ -171,7 +146,7 @@ class Map:
 
 class MAPElitesBase:
     """
-    Base class for MAP-Elites, a quality-diversity algorithm.
+    Class implementing MAP-Elites, a quality-diversity algorithm.
 
     MAP-Elites creates a map of high perfoming solutions at each point in a
     discretized behavior space. First, the algorithm generates some initial random
@@ -240,6 +215,7 @@ class MAPElitesBase:
     def _init_maps(
         self, init_map: Optional[Map] = None, log_snapshot_dir: Optional[str] = None
     ):
+        # TODO: abstract all maps out to a single class.
         # perfomance of niches
         if init_map is None:
             self.map_dims = self._get_map_dimensions()
@@ -263,8 +239,9 @@ class MAPElitesBase:
         # index over explored niches to select from
         self.nonzero: Map = Map(dims=self.map_dims, fill_value=False, dtype=bool)
 
-        log_path = Path(log_snapshot_dir)
-        if log_snapshot_dir and os.path.isdir(log_path):
+        # log_path = Path(log_snapshot_dir)
+        log_path = PROJECT_PATH / "logs" / "elm" / "qdaif"
+        if os.path.isdir(log_path):
             stem_dir = log_path.stem
 
             assert (
@@ -285,6 +262,9 @@ class MAPElitesBase:
             # Load maps from pickle file
             with open(snapshot_path, "rb") as f:
                 maps = pickle.load(f)
+            # maps_file = np.load(
+            #     snapshot_path, allow_pickle=True
+            # )  # (history_len, num_bins_1, num_bins_2, ...)
             assert (
                 self.genomes.array.shape == maps["genomes"].shape
             ), f"expected shape of map doesn't match init config settings, got {self.genomes.array.shape} and {maps['genomes'].shape}"
@@ -302,19 +282,16 @@ class MAPElitesBase:
             ), f'unmatching environments, got {self.env.config.env_name} and {old_config["env_name"]}'
 
             # compute top indices
-            if hasattr(self.fitnesses, "top"):
-                top_array = np.array(self.fitnesses.top)
-                for cell_idx in np.ndindex(
-                    self.fitnesses.array.shape[1:]
-                ):  # all indices of cells in map
-                    nonzero = np.nonzero(
-                        self.fitnesses.array[(slice(None),) + cell_idx] != -np.inf
-                    )  # check full history depth at cell
-                    if len(nonzero[0]) > 0:
-                        top_array[cell_idx] = nonzero[0][-1]
+            if hasattr(self.genomes, "top"):
+                num_bins = self.genomes.shape[1]
+                top_array = np.array(self.genomes.top)
+                for i in range(num_bins):
+                    nonzero_1d = np.nonzero(self.genomes.array[:, i])
+                    if len(nonzero_1d[0]) > 0:
+                        top_array[i] = nonzero_1d[0][-1]
                 # correct stats
-                self.genomes.top = top_array.copy()
-                self.fitnesses.top = top_array.copy()
+                self.genomes.top = top_array
+                self.fitnesses.top = top_array
             self.genomes.empty = False
             self.fitnesses.empty = False
 
@@ -338,7 +315,7 @@ class MAPElitesBase:
         ix = self.rng.choice(np.flatnonzero(self.nonzero.array))
         return np.unravel_index(ix, self.nonzero.dims)
 
-    def search(self, init_steps: int, total_steps: int, atol: float = 0.0) -> str:
+    def search(self, init_steps: int, total_steps: int, atol: float = 1.0) -> str:
         """
         Run the MAP-Elites search algorithm.
 
@@ -358,13 +335,8 @@ class MAPElitesBase:
         start_step = int(self.start_step)
         total_steps = int(total_steps)
         tbar = trange(start_step, total_steps, initial=start_step, total=total_steps)
-        if self.niches_filled() == 0:
-            max_fitness = -np.inf
-            max_genome = None
-        else:  # take max fitness in case of filled loaded snapshot
-            max_fitness = self.max_fitness()
-            max_index = np.where(self.fitnesses.latest == max_fitness)
-            max_genome = self.genomes[max_index]
+        max_fitness = -np.inf
+        max_genome = None
         if self.save_history:
             self.history = defaultdict(list)
 
@@ -377,90 +349,60 @@ class MAPElitesBase:
             else:
                 # Randomly select a batch of elites from the map.
                 batch: list[Genotype] = []
-                if self.config.crossover:
-                    crossover_parents = []
-                    previous_ix = None
-                    for i in range(self.config.crossover_parents):
-                        map_ix = self.random_selection()
-                        if map_ix != previous_ix:
-                            crossover_parents.append(self.genomes[map_ix])
-                            previous_ix = map_ix
-                    batch.append(crossover_parents)
-                else:
-                    for _ in range(self.env.batch_size):
-                        map_ix = self.random_selection()
-                        batch.append(self.genomes[map_ix])
+                for _ in range(self.env.batch_size):
+                    map_ix = self.random_selection()
+                    batch.append(self.genomes[map_ix])
                 # Mutate the elite.
                 new_individuals = self.env.mutate(batch)
 
-            max_genome, max_fitness = self.update_map(
-                new_individuals, max_genome, max_fitness
-            )
-            tbar.set_description(f"{max_fitness=:.4f}")
+            # `new_individuals` is a list of generation/mutation. We put them
+            # into the behavior space one-by-one.
+            # TODO: account for the case where multiple new individuals are
+            # placed in the same niche, for saving histories.
+            for individual in new_individuals:
+                fitness = self.env.fitness(individual)
+                if np.isinf(fitness):
+                    continue
+                map_ix = self.to_mapindex(individual.to_phenotype())
+                # if the return is None, the individual is invalid and is thrown
+                # into the recycle bin.
+                if map_ix is None:
+                    self.recycled[self.recycled_count % len(self.recycled)] = individual
+                    self.recycled_count += 1
+                    continue
+
+                if self.save_history:
+                    # TODO: thresholding
+                    self.history[map_ix].append(individual)
+                self.nonzero[map_ix] = True
+
+                # If new fitness greater than old fitness in niche, replace.
+                if fitness > self.fitnesses[map_ix]:
+                    self.fitnesses[map_ix] = fitness
+                    self.genomes[map_ix] = individual
+                # If new fitness is the highest so far, update the tracker.
+                if fitness > max_fitness:
+                    max_fitness = fitness
+                    max_genome = individual
+
+                    tbar.set_description(f"{max_fitness=:.4f}")
+                # Stop if best fitness is within atol of maximum possible fitness.
+                if np.isclose(max_fitness, self.env.max_fitness, atol=atol):
+                    break
 
             self.fitness_history["max"].append(self.max_fitness())
             self.fitness_history["min"].append(self.min_fitness())
             self.fitness_history["mean"].append(self.mean_fitness())
             self.fitness_history["qd_score"].append(self.qd_score())
+            self.fitness_history["niches_filled"].append(self.niches_filled())
 
-            if (
-                self.save_snapshot_interval is not None
-                and n_steps != 0
-                and n_steps % self.save_snapshot_interval == 0
-            ):
+            if n_steps != 0 and n_steps % self.save_snapshot_interval == 0:
                 self.save_results(step=n_steps)
 
         self.current_max_genome = max_genome
         self.save_results(step=n_steps)
         self.visualize()
         return str(max_genome)
-
-    def update_map(self, new_individuals, max_genome, max_fitness):
-        """
-        Update the map if new individuals achieve better fitness scores.
-
-        Args:
-            new_individuals (list[Genotype]) : List of new solutions
-            max_fitness : current maximum fitness
-
-        Returns:
-            max_genome : updated maximum genome
-            max_fitness : updated maximum fitness
-
-        """
-        # `new_individuals` is a list of generation/mutation. We put them
-        # into the behavior space one-by-one.
-        for individual in new_individuals:
-            fitness = self.env.fitness(individual)
-            if np.isinf(fitness):
-                continue
-            phenotype = individual.to_phenotype()
-            map_ix = self.to_mapindex(phenotype)
-
-            # if the return is None, the individual is invalid and is thrown
-            # into the recycle bin.
-            if map_ix is None:
-                self.recycled[self.recycled_count % len(self.recycled)] = individual
-                self.recycled_count += 1
-                continue
-
-            if self.save_history:
-                # TODO: thresholding
-                self.history[map_ix].append(individual)
-
-            self.nonzero[map_ix] = True
-
-            # If new fitness greater than old fitness in niche, replace.
-            if fitness > self.fitnesses[map_ix]:
-                self.fitnesses[map_ix] = fitness
-                self.genomes[map_ix] = individual
-
-            # update if new fitness is the highest so far.
-            if fitness > max_fitness:
-                max_fitness = fitness
-                max_genome = individual
-
-        return max_genome, max_fitness
 
     def niches_filled(self):
         """Get the number of niches that have been explored in the map."""
@@ -497,11 +439,8 @@ class MAPElitesBase:
             "nonzero": self.nonzero.array,
         }
         # Save maps as pickle file
-        try:
-            with open((output_folder / "maps.pkl"), "wb") as f:
-                pickle.dump(maps, f)
-        except Exception:
-            pass
+        with open((output_folder / "maps.pkl"), "wb") as f:
+            pickle.dump(maps, f)
         if self.save_history:
             with open((output_folder / "history.pkl"), "wb") as f:
                 pickle.dump(self.history, f)
@@ -531,45 +470,24 @@ class MAPElitesBase:
 
         save_path: str = self.config.output_dir
         plt.figure()
-        plt.plot(self.fitness_history["max"], label="Max fitness")
-        plt.plot(self.fitness_history["mean"], label="Mean fitness")
-        plt.plot(self.fitness_history["min"], label="Min fitness")
+        plt.plot(self.fitness_history["max"], label="max fitness")
+        plt.plot(self.fitness_history["mean"], label="mean fitness")
+        plt.plot(self.fitness_history["min"], label="min fitness")
         plt.legend()
         plt.savefig(f"{save_path}/MAPElites_fitness_history.png")
-        plt.close("all")
-
-        plt.figure()
-        plt.plot(self.fitness_history["qd_score"], label="QD score")
-        plt.legend()
-        plt.savefig(f"{save_path}/MAPElites_qd_score.png")
-        plt.close("all")
-
-        plt.figure()
-        plt.plot(self.fitness_history["niches_filled"], label="Niches filled")
-        plt.legend()
-        plt.savefig(f"{save_path}/MAPElites_niches_filled.png")
-        plt.close("all")
 
         if len(self.map_dims) > 1:
-            if len(self.fitnesses.dims) == 2:
-                map2d = self.fitnesses.latest
-                print(
-                    "plotted genes:",
-                    *[str(g) for g in self.genomes.latest.flatten().tolist()],
-                )
-            else:
-                ix = tuple(np.zeros(max(1, len(self.fitnesses.dims) - 2), int))
-                map2d = self.fitnesses.latest[ix]
-
-                print(
-                    "plotted genes:",
-                    *[str(g) for g in self.genomes.latest[ix].flatten().tolist()],
-                )
+            ix = tuple(np.zeros(max(1, len(self.fitnesses.dims) - 2), int))
+            map2d = self.fitnesses.latest
+            # print(
+            #     "plotted genes:",
+            #     *[str(g) for g in self.genomes.latest[ix].flatten().tolist()],
+            # )
 
             plt.figure()
             plt.pcolor(map2d, cmap="inferno")
+            plt.colorbar()
             plt.savefig(f"{save_path}/MAPElites_vis.png")
-        plt.close("all")
 
     def visualize_individuals(self):
         """Visualize the genes of the best performing solution."""
@@ -650,9 +568,8 @@ class CVTMAPElites(MAPElitesBase):
     """
     Class implementing CVT-MAP-Elites, a variant of MAP-Elites.
 
-    This replaces the grid of niches in MAP-Elites with niches generated using a
-    Centroidal Voronoi Tessellation. Unlike in MAP-Elites, we have a fixed number
-    of total niches rather than a fixed number of subdivisions per dimension.
+    This replaces the grid of niches in MAP-Elites with niches generated using a Centroidal Voronoi Tessellation.
+    Unlike in MAP-Elites, we have a fixed number of total niches rather than a fixed number of subdivisions per dimension.
     """
 
     def __init__(
