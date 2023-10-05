@@ -125,6 +125,7 @@ class QDEnvConfig(EnvConfig):
             [0, 5],
         ]
     )
+    method: str = "random" # qdaif, targeted, random
 
 
 @dataclass
@@ -146,7 +147,7 @@ class ELMConfig(BaseConfig):
     hydra: Any = field(
         default_factory=lambda: {
             "run": {
-                "dir": "logs/elm/${hydra.job.override_dirname}/${now:%y-%m-%d_%H:%M}"
+                "dir": "logs/poetry/random/${hydra.job.override_dirname}/${now:%y-%m-%d_%H:%M:%S}"
             }
         }
     )

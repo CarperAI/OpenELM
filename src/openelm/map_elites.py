@@ -341,6 +341,7 @@ class MAPElitesBase:
             self.history = defaultdict(list)
 
         for n_steps in tbar:
+            stored_idx = None
             if n_steps < init_steps or self.genomes.empty:
                 # Initialise by generating initsteps random solutions.
                 # If map is still empty: force to do generation instead of mutation.
@@ -351,6 +352,7 @@ class MAPElitesBase:
                 batch: list[Genotype] = []
                 for _ in range(self.env.batch_size):
                     map_ix = self.random_selection()
+                    stored_idx = [int(map_ix[0]), int(map_ix[1])]
                     batch.append(self.genomes[map_ix])
                 # Mutate the elite.
                 new_individuals = self.env.mutate(batch)
@@ -362,6 +364,16 @@ class MAPElitesBase:
             for individual in new_individuals:
                 fitness = self.env.fitness(individual)
                 if np.isinf(fitness):
+                    log_dict = {
+                        "poem": individual.poem,
+                        "quality": None,
+                        "genre": None,
+                        "tone": None,
+                        "parent_idx": stored_idx,
+                    }
+                    with open(Path(self.config.output_dir) / "history.jsonl", "a+", encoding="UTF-8") as f:
+                        f.write(json.dumps(log_dict))
+                        f.write("\n")
                     continue
                 map_ix = self.to_mapindex(individual.to_phenotype())
                 # if the return is None, the individual is invalid and is thrown
@@ -369,6 +381,16 @@ class MAPElitesBase:
                 if map_ix is None:
                     self.recycled[self.recycled_count % len(self.recycled)] = individual
                     self.recycled_count += 1
+                    log_dict = {
+                        "poem": individual.poem,
+                        "quality": None,
+                        "genre": None,
+                        "tone": None,
+                        "parent_idx": stored_idx,
+                    }
+                    with open(Path(self.config.output_dir) / "history.jsonl", "a+", encoding="UTF-8") as f:
+                        f.write(json.dumps(log_dict))
+                        f.write("\n")
                     continue
 
                 if self.save_history:
@@ -386,15 +408,26 @@ class MAPElitesBase:
                     max_genome = individual
 
                     tbar.set_description(f"{max_fitness=:.4f}")
-                # Stop if best fitness is within atol of maximum possible fitness.
-                if np.isclose(max_fitness, self.env.max_fitness, atol=atol):
-                    break
+                # # Stop if best fitness is within atol of maximum possible fitness.
+                # if np.isclose(max_fitness, self.env.max_fitness, atol=atol):
+                #     break
+                log_dict = {
+                    "poem": individual.poem,
+                    "quality": individual.quality,
+                    "genre": individual.genre,
+                    "tone": individual.tone,
+                    "parent_idx": stored_idx,
+                }
+                with open(Path(self.config.output_dir) / "history.jsonl", "a+", encoding="UTF-8") as f:
+                    f.write(json.dumps(log_dict))
+                    f.write("\n")
 
             self.fitness_history["max"].append(self.max_fitness())
             self.fitness_history["min"].append(self.min_fitness())
             self.fitness_history["mean"].append(self.mean_fitness())
             self.fitness_history["qd_score"].append(self.qd_score())
             self.fitness_history["niches_filled"].append(self.niches_filled())
+
 
             if n_steps != 0 and n_steps % self.save_snapshot_interval == 0:
                 self.save_results(step=n_steps)

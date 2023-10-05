@@ -975,15 +975,15 @@ Respond in JSON with the keys "genre" and "tone".
             self.quality = json.loads(quality_result)["quality"]
             self.genre = json.loads(diversity_result)["genre"]
             self.tone = json.loads(diversity_result)["tone"]
-            log_dict = {
-                "poem": self.poem,
-                "quality": self.quality,
-                "genre": self.genre,
-                "tone": self.tone,
-            }
-            with open("/nfs/scratch_2/adai/open_forks/openelm/poetry_dump/poems.jsonl", "a+", encoding="UTF-8") as f:
-                f.write(json.dumps(log_dict))
-                f.write("\n")
+            # log_dict = {
+            #     "poem": self.poem,
+            #     "quality": self.quality,
+            #     "genre": self.genre,
+            #     "tone": self.tone,
+            # }
+            # with open("/nfs/scratch_2/adai/open_forks/openelm/poetry_dump/qdaif_1.jsonl", "a+", encoding="UTF-8") as f:
+            #     f.write(json.dumps(log_dict))
+            #     f.write("\n")
             return float(self.quality)
         except Exception as e:
             return -np.inf
@@ -1042,13 +1042,27 @@ Winds whisper; normality reigns.
     def construct_prompt(self, poem: Optional[PoetryGenotype] = None) -> dict[str, str]:
         target_genre = self.genres_to[self.rng.choice(list(self.genres_to.keys()))]
         target_tone = self.tones_to[self.rng.choice(list(self.tones_to.keys()))]
-        if poem is None:
+        if self.config.method == "random":
+            instruction_str = f"Write a poem of very high, award winning quality.\n"
+            prompt_str = f"{instruction_str}"
+        elif self.config.method == "targeted":
             instruction_str = f"Write a {target_tone} {target_genre} poem of very high, award winning quality.\n"
-            prompt_str = f"{self.seed.poem}\n{instruction_str}"
-            # prompt_str = "Write a poem of very high, award winning quality.\n"
-        else:
-            instruction_str = f"Translate this {poem.genre} poem into a {target_tone} {target_genre} poem of very high, award winning quality.\n"
-            prompt_str = f"{poem.poem}\n{instruction_str}"
+            prompt_str = f"{instruction_str}"
+        else: # qdaif
+            if poem is None:
+                instruction_str = f"Translate this {self.seed.genre} poem into a {target_tone} {target_genre} poem of very high, award winning quality.\n"
+                prompt_str = f"{self.seed.poem}\n{instruction_str}"
+            else:
+                instruction_str = f"Translate this {poem.genre} poem into a {target_tone} {target_genre} poem of very high, award winning quality.\n"
+                prompt_str = f"{poem.poem}\n{instruction_str}"
+            
+        # if poem is None:
+        #     instruction_str = f"Write a {target_tone} {target_genre} poem of very high, award winning quality.\n"
+        #     prompt_str = f"{self.seed.poem}\n{instruction_str}"
+        #     # prompt_str = "Write a poem of very high, award winning quality.\n"
+        # else:
+        #     instruction_str = f"Translate this {poem.genre} poem into a {target_tone} {target_genre} poem of very high, award winning quality.\n"
+        #     prompt_str = f"{poem.poem}\n{instruction_str}"
         return {
             "prompt": prompt_str,
             "template": "",
