@@ -10,6 +10,8 @@ We want to support users with many different compute profiles!
 3. Provide a simple interface to a range of example environments for evolutionary search, to let users adapt these easily for their domain.
 4. Demonstrate the potential of evolution with LLMs.
 
+**<ins>For QDAIF</ins>:** poetry domain currently implemented in main, and other experiment code with few-shot [LMX](https://arxiv.org/abs/2302.12170) domains currently in [experimental branch](https://github.com/CarperAI/OpenELM/tree/qdaif-lmx-expt)
+
 # Install
 `pip install openelm`
 
